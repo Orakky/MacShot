@@ -52,7 +52,7 @@
 | T-022 | 权限探测 + 黑图启发式 + `UI-007` | M-1 | FR-CAP-006；顺带填 `hotkey-and-permissions.md` §5 的两个"待实测" |
 | T-023 | `AnnotationDocument` schema v1 冻结 + 往返测试 | M-1 | ADR-009、NFR-018 |
 | T-024 | 性能测量点内建（4 个 `t.*` 标记）+ `scripts/perf-snip.sh` | M-1 | NFR-001/002/003 |
-| T-030… | 遮罩窗 / 指针路由 / 读数 / 状态机 / `CommitIntent` / 剪贴板写入 | M-2 | FR-CAP-002/003、FR-SESS-001/002/003 |
+| T-030… | 遮罩窗 / 指针路由 / 读数 / 状态机 / `CommitIntent` 与默认出口查表 / 剪贴板写入 | M-2 | FR-CAP-002/003、FR-SESS-001/002/003、FR-PIN-018、V-036 |
 | T-040… | 贴图窗 level 实测（含 ADR-019 数值定稿）/ 缩放 / 透明 / `PinRegistry` | M-3 | FR-PIN-001…006/017 |
 | T-050… | 渲染器三 intent / 9 件工具 / 命中 / 撤销栈 / 再编辑宿主 | M-4 | FR-ANN-001…007、FR-PIN-005 |
 | T-060 | 可视化原型稿 `prototypes/index.html`：UI-001…009 可操作模型（**已办**，见 E-014） | 已完成（提前于 M-0，因为它服务裁决） | `docs/design/screens.md` 为真源，原型只是对照 |

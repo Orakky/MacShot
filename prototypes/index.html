@@ -104,7 +104,8 @@ main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:0;min-hei
 .act{height:var(--ctrl-h);border-radius:5px;border:1px solid var(--float-stroke);background:rgba(128,128,128,.1);
   font-family:var(--sans);font-size:12px;padding:0 8px;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap}
 .act kbd{font-family:var(--mono);font-size:10px;color:var(--text-secondary)}
-.act.pri{color:var(--accent);font-weight:600}
+.act.pri{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.act.pri kbd{color:rgba(255,255,255,.82)}
 .act.x{padding:0 6px}
 .pop{position:absolute;font-family:var(--sans);background:var(--float-surface);border:1px solid var(--float-stroke);
   border-radius:var(--r2);box-shadow:var(--float-shadow);padding:6px 8px;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-primary)}
@@ -244,8 +245,8 @@ li{margin:0 0 5px}
         <button class="tbtn" id="undo" title="撤销 ⌘Z"><svg viewBox="0 0 16 16"><path d="M6 4L3 7l3 3"/><path d="M3 7h6a4 4 0 1 1 0 8H8"/></svg></button>
         <button class="tbtn" id="redo" title="重做 ⇧⌘Z"><svg viewBox="0 0 16 16"><path d="M10 4l3 3-3 3"/><path d="M13 7H7a4 4 0 1 0 0 8h1"/></svg></button>
         <div class="sep"></div>
-        <button class="act pri" data-commit="copy">复制<kbd>⌘C</kbd></button>
-        <button class="act" data-commit="pin">贴出<kbd>⌘P</kbd></button>
+        <button class="act pri" data-commit="pin" title="FR-PIN-018：截图后的一等出口">贴出<kbd>Enter</kbd></button>
+        <button class="act" data-commit="copy">复制<kbd>⌘C</kbd></button>
         <button class="act" data-commit="save">保存<kbd>⌘S</kbd></button>
         <button class="act x" data-commit="cancel" title="取消 Esc">✕</button>
       </div>
@@ -306,9 +307,9 @@ li{margin:0 0 5px}
           <div class="grp">
             <h4>提交动作（Q-05）</h4>
             <div class="row"><label>选区确定后</label>
-              <div class="seg" data-set="commit"><button aria-pressed="true">复制并结束</button><button>贴出</button><button>保存到文件</button></div>
+              <div class="seg" data-set="commit"><button aria-pressed="true">贴出</button><button>复制并结束</button><button>保存到文件</button></div>
             </div>
-            <div class="note"><i>ⓘ</i><span>本原型把 <span style="font-family:var(--mono)">Enter</span>/双击选区 也视为提交＝复制，与推荐档一致。</span></div>
+            <div class="note"><i>ⓘ</i><span>默认档＝<b>贴出</b>（<span style="font-family:var(--mono)">Enter</span>/双击选区），复制走 <span style="font-family:var(--mono)">⌘C</span> 或 <span style="font-family:var(--mono)">⌥Enter</span>。这是按你 11-16 提的"截屏后能直接置顶查看"改的档，仍属 <span style="font-family:var(--mono)">Q-05</span> 待签字。</span></div>
           </div>
           <div class="grp">
             <h4>导出</h4>
@@ -452,7 +453,7 @@ function pixelRect(s){
 
 /* ================= 屏定义（右栏规格 = 裁决材料） ================= */
 const SCREENS = {
-  'UI-001':{name:'遮罩与选区',fr:'FR-CAP-001/002/003 · FR-SESS-002',hint:'在桌面上按住拖出选区；拖把手缩放；拖选区内部移动。<kbd>Esc</kbd> 取消 · <kbd>Enter</kbd>/双击＝复制 · <kbd>⌘P</kbd>＝贴出',
+  'UI-001':{name:'遮罩与选区',fr:'FR-CAP-001/002/003 · FR-SESS-002 · FR-PIN-018',hint:'在桌面上按住拖出选区；拖把手缩放；拖选区内部移动。<kbd>Esc</kbd> 取消 · <kbd>Enter</kbd>/双击＝<b>贴出</b>（一等出口）· <kbd>⌘C</kbd>＝复制',
     spec:[['读数','<b>设备像素</b>，非逻辑点：scale=2 时拖 100×100 得 200×200，与导出 <b>cgImage.width</b> 同源（FR-CAP-002）'],
           ['像素对齐','<b>min/max 两边分别 round</b>，不是 round(w×s)——非整数缩放（1.799x）下的 1px 渗色就靠这条消除（ADR-013/V-002）'],
           ['暗化层','选区外 <b>4 块矩形</b>拼"洞"，不是整层 even-odd：拖选区时只重绘变化条带'],
@@ -465,7 +466,7 @@ const SCREENS = {
           ['作用域','样式改动不影响已绘制元素（FR-ANN-003/V-016）—— 本原型按此实现'],
           ['位置','优先贴选区下沿外侧；越界翻上沿，再越界压进选区内 12pt'],
           ['移出后','降到 70% 不透明、不消失 <span class="tag q">Q-14</span>（Snipaste 会消失，我们刻意不同）',"q"],
-          ['提交','复制/贴出/保存三个动作都带键位提示，鼠标用户也能学键盘']],
+          ['提交','<b>贴出是一等出口</b>（实底主按钮 + <span class="tag">Enter</span>），复制/保存降为描边按钮：截图后最常见的动作是"钉住看"（FR-PIN-018，默认档仍待 <span class="tag q">Q-05</span> 签字）',"q"]],
     show:true},
   'UI-003':{name:'贴图（浏览态）',fr:'FR-PIN-001…006/017 · D-04',hint:'滚轮缩放（指针为锚）· <kbd>⌘</kbd>+滚轮或 <kbd>⌘1</kbd>…<kbd>⌘9</kbd> 透明度 · <kbd>E</kbd> 进再编辑 · <kbd>⌘C</kbd> 复制 · <kbd>⌘W</kbd>/双击 关闭',
     spec:[['无损分两层','<b>位图</b>：近邻放大 → 看得到像素方块（正确表现）；<b>矢量标注</b>：按显示倍率重绘 → 边缘恒锐利。这条是 D-04 最直观的收益（FR-PIN-003/V-033）'],
@@ -922,7 +923,7 @@ addEventListener('keydown',e=>{
     if((e.key==='w'||e.key==='W')&&e.metaKey){ state.pins.pop(); renderPins(); toastMsg('贴图关闭＝销毁（Q-13）'); e.preventDefault(); return; }
   }
   if(e.key==='Escape'){ if(state.sel){commit('cancel');} return; }
-  if(e.key==='Enter'&&state.sel){ commit('copy'); return; }
+  if(e.key==='Enter'&&state.sel){ commit(e.altKey?'copy':'pin'); return; }   // 默认出口＝贴出（FR-PIN-018），⌥Enter＝复制
   if((e.key==='c'||e.key==='C')&&e.metaKey&&!e.shiftKey){ commit('copy'); e.preventDefault(); return; }
   if((e.key==='p'||e.key==='P')&&e.metaKey){ commit('pin'); e.preventDefault(); return; }
   if((e.key==='s'||e.key==='S')&&e.metaKey){ commit(e.shiftKey?'save':'save'); e.preventDefault(); return; }
@@ -1014,7 +1015,7 @@ function boot(){
   state.sel=clamp({x:250,y:170,w:430,h:250}); lastSize={...state.sel};
   state.phase='selecting';
   paint();
-  logEvent('舞台就绪：按 <b>⌘P</b> 提交成贴图，再看 D-04 的放大差别');
+  logEvent('舞台就绪：选区拖好后按 <b>Enter</b> 直接贴到桌面（一等出口），再滚轮放大看 D-04 的差别');
   setTimeout(placeCallouts,60);
 }
 function placeCallouts(){

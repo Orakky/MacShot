@@ -70,13 +70,17 @@ public struct NamingTemplate {
 
 ```swift
 public enum CommitIntent: Sendable {
-    case copy                       // Enter / 双击 / ⌘C（Q-05 A）
-    case copyAndPin                  // ⌘⌥C 之类，P1
-    case pin                         // ⌘P：只贴出，不写剪贴板
-    case savePanel  case quickSave   // ⌘S / ⌘⇧S
+    case pin                         // 默认出口（Q-05 A）：只贴出，不写剪贴板 —— 也是 ⌘P
+    case copy                        // ⌘C / ⌥Enter
+    case copyAndPin                  // ⌘⇧P（P1）
+    case savePanel                   // ⌘S
+    case quickSave                   // ⌘⇧S
     case cancel                      // Esc：什么都不做（FR-SESS-002 判据：剪贴板哨兵不动）
 }
 ```
+
+默认出口由 `AppPreferences.commitBehavior` 决定（`pin` / `copy` / `save`），**枚举本身不含默认值**：
+"按 Enter 发生什么"是会话层查表的结果，而不是 `CommitIntent` 的语义，这样改默认档不动任何状态机代码。
 
 `cancel` 与 `pin` 都不写剪贴板 —— 这条要专门测，因为"顺手复制"是实现里最容易犯的错。
 
