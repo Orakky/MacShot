@@ -6,6 +6,8 @@
 	<string>zh_CN</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIconFile</key>
+	<string>macshot</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.macshot.app</string>
 	<key>CFBundleInfoDictionaryVersion</key>

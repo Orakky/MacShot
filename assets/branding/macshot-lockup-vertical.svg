@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 420" width="360" height="420" role="img" aria-labelledby="vt vd">
+  <title id="vt">MacShot vertical lockup</title>
+  <desc id="vd">Mark above, wordmark below. Mark geometry mirrors macshot-icon.svg; wordmark is live text and must be outlined before production use.</desc>
+  <defs>
+    <style>
+      .field { fill: #1D1D1F; }
+      .screen { fill: #0A84FF; }
+      .notch { fill: #0663C4; }
+      .tile { fill: #FFFFFF; }
+      .shaft { fill: none; stroke: #E83347; stroke-width: 40; stroke-linecap: round; }
+      .head { fill: #E83347; }
+      .word { font-family: -apple-system, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif; font-size: 76px; font-weight: 600; letter-spacing: -1.6px; fill: #1D1D1F; }
+    </style>
+  </defs>
+  <g transform="translate(60 24) scale(0.23438)">
+    <rect class="field" x="100" y="100" width="824" height="824" rx="186"/>
+    <rect class="screen" x="188" y="352" width="648" height="424" rx="28"/>
+    <rect class="notch" x="452" y="404" width="340" height="272" rx="16"/>
+    <rect class="tile" x="412" y="284" width="340" height="272" rx="16"/>
+    <path class="head" d="M684 346 651 451 574 344 Z"/>
+    <path class="shaft" d="M470 500 613 397"/>
+  </g>
+  <text class="word" x="180" y="372" text-anchor="middle">MacShot</text>
+</svg>

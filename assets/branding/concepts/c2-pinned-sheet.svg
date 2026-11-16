@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="c2t c2d">
+  <title id="c2t">MacShot icon concept 2 — Pinned sheet</title>
+  <desc id="c2d">Blue field, white sheet with a lifted corner and an annotation arrow, tacked at the top-left corner.</desc>
+  <defs>
+    <style>
+      .field { fill: #0A84FF; }
+      .sheet { fill: #FFFFFF; }
+      .flap { fill: #9FCBFF; }
+      .tack { fill: #E83347; stroke: #FFFFFF; stroke-width: 18; }
+      .shaft { fill: none; stroke: #0A84FF; stroke-width: 40; stroke-linecap: round; }
+      .head { fill: #0A84FF; }
+    </style>
+  </defs>
+  <rect class="field" x="100" y="100" width="824" height="824" rx="186"/>
+  <rect class="sheet" x="232" y="264" width="560" height="496" rx="32"/>
+  <polygon class="flap" points="792,612 644,760 644,612"/>
+  <polygon class="field" points="792,612 792,760 644,760"/>
+  <path class="head" d="M596 470 578 582 484 488 Z"/>
+  <path class="shaft" d="M366 660 531 495"/>
+  <circle class="tack" cx="252" cy="284" r="76"/>
+</svg>

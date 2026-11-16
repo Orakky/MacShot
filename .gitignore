@@ -6,6 +6,7 @@ build/Derived/
 .build/
 *.app/
 *.dmg
+*.icns
 *.xcarchive
 .swiftpm/
 Package.resolved.bak
@@ -13,6 +14,8 @@ Package.resolved.bak
 # 交付素材（Tests/Fixtures 里的渲染基线除外，见文件末尾）
 # 交付素材（截图基线之外）
 *.tmp.png
+# 品牌素材：SVG 是真源，对照页渲染图不入库
+assets/branding/preview/
 
 # 编辑器与系统
 .idea/

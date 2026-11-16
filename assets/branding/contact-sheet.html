@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>MacShot — Logo 定稿包</title>
+<style>
+  body { margin: 0; padding: 28px 32px 40px; background: #ECECEE; font: 14px/1.45 -apple-system, "SF Pro Text", sans-serif; color: #1D1D1F; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: #6E6E73; margin-bottom: 22px; }
+  section { background: #fff; border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  h2 { font-size: 15px; margin: 0 0 14px; }
+  h2 small { color: #6E6E73; font-weight: 400; }
+  .row { display: flex; align-items: flex-end; gap: 22px; flex-wrap: wrap; }
+  .cell { text-align: center; }
+  .cell span { display: block; font-size: 11px; color: #6E6E73; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .dark { background: #1D1D1F; border-radius: 10px; padding: 12px 16px; }
+  .dark span { color: #A1A1A6; }
+  .photo { background: linear-gradient(120deg,#7C5CBF,#2A7F62 60%,#C2683A); border-radius: 10px; padding: 12px 16px; }
+  .photo span { color: rgba(255,255,255,.85); }
+  .bar { background: #F6F6F6; border: 1px solid #d8d8da; border-radius: 8px; padding: 6px 14px; display: flex; align-items: center; gap: 8px; height: 22px; }
+  .bar b { font-weight: 600; font-size: 13px; }
+  .bar i { font-style: normal; font-size: 13px; color: #6E6E73; }
+  .bar.dark2 { background: #2A2A2C; border-color: #2A2A2C; }
+  .bar.dark2 b { color: #F2F2F7; } .bar.dark2 i { color: #A1A1A6; }
+</style>
+<h1>MacShot — Logo 定稿包（C4 冻结帧取出）</h1>
+<div class="sub">真源是 SVG；本页只是对照。色值全部来自 <code>docs/design/design-system.md</code> §2 token，无渐变、无投影（§9）。</div>
+
+<section>
+  <h2>主图标 <small>macshot-icon.svg</small></h2>
+  <div class="row">
+    <div class="cell"><img src="macshot-icon.svg" width="256"><span>256</span></div>
+    <div class="cell"><img src="macshot-icon.svg" width="128"><span>128</span></div>
+    <div class="cell"><img src="macshot-icon.svg" width="64"><span>64</span></div>
+    <div class="cell"><img src="macshot-icon.svg" width="32"><span>32</span></div>
+    <div class="cell"><img src="macshot-icon.svg" width="16"><span>16</span></div>
+    <div class="cell dark"><img src="macshot-icon.svg" width="96"><span>暗背景</span></div>
+    <div class="cell photo"><img src="macshot-icon.svg" width="96"><span>花背景</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>单色变体 <small>mono-dark / mono-light（重绘，不是滤镜）</small></h2>
+  <div class="row">
+    <div class="cell"><img src="macshot-icon-mono-dark.svg" width="128"><span>128 墨</span></div>
+    <div class="cell"><img src="macshot-icon-mono-dark.svg" width="64"><span>64</span></div>
+    <div class="cell"><img src="macshot-icon-mono-dark.svg" width="32"><span>32</span></div>
+    <div class="cell dark"><img src="macshot-icon-mono-light.svg" width="128"><span>128 反白</span></div>
+    <div class="cell dark"><img src="macshot-icon-mono-light.svg" width="64"><span>64</span></div>
+    <div class="cell dark"><img src="macshot-icon-mono-light.svg" width="32"><span>32</span></div>
+    <div class="cell photo"><img src="macshot-icon-mono-light.svg" width="96"><span>花背景反白</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>方形头像 <small>macshot-icon-square-avatar.svg（社交/OG，满幅无圆角）</small></h2>
+  <div class="row">
+    <div class="cell"><img src="macshot-icon-square-avatar.svg" width="180"><span>180</span></div>
+    <div class="cell"><img src="macshot-icon-square-avatar.svg" width="64"><span>64</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>菜单栏 22px 实际占位 <small>LSUIElement 的唯一露脸位；模板图形靠 alpha，明暗栏都可用</small></h2>
+  <div class="row">
+    <div class="bar"><b>MacShot</b><i>File Edit View</i><img src="macshot-menubar-template.svg" width="18" height="18"><i>11:42 AM</i></div>
+    <div class="bar dark2"><b>MacShot</b><i>File Edit View</i><img src="macshot-menubar-template.svg" width="18" height="18" style="filter:invert(1)"><i>11:42 AM</i></div>
+    <div class="cell"><img src="macshot-menubar-template.svg" width="64"><span>模板 ×64</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>组合锁定 <small>wordmark 仍是活字，投产前需转曲</small></h2>
+  <div class="row">
+    <div class="cell"><img src="macshot-lockup-horizontal.svg" width="480"><span>横排 660×200</span></div>
+    <div class="cell"><img src="macshot-lockup-vertical.svg" width="200"><span>竖排 360×420</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>落选候选留档 <small>concepts/（保留记录，不再迭代）</small></h2>
+  <div class="row">
+    <div class="cell"><img src="concepts/c1-marquee.svg" width="128"><span>C1 选框</span></div>
+    <div class="cell"><img src="concepts/c2-pinned-sheet.svg" width="128"><span>C2 贴纸</span></div>
+    <div class="cell"><img src="concepts/c3-monogram.svg" width="128"><span>C3 字标 M</span></div>
+  </div>
+</section>

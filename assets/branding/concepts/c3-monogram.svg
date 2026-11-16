@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="c3t c3d">
+  <title id="c3t">MacShot icon concept 3 — M in crop marks</title>
+  <desc id="c3d">Ink field with four blue crop brackets framing a two-colour letterform M (white stems, red apex).</desc>
+  <defs>
+    <style>
+      .field { fill: #1D1D1F; }
+      .bracket { fill: none; stroke: #0A84FF; stroke-width: 30; stroke-linecap: butt; }
+      .stem { fill: none; stroke: #FFFFFF; stroke-width: 66; stroke-linecap: butt; }
+      .apex { fill: none; stroke: #E83347; stroke-width: 66; stroke-linejoin: round; stroke-linecap: butt; }
+    </style>
+  </defs>
+  <rect class="field" x="100" y="100" width="824" height="824" rx="186"/>
+  <g class="bracket">
+    <path d="M244 344V268q0-24 24-24h76"/>
+    <path d="M680 244h76q24 0 24 24v76"/>
+    <path d="M780 680v76q0 24-24 24h-76"/>
+    <path d="M344 780h-76q-24 0-24-24v-76"/>
+  </g>
+  <path class="stem" d="M352 700V392"/>
+  <path class="stem" d="M672 700V392"/>
+  <path class="apex" d="M352 392 512 566 672 392"/>
+</svg>

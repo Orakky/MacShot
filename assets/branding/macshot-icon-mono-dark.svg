@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="mt md">
+  <title id="mt">MacShot monochrome mark (dark ink)</title>
+  <desc id="md">Single-colour redraw: outlined screen, arrow inside pointing at a solid tile lifted off the top-right corner.</desc>
+  <defs>
+    <style>
+      .screen { fill: none; stroke: #1D1D1F; stroke-width: 40; }
+      .tile { fill: #1D1D1F; }
+      .shaft { fill: none; stroke: #1D1D1F; stroke-width: 40; stroke-linecap: round; }
+      .head { fill: #1D1D1F; }
+    </style>
+  </defs>
+  <rect class="screen" x="196" y="380" width="600" height="400" rx="32"/>
+  <path class="head" d="M476 556 450 657 372 561 Z"/>
+  <path class="shaft" d="M288 708 411 609"/>
+  <rect class="tile" x="492" y="244" width="340" height="272" rx="24"/>
+</svg>

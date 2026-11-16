@@ -3,9 +3,11 @@ XCODEPROJ := MacShot.xcodeproj
 SCHEME    := MacShot
 DERIVED   := build/Derived
 PRODUCT   := $(DERIVED)/Build/Products/Debug/MacShot.app
+RELEASE   := $(DERIVED)/Build/Products/Release/MacShot.app
+ICNS      := build/macshot.icns
 VERSION   := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Config/Info.plist 2>/dev/null)
 
-.PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission
+.PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission icon appicon
 
 doctor:
 	@sh scripts/doctor.sh
@@ -18,6 +20,17 @@ build:
 release:
 	xcodebuild -project $(XCODEPROJ) -scheme $(SCHEME) -configuration Release \
 	  -derivedDataPath $(DERIVED) -quiet build
+
+# 图标真源 = assets/branding/macshot-icon.svg；build/macshot.icns 是产物，不入库
+icon:
+	@sh scripts/make-icon.sh
+
+# 往 .app 里加资源会让原 ad-hoc 签名失效 ⇒ 每次注入后重签（D-02）
+appicon: build icon
+	@mkdir -p "$(PRODUCT)/Contents/Resources"
+	@cp $(ICNS) "$(PRODUCT)/Contents/Resources/macshot.icns"
+	@codesign --force --sign - --timestamp=none "$(PRODUCT)" >/dev/null
+	@echo "→ icon 已装入 $(PRODUCT)"
 
 test:
 	@cd Packages/MacShotKit && swift test 2>&1 | tail -3
@@ -43,14 +56,17 @@ sign: build
 	codesign --force --sign - --timestamp=none "$(PRODUCT)"
 	codesign -dv "$(PRODUCT)" 2>&1 | grep -E 'Signature|Identifier' || true
 
-dmg: release
+dmg: release icon
 	@mkdir -p build
 	@rm -f build/MacShot-$(VERSION).dmg
-	hdiutil create -volname MacShot -srcfolder "$(DERIVED)/Build/Products/Release/MacShot.app" \
+	@mkdir -p "$(RELEASE)/Contents/Resources"
+	@cp $(ICNS) "$(RELEASE)/Contents/Resources/macshot.icns"
+	@codesign --force --sign - --timestamp=none "$(RELEASE)" >/dev/null
+	hdiutil create -volname MacShot -srcfolder "$(RELEASE)" \
 	  -ov -format UDZO build/MacShot-$(VERSION).dmg
 	@echo "→ build/MacShot-$(VERSION).dmg"
 
-install: build
+install: appicon
 	@rm -rf "$(HOME)/Applications/MacShot.app"
 	@mkdir -p "$(HOME)/Applications"
 	cp -R "$(PRODUCT)" "$(HOME)/Applications/"

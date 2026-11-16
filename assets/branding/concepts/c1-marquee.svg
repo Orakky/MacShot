@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="c1t c1d">
+  <title id="c1t">MacShot icon concept 1 — Selection</title>
+  <desc id="c1d">Ink rounded-square field, white selection frame with four blue corner handles, red annotation arrow.</desc>
+  <defs>
+    <style>
+      .field { fill: #1D1D1F; }
+      .frame { fill: none; stroke: #FFFFFF; stroke-width: 34; }
+      .handle { fill: #0A84FF; stroke: #FFFFFF; stroke-width: 12; }
+      .shaft { fill: none; stroke: #E83347; stroke-width: 46; stroke-linecap: round; }
+      .head { fill: #E83347; }
+    </style>
+  </defs>
+  <rect class="field" x="100" y="100" width="824" height="824" rx="186"/>
+  <rect class="frame" x="244" y="300" width="536" height="424" rx="28"/>
+  <g class="head"><path d="M676 388 651 506 556 383 Z"/></g>
+  <path class="shaft" d="M348 636 604 444"/>
+  <g class="handle">
+    <rect x="210" y="266" width="68" height="68" rx="16"/>
+    <rect x="746" y="266" width="68" height="68" rx="16"/>
+    <rect x="210" y="690" width="68" height="68" rx="16"/>
+    <rect x="746" y="690" width="68" height="68" rx="16"/>
+  </g>
+</svg>
