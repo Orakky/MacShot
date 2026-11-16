@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MacShot 交互原型 · 待裁决校对面</title>
+<style>
+/* ---------- 外壳 token（原型自己的视觉，不与产品 token 混用） ---------- */
+:root{
+  --shell-paper:#EDEEF0; --shell-ink:#14161A; --shell-ink-2:#5A5F68;
+  --shell-hair:#D6D9DE; --shell-surface:#F7F8F9;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  --sans:system-ui,-apple-system,"Helvetica Neue",sans-serif;
+
+  /* ---------- 产品 token：取自 docs/design/design-system.md，逐条对应 ---------- */
+  --scrim:rgba(0,0,0,.45);                 /* overlay.scrim light */
+  --float-surface:rgba(246,246,246,.96);   /* float.surface */
+  --float-stroke:rgba(0,0,0,.12);
+  --float-shadow:0 6px 18px -4px rgba(0,0,0,.28);
+  --text-primary:#1D1D1F; --text-secondary:#6E6E73; --text-on-dark:#fff;
+  --accent:#0A84FF; --danger:#FF3B30; --warn:#FF9F0A;
+  --sel-stroke:rgba(255,255,255,.9); --sel-stroke-inner:rgba(0,0,0,.55);
+  --badge-surface:rgba(0,0,0,.62);         /* pin.badge.surface */
+  --sp1:4px; --sp2:8px; --sp3:12px; --sp4:16px; --sp5:24px;
+  --hit-min:24px; --ctrl-h:28px; --bar-h:40px;
+  --r1:4px; --r2:8px; --r3:12px;
+  --handle:7px; --handle-hit:10px;
+  --dur-fast:100ms; --dur-normal:160ms;
+}
+html[data-theme="dark"]{
+  --scrim:rgba(0,0,0,.55);
+  --float-surface:rgba(42,42,44,.96); --float-stroke:rgba(255,255,255,.14);
+  --text-primary:#F2F2F7; --text-secondary:#A1A1A6; --accent:#409CFF;
+  --shell-paper:#1B1D21; --shell-ink:#E8EAED; --shell-ink-2:#9AA0A8;
+  --shell-hair:#33373E; --shell-surface:#232629;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:var(--shell-paper); color:var(--shell-ink);
+  font-family:var(--mono); font-size:12px; line-height:1.5;
+  display:flex; flex-direction:column;
+}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+
+/* ---------- 顶栏 ---------- */
+.bar{display:flex;align-items:center;gap:var(--sp3);padding:10px 16px;border-bottom:1px solid var(--shell-hair);background:var(--shell-surface);flex:0 0 auto}
+.brand{font-size:13px;letter-spacing:.02em}
+.brand b{font-weight:600}
+.brand span{color:var(--shell-ink-2)}
+.chips{display:flex;gap:2px;margin-left:auto;flex-wrap:wrap}
+.chip{border:1px solid transparent;background:none;padding:5px 8px;border-radius:var(--r1);cursor:pointer;color:var(--shell-ink-2);white-space:nowrap}
+.chip[aria-current="true"]{color:var(--shell-ink);border-color:var(--shell-hair);background:var(--shell-paper)}
+.chip .n{color:var(--accent);margin-right:5px}
+.togs{display:flex;gap:var(--sp2);align-items:center}
+.tog{border:1px solid var(--shell-hair);background:var(--shell-paper);border-radius:var(--r1);padding:5px 9px;cursor:pointer}
+.tog[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+
+/* ---------- 主区 ---------- */
+main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:0;min-height:0}
+.work{display:flex;flex-direction:column;min-width:0;padding:14px 16px 0}
+.ruler{height:18px;max-width:1200px;border-left:1px solid var(--shell-hair);border-right:1px solid var(--shell-hair);background:
+  repeating-linear-gradient(to right,var(--shell-hair) 0 1px,transparent 1px 20px);position:relative}
+.ruler i{position:absolute;top:0;font-size:9px;color:var(--shell-ink-2);font-style:normal;transform:translateX(3px)}
+/* 外层按可用宽度缩放，内层永远是 1200×760 的逻辑坐标舞台：原型的坐标数学与显示尺寸解耦 */
+.viewport{position:relative;width:100%;max-width:1200px;aspect-ratio:1200/760;overflow:hidden;
+  border:1px solid var(--shell-hair);border-top:none;background:#0e0f11;flex:0 0 auto}
+.stage{position:absolute;left:0;top:0;width:1200px;height:760px;transform-origin:top left;cursor:default;touch-action:none}
+.stage canvas.desk{display:block;width:1200px;height:760px}
+.hint{padding:8px 0 10px;color:var(--shell-ink-2);max-width:74ch}
+.hint kbd{font-family:var(--mono);background:var(--shell-paper);border:1px solid var(--shell-hair);border-bottom-width:2px;border-radius:3px;padding:0 4px;color:var(--shell-ink)}
+
+/* ---------- 遮罩层 ---------- */
+.layer{position:absolute;inset:0}
+.layer[hidden]{display:none}
+.scrimblk{position:absolute;background:var(--scrim)}
+.sel{position:absolute;box-shadow:0 0 0 1px var(--sel-stroke),inset 0 0 0 1px var(--sel-stroke-inner)}
+.sel.off{display:none}
+.hd{position:absolute;width:var(--handle);height:var(--handle);border-radius:50%;background:#fff;border:1px solid var(--accent);
+  margin:calc(var(--handle) / -2);box-shadow:0 0 0 3px rgba(0,0,0,.15)}
+.hd[data-h]:hover,.hd.on{width:9px;height:9px}
+.readout,.warnpill,.badge{position:absolute;font-family:var(--mono);font-size:11px;color:var(--text-on-dark);
+  background:var(--badge-surface);border-radius:var(--r1);padding:2px 6px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.readout{letter-spacing:.01em}
+.warnpill{background:var(--float-surface);color:var(--text-primary);border:1px solid var(--float-stroke);box-shadow:var(--float-shadow);display:flex;gap:6px;align-items:center}
+.warnpill svg{flex:0 0 auto}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--warn)}
+
+/* ---------- 浮层通用（App mock 用 sans） ---------- */
+.float{position:absolute;font-family:var(--sans);background:var(--float-surface);border:1px solid var(--float-stroke);
+  border-radius:var(--r2);box-shadow:var(--float-shadow);display:flex;align-items:center;gap:var(--sp1);padding:5px var(--sp2)}
+.dim{opacity:.7}
+.tbtn{width:var(--ctrl-h);height:var(--ctrl-h);min-width:var(--hit-min);border-radius:5px;border:1px solid transparent;background:none;
+  display:grid;place-items:center;cursor:pointer;padding:0}
+.tbtn:hover{background:rgba(128,128,128,.16)}
+.tbtn[aria-pressed="true"]{background:rgba(10,132,255,.16);border-color:rgba(10,132,255,.35)}
+.tbtn[aria-pressed="true"] svg{stroke:var(--accent)}
+.tbtn svg{width:16px;height:16px;fill:none;stroke:var(--text-primary);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.sep{width:1px;height:22px;background:var(--float-stroke);margin:0 3px}
+.sw{width:18px;height:18px;border-radius:50%;border:none;cursor:pointer;padding:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
+.sw[aria-pressed="true"]{box-shadow:inset 0 0 0 2px var(--float-surface),0 0 0 2px var(--accent)}
+.sw.more{background:conic-gradient(#E83347,#FF9500,#FFCC00,#34C759,#0A84FF,#AF52DE,#E83347);box-shadow:inset 0 0 0 1px rgba(0,0,0,.3)}
+.act{height:var(--ctrl-h);border-radius:5px;border:1px solid var(--float-stroke);background:rgba(128,128,128,.1);
+  font-family:var(--sans);font-size:12px;padding:0 8px;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.act kbd{font-family:var(--mono);font-size:10px;color:var(--text-secondary)}
+.act.pri{color:var(--accent);font-weight:600}
+.act.x{padding:0 6px}
+.pop{position:absolute;font-family:var(--sans);background:var(--float-surface);border:1px solid var(--float-stroke);
+  border-radius:var(--r2);box-shadow:var(--float-shadow);padding:6px 8px;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-primary)}
+.pop.off,.float.off{display:none}
+input[type=range]{width:74px;accent-color:var(--accent)}
+.chipx{border:1px solid var(--float-stroke);background:none;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;font-family:var(--sans);color:var(--text-primary)}
+.chipx[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+
+/* ---------- 贴图 ---------- */
+.pin{position:absolute;background:#111;box-shadow:0 10px 28px -8px rgba(0,0,0,.5),0 0 0 1px rgba(0,0,0,.28);border-radius:2px;overflow:visible}
+.pin canvas.img{display:block;width:100%;height:100%;border-radius:2px}
+.pin.zoomin canvas.img{image-rendering:pixelated}
+.pin canvas.vec{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.pin .pbar{position:absolute;top:-30px;left:0;display:flex;gap:2px;background:var(--float-surface);border:1px solid var(--float-stroke);
+  border-radius:6px;padding:3px;box-shadow:var(--float-shadow);opacity:0;transition:opacity var(--dur-fast) linear;font-family:var(--sans)}
+.pin:hover .pbar,.pin.showbar .pbar{opacity:1}
+.pin .badge{right:6px;bottom:6px}
+.pin .badge.off{display:none}
+.pin .editframe{position:absolute;inset:-1px;border:1px solid var(--accent);border-radius:2px;pointer-events:none}
+.pin .editframe.off{display:none}
+
+/* ---------- 放大镜 ---------- */
+.loupe{position:absolute;width:170px;background:var(--float-surface);border:1px solid var(--float-stroke);border-radius:var(--r2);
+  box-shadow:var(--float-shadow);overflow:hidden;font-family:var(--sans)}
+.loupe canvas{display:block;width:170px;height:170px;image-rendering:pixelated}
+.loupe .lr{display:flex;justify-content:space-between;gap:6px;padding:4px 6px;font-family:var(--mono);font-size:11px;color:var(--text-primary);font-variant-numeric:tabular-nums}
+.loupe.off{display:none}
+
+/* ---------- 窗口（设置 / 权限） ---------- */
+.win{position:absolute;background:var(--float-surface);border:1px solid var(--float-stroke);border-radius:var(--r3);
+  box-shadow:0 22px 60px -18px rgba(0,0,0,.6);font-family:var(--sans);color:var(--text-primary);overflow:hidden}
+.win.off{display:none}
+.titlebar{height:28px;display:flex;align-items:center;gap:6px;padding:0 10px;border-bottom:1px solid var(--float-stroke)}
+.light{width:11px;height:11px;border-radius:50%;background:#C9C9CE}
+.light.r{background:#FF5F57}.light.y{background:#FEBC2E}.light.g{background:#28C840}
+.titlebar .t{margin-left:8px;font-size:12px;color:var(--text-secondary)}
+.body{padding:var(--sp3) var(--sp4) var(--sp4)}
+.grp{margin-bottom:var(--sp4)}
+.grp>h4{margin:0 0 8px;font-size:12px;font-weight:600;color:var(--text-secondary);font-family:var(--mono)}
+.row{display:flex;align-items:center;gap:10px;padding:5px 0;min-height:30px}
+.row>label{flex:0 0 108px;font-size:13px}
+.row .sp{margin-left:auto}
+.seg{display:inline-flex;border:1px solid var(--float-stroke);border-radius:7px;overflow:hidden}
+.seg button{border:none;background:none;padding:4px 11px;font-size:12px;cursor:pointer;color:var(--text-primary)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.keyfld{min-width:104px;text-align:center;font-family:var(--mono);font-size:12px;border:1px solid var(--float-stroke);
+  background:var(--shell-surface);border-radius:6px;padding:5px 9px;cursor:pointer}
+.keyfld.rec{border-color:var(--accent);color:var(--accent)}
+.txt{flex:1;font-family:var(--mono);font-size:12px;border:1px solid var(--float-stroke);background:var(--shell-surface);border-radius:6px;padding:5px 8px;color:var(--text-primary)}
+.btn{border:1px solid var(--float-stroke);background:var(--shell-surface);border-radius:6px;padding:5px 11px;font-size:12px;cursor:pointer;color:var(--text-primary)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.note{display:flex;gap:7px;font-size:11.5px;color:var(--text-secondary);line-height:1.45}
+.note i{flex:0 0 auto;font-style:normal}
+.stat{display:flex;align-items:center;gap:7px;font-size:12.5px}
+.perm{border-radius:var(--r2);background:rgba(255,159,10,.12);border:1px solid rgba(255,159,10,.4);padding:var(--sp3) var(--sp4);margin-bottom:var(--sp4)}
+.steps{margin:0 0 var(--sp4);padding-left:20px;font-size:12.5px;line-height:1.7}
+.steps li::marker{font-family:var(--mono);color:var(--accent)}
+
+/* ---------- 菜单 ---------- */
+.menu{position:absolute;width:246px;background:var(--float-surface);border:1px solid var(--float-stroke);border-radius:7px;
+  box-shadow:0 16px 44px -12px rgba(0,0,0,.55);font-family:var(--sans);padding:5px;font-size:13px}
+.menu.off{display:none}
+.menu .mtitle{padding:5px 9px;color:var(--text-secondary)}
+.menu .mi{display:flex;justify-content:space-between;gap:14px;padding:5px 9px;border-radius:5px;cursor:default}
+.menu .mi:hover{background:var(--accent);color:#fff}
+.menu .mi kbd{font-family:var(--mono);font-size:11px;color:var(--text-secondary)}
+.menu .mi:hover kbd{color:rgba(255,255,255,.8)}
+.menu hr{border:none;border-top:1px solid var(--float-stroke);margin:5px 7px}
+.menu .mi.warnx{color:var(--warn)}
+
+/* ---------- toast ---------- */
+.toast{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);display:flex;align-items:center;gap:9px;
+  font-family:var(--sans);font-size:12.5px;background:var(--float-surface);border:1px solid var(--float-stroke);
+  border-radius:var(--r2);box-shadow:var(--float-shadow);padding:8px 12px;color:var(--text-primary)}
+.toast.off{display:none}
+
+/* ---------- 右栏规格 ---------- */
+aside{border-left:1px solid var(--shell-hair);background:var(--shell-surface);padding:14px 16px;overflow:auto;min-width:0}
+aside h2{margin:0 0 4px;font-size:14px;font-weight:600}
+aside h2 .id{color:var(--accent)}
+aside h3{margin:var(--sp5) 0 6px;font-size:11px;font-weight:600;color:var(--shell-ink-2);letter-spacing:.04em}
+.spec{border-top:1px solid var(--shell-hair);margin-top:10px;padding-top:10px}
+table{width:100%;border-collapse:collapse;font-size:11.5px}
+th{text-align:left;font-weight:600;color:var(--shell-ink-2);padding:3px 6px 3px 0;border-bottom:1px solid var(--shell-hair);white-space:nowrap}
+td{padding:4px 6px 4px 0;border-bottom:1px solid var(--shell-hair);vertical-align:top;color:var(--shell-ink)}
+td b{font-weight:600}
+ul{margin:0;padding-left:17px}
+li{margin:0 0 5px}
+.tag{display:inline-block;border:1px solid var(--shell-hair);border-radius:3px;padding:0 4px;font-size:10.5px;color:var(--shell-ink-2);margin-left:6px}
+.tag.q{border-color:var(--warn);color:var(--warn)}
+.tag.block{border-color:var(--danger);color:var(--danger)}
+.log{font-size:11px;color:var(--shell-ink-2);max-height:130px;overflow:auto;border-top:1px solid var(--shell-hair);padding-top:6px}
+.log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.log b{color:var(--accent);font-weight:400}
+.legend{display:flex;gap:10px;flex-wrap:wrap;color:var(--shell-ink-2);font-size:11px;padding:8px 0 0}
+.callout{position:absolute;font-family:var(--mono);font-size:10px;background:var(--warn);color:#20180A;border-radius:3px;padding:1px 4px;z-index:9}
+.callout.off{display:none}
+@media (max-width:1180px){main{grid-template-columns:minmax(0,1fr)}aside{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="brand"><b>MacShot</b> <span>交互原型 v0 · 逐屏裁决用</span></div>
+  <div class="chips" id="chips" role="tablist" aria-label="屏"></div>
+  <div class="togs">
+    <button class="tog" id="theme" aria-pressed="false">深色</button>
+    <button class="tog" id="callops" aria-pressed="true">规格标注</button>
+    <button class="tog" id="scaleBtn" aria-pressed="true">2x 屏</button>
+  </div>
+</header>
+
+<main>
+  <section class="work">
+    <div class="ruler" id="ruler" aria-hidden="true"></div>
+    <div class="viewport" id="viewport">
+    <div class="stage" id="stage" tabindex="0" aria-label="模拟桌面：可拖拽选区、绘制标注">
+      <canvas class="desk" id="desk" width="2400" height="1520"></canvas>
+
+      <!-- UI-001/002 遮罩 -->
+      <div class="layer" id="ovl">
+        <div class="scrimblk" id="sc0"></div><div class="scrimblk" id="sc1"></div>
+        <div class="scrimblk" id="sc2"></div><div class="scrimblk" id="sc3"></div>
+        <div class="sel off" id="sel"></div>
+        <canvas class="sel" id="annCanvas" style="background:none;box-shadow:none"></canvas>
+      </div>
+
+      <!-- UI-002 工具条 -->
+      <div class="float off" id="bar">
+        <div id="tools" style="display:flex;gap:2px"></div>
+        <div class="sep"></div>
+        <div id="swatches" style="display:flex;gap:4px"></div>
+        <div class="sep"></div>
+        <button class="chipx" id="lwChip" aria-pressed="false">3pt</button>
+        <button class="chipx" id="styleChip" aria-pressed="false">样式</button>
+        <div class="sep"></div>
+        <button class="tbtn" id="undo" title="撤销 ⌘Z"><svg viewBox="0 0 16 16"><path d="M6 4L3 7l3 3"/><path d="M3 7h6a4 4 0 1 1 0 8H8"/></svg></button>
+        <button class="tbtn" id="redo" title="重做 ⇧⌘Z"><svg viewBox="0 0 16 16"><path d="M10 4l3 3-3 3"/><path d="M13 7H7a4 4 0 1 0 0 8h1"/></svg></button>
+        <div class="sep"></div>
+        <button class="act pri" data-commit="copy">复制<kbd>⌘C</kbd></button>
+        <button class="act" data-commit="pin">贴出<kbd>⌘P</kbd></button>
+        <button class="act" data-commit="save">保存<kbd>⌘S</kbd></button>
+        <button class="act x" data-commit="cancel" title="取消 Esc">✕</button>
+      </div>
+      <div class="pop off" id="lwPop">线宽 <input type="range" id="lw" min="1" max="12" value="3"><span id="lwVal">3pt</span><span style="color:var(--text-secondary)">改样式只作用于之后的元素（FR-ANN-003）</span></div>
+      <div class="pop off" id="stylePop">
+        端点 <button class="chipx" data-arrow="single" aria-pressed="true">单</button><button class="chipx" data-arrow="double">双</button>
+        线型 <button class="chipx" data-dash="solid" aria-pressed="true">实</button><button class="chipx" data-dash="dash">虚</button><button class="chipx" data-dash="dot">点</button>
+        圆角 <button class="chipx" data-corner="0" aria-pressed="true">0</button><button class="chipx" data-corner="4">4</button><button class="chipx" data-corner="8">8</button>
+      </div>
+      <div id="handles"></div>
+      <div class="readout" id="readout" style="display:none"></div>
+      <div class="warnpill" id="warnClear" style="display:none">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#FF9F0A" stroke-width="1.8"><path d="M8 2l6 11H2z"/><path d="M8 6.5v3"/></svg>
+        <span>调整选区会清空已有标注（可 ⌘Z 找回）—— Q-11</span>
+      </div>
+
+      <!-- UI-003/004 贴图 -->
+      <div class="layer" id="pinLayer" style="pointer-events:none"><div id="pins" style="position:absolute;inset:0"></div></div>
+
+      <!-- UI-008 放大镜 -->
+      <div class="loupe off" id="loupe"><canvas id="loupeC" width="17" height="17"></canvas><div class="lr"><span id="lhex">#000000</span><span id="lxy">X:0 Y:0</span></div></div>
+
+      <!-- UI-009 toast -->
+      <div class="toast off" id="toast"><span id="toastMsg"></span><button class="btn" id="toastAct" style="display:none">打开所在目录</button></div>
+
+      <!-- UI-006 菜单 -->
+      <div class="menu off" id="menu">
+        <div class="mtitle">MacShot</div><hr>
+        <div class="mi" data-go="UI-001"><span>截图</span><kbd>F1</kbd></div>
+        <div class="mi"><span>全屏截图</span><kbd>⌘A</kbd></div>
+        <div class="mi"><span>贴出剪贴板图像</span><kbd>F3</kbd></div>
+        <div class="mi"><span>关闭所有贴图</span><kbd>⌥⌘W</kbd></div><hr>
+        <div class="mi warnx"><span>⚠ 需要屏幕录制权限</span><kbd></kbd></div><hr>
+        <div class="mi" data-go="UI-005"><span>设置…</span><kbd>⌘,</kbd></div>
+        <div class="mi"><span>关于 MacShot</span><kbd></kbd></div>
+        <div class="mi"><span>退出 MacShot</span><kbd>⌘Q</kbd></div>
+      </div>
+
+      <!-- UI-005 设置 -->
+      <div class="win off" id="settings" style="width:460px;left:50%;top:40px;transform:translateX(-50%)">
+        <div class="titlebar"><span class="light r"></span><span class="light y"></span><span class="light g"></span><span class="t">设置</span></div>
+        <div class="body">
+          <div class="grp">
+            <h4>常规</h4>
+            <div class="row"><label>外观</label>
+              <div class="seg" data-set="appearance"><button aria-pressed="true">系统</button><button>浅色</button><button>深色</button></div>
+              <span class="note sp" style="max-width:150px">原型右上角的"深色"就是这一项</span>
+            </div>
+            <div class="row"><label>开机自启</label><span class="tag">P1</span><span class="note sp">SMAppService · ADR-020</span></div>
+          </div>
+          <div class="grp">
+            <h4>热键</h4>
+            <div class="row"><label>截图</label><button class="keyfld" data-key="snip">F1</button><button class="btn">录制新键…</button></div>
+            <div class="row"><label>贴出剪贴板</label><button class="keyfld" data-key="pinClip">F3</button></div>
+            <div class="row"><label>全屏截图</label><button class="keyfld" data-key="full">⌘A</button><span class="note sp" style="color:var(--danger)">⚠ 与"全选"冲突</span></div>
+            <div class="note"><i>ⓘ</i><span>MacBook 的 F1/F3 可能被系统当作亮度/调度键：需在系统设置开启「将 F1、F2 等键用作标准功能键」，或按 <span style="font-family:var(--mono)">fn</span>。（Q-02）</span></div>
+          </div>
+          <div class="grp">
+            <h4>提交动作（Q-05）</h4>
+            <div class="row"><label>选区确定后</label>
+              <div class="seg" data-set="commit"><button aria-pressed="true">复制并结束</button><button>贴出</button><button>保存到文件</button></div>
+            </div>
+            <div class="note"><i>ⓘ</i><span>本原型把 <span style="font-family:var(--mono)">Enter</span>/双击选区 也视为提交＝复制，与推荐档一致。</span></div>
+          </div>
+          <div class="grp">
+            <h4>导出</h4>
+            <div class="row"><label>格式</label><div class="seg" data-set="fmt"><button aria-pressed="true">PNG</button><button>JPEG</button><button>WebP</button></div><span class="tag sp">JPEG/WebP＝P1/P2</span></div>
+            <div class="row"><label>目录</label><input class="txt" value="~/Pictures/MacShot"></div>
+            <div class="row"><label>命名模板</label><input class="txt" id="tpl" value="MacShot {yyyy}-{MM}-{dd} {HH}.{mm}.{ss}"></div>
+            <div class="row"><label>预览</label><span id="tplOut" style="font-family:var(--mono);font-size:11.5px"></span></div>
+          </div>
+          <div class="grp">
+            <h4>标注默认</h4>
+            <div class="row"><label>默认工具</label><div class="seg" data-set="tool"><button>矩形</button><button aria-pressed="true">箭头</button><button>文字</button></div></div>
+            <div class="row"><label>默认线宽</label>3pt<span class="sp"></span><label style="flex:0 0 auto">序号起始</label>1</div>
+          </div>
+          <div class="grp" style="margin-bottom:0">
+            <h4>权限</h4>
+            <div class="row"><label>屏幕录制</label><span class="stat"><span class="dot" style="background:var(--warn)"></span>未授予（原型态）</span>
+              <button class="btn sp">打开系统设置</button><button class="btn">重启 MacShot</button></div>
+            <div class="note"><i>ⓘ</i><span>P0 只需这一项权限；元素识别与像素光标要辅助功能权限，都在 P1（B-005/V-021）。</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- UI-007 权限引导 -->
+      <div class="win off" id="gate" style="width:390px;left:50%;top:120px;transform:translateX(-50%)">
+        <div class="titlebar"><span class="light r"></span><span class="light y"></span><span class="light g"></span><span class="t">需要屏幕录制权限</span></div>
+        <div class="body">
+          <div class="perm"><div class="note" style="color:var(--text-primary)"><i>⛭</i><span>截图需要系统允许 MacShot 读取屏幕内容。目前截图会得到全黑画面，<b>这不是 bug</b>。</span></div></div>
+          <ol class="steps">
+            <li>打开 <b>系统设置 → 隐私与安全性 → 屏幕录制与系统音频录制</b></li>
+            <li>勾选 <b>MacShot</b>（列表里没有就先触发一次截图）</li>
+            <li>点「重启 MacShot」让授权生效<b>（重启是否必需：待实测 V-021）</b></li>
+          </ol>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn">稍后</button><button class="btn">重启 MacShot</button><button class="btn pri">打开系统设置</button>
+          </div>
+        </div>
+      </div>
+    </div><!-- /stage -->
+    </div><!-- /viewport -->
+    <p class="hint" id="hint"></p>
+  </section>
+
+  <aside id="spec" aria-live="polite"></aside>
+</main>
+
+<script>
+/* ================= 舞台与"假桌面"（真像素源，供裁剪/取色用） ================= */
+const STAGE_W = 1200, STAGE_H = 760;
+const stage = document.getElementById('stage');
+const desk = document.getElementById('desk');
+let SCALE = 2;                       // 1x / 2x 切换，验证 FR-CAP-002/004 读数
+const deskCtx = desk.getContext('2d');
+
+function drawScene(){
+  const d = SCALE, W = STAGE_W*d, H = STAGE_H*d;
+  desk.width = W; desk.height = H;
+  const c = deskCtx; c.setTransform(1,0,0,1,0,0);
+  const P = v => v*d;
+  const g = c.createLinearGradient(0,0,W,H);
+  g.addColorStop(0,'#4B5563'); g.addColorStop(1,'#20242B');
+  c.fillStyle=g; c.fillRect(0,0,W,H);
+
+  // 菜单栏
+  c.fillStyle='rgba(0,0,0,.55)'; c.fillRect(0,0,W,P(26));
+  c.fillStyle='#E5E7EB'; c.font=`${P(12)}px ui-monospace,monospace`;
+  c.fillText('◍   文件   编辑   显示   窗口    ——  MacShot 原型桌面 ——', P(12), P(17));
+  c.fillText('⌁  ✳  10:30', P(W-90), P(17));
+
+  // 主窗口：代码编辑器
+  win(c,P,{x:56,y:64,w:724,h:470,title:'untitled.swift'},()=>{
+    c.fillStyle='#171A20'; c.fillRect(P(56),P(64+30),P(150),P(440));
+    for(let i=0;i<13;i++){
+      c.fillStyle = i%4===0 ? '#3A4250' : '#2B313C';
+      c.fillRect(P(66),P(104+i*24),P(28+((i*37)%90)),P(9));
+    }
+    for(let i=0;i<17;i++){
+      const y = 96+i*22, len = [9,14,20,7,18,11,22,6,16,12,19,8,15,21,10,17,13][i];
+      c.fillStyle='#4A5160'; c.font=`${P(11)}px ui-monospace,monospace`; c.fillText(String(i+1),P(224),P(y+7));
+      bar(c,P,240,y,len,'#5E81ED'); 
+      if(i%5===2) bar(c,P,240+len*7,y+0,8,'#E8B14B');
+      if(i%6===4) bar(c,P,240,y,len,'#4FB477');
+    }
+    // 1px 参考线与饱和红块（V-002 / V-004 的对照物）
+    c.fillStyle='#E83347'; c.fillRect(P(660),P(120),P(96),P(96));
+    c.fillStyle='#FFCC00'; c.fillRect(P(660),P(232),P(96),P(30));
+    c.strokeStyle='#000'; c.lineWidth=P(1);
+    for(let i=0;i<5;i++){ c.beginPath(); c.moveTo(P(660+i*24),P(280)); c.lineTo(P(660+i*24),P(330)); c.stroke(); }
+    c.fillStyle='#9AA3B2'; c.font=`${P(11)}px ui-monospace,monospace`;
+    c.fillText('1px 栅格 · #E83347 饱和红（偏色与渗色对照）', P(660), P(348));
+  });
+
+  // 次窗口：图片浏览器
+  win(c,P,{x:560,y:300,w:560,h:384,title:'shot-2026-11-16.png'},()=>{
+    const lg=c.createLinearGradient(P(560),P(330),P(1120),P(684));
+    lg.addColorStop(0,'#1E6FB8'); lg.addColorStop(.5,'#7FB7E8'); lg.addColorStop(1,'#C9DDEF');
+    c.fillStyle=lg; c.fillRect(P(572),P(332),P(536),P(330));
+    c.fillStyle='rgba(255,255,255,.85)'; c.beginPath(); c.arc(P(940),P(400),P(30),0,7); c.fill();
+    c.fillStyle='#22364B'; c.beginPath(); c.moveTo(P(572),P(662)); c.lineTo(P(760),P(470)); c.lineTo(P(900),P(600)); c.lineTo(P(1000),P(520)); c.lineTo(P(1108),P(640)); c.lineTo(P(1108),P(662)); c.closePath(); c.fill();
+  });
+
+  // Dock
+  c.fillStyle='rgba(255,255,255,.22)'; roundRect(c,P,STAGE_W/2-190,STAGE_H-56,380,44,12); c.fill();
+  for(let i=0;i<7;i++){ c.fillStyle=['#E83347','#FF9500','#FFCC00','#34C759','#0A84FF','#AF52DE','#8E8E93'][i];
+    roundRect(c,P,STAGE_W/2-176+i*52,STAGE_H-48,32,32,8); c.fill(); }
+}
+function bar(c,P,x,y,len,color){ c.fillStyle=color; c.fillRect(P(x),P(y),P(len*6),P(9)); }
+function win(c,P,r,extra){
+  c.save(); c.shadowColor='rgba(0,0,0,.45)'; c.shadowBlur=P(18); c.shadowOffsetY=P(6);
+  c.fillStyle='#F2F3F5'; roundRect(c,P,r.x,r.y,r.w,r.h,10); c.fill(); c.restore();
+  c.fillStyle='#E4E6EA'; roundRect(c,P,r.x,r.y,r.w,30,10); c.fill();
+  c.fillRect(P(r.x),P(r.y+18),P(r.w),P(12));
+  ['#FF5F57','#FEBC2E','#28C840'].forEach((col,i)=>{ c.fillStyle=col; c.beginPath(); c.arc(P(r.x+18+i*18),P(r.y+15),P(5.5),0,7); c.fill(); });
+  c.fillStyle='#6B7280'; c.font=`${P(11.5)}px system-ui,sans-serif`; c.fillText(r.title,P(r.x+r.w/2-30),P(r.y+19));
+  c.strokeStyle='rgba(0,0,0,.18)'; c.lineWidth=P(1); roundRect(c,P,r.x+.5,r.y+.5,r.w-1,r.h-1,10); c.stroke();
+  c.save(); roundRect(c,P,r.x,r.y+30,r.w,r.h-30,0); c.clip(); extra&&extra(); c.restore();
+}
+function roundRect(c,P,x,y,w,h,r){ const R=P(r); c.beginPath();
+  c.moveTo(P(x)+R,P(y)); c.arcTo(P(x+w),P(y),P(x+w),P(y+h),R); c.arcTo(P(x+w),P(y+h),P(x),P(y+h),R);
+  c.arcTo(P(x),P(y+h),P(x),P(y),R); c.arcTo(P(x),P(y),P(x+w),P(y),R); c.closePath(); }
+
+/* ================= 状态：一套标注文档贯穿 遮罩→贴图→再编辑（D-04） ================= */
+const state = {
+  screen:'UI-001',
+  sel:null,                          // 逻辑坐标 {x,y,w,h}
+  phase:'frozen',
+  tool:null,
+  style:{color:'#E83347',width:3,dash:'solid',arrow:'single',corner:0,fontSize:18},
+  elements:[],                       // 文档坐标＝设备像素，y 向下（ADR-013）
+  history:[],future:[],
+  pins:[],                           // {doc,scale,zoom,opacity,dirty,x,y,w,h,edit}
+  drag:null, draw:null,
+  callouts:true,
+};
+const px = v => Math.round(v*SCALE);
+/** 两条边分别取整（ADR-013 §4：这是消除 ±1px 的规则） */
+function pixelRect(s){
+  const x1=Math.round(s.x*SCALE), x2=Math.round((s.x+s.w)*SCALE);
+  const y1=Math.round(s.y*SCALE), y2=Math.round((s.y+s.h)*SCALE);
+  return {x:x1,y:y1,w:x2-x1,h:y2-y1};
+}
+
+/* ================= 屏定义（右栏规格 = 裁决材料） ================= */
+const SCREENS = {
+  'UI-001':{name:'遮罩与选区',fr:'FR-CAP-001/002/003 · FR-SESS-002',hint:'在桌面上按住拖出选区；拖把手缩放；拖选区内部移动。<kbd>Esc</kbd> 取消 · <kbd>Enter</kbd>/双击＝复制 · <kbd>⌘P</kbd>＝贴出',
+    spec:[['读数','<b>设备像素</b>，非逻辑点：scale=2 时拖 100×100 得 200×200，与导出 <b>cgImage.width</b> 同源（FR-CAP-002）'],
+          ['像素对齐','<b>min/max 两边分别 round</b>，不是 round(w×s)——非整数缩放（1.799x）下的 1px 渗色就靠这条消除（ADR-013/V-002）'],
+          ['暗化层','选区外 <b>4 块矩形</b>拼"洞"，不是整层 even-odd：拖选区时只重绘变化条带'],
+          ['背景不动','遮罩画的就是那张冻结帧，会话期间不回源屏幕（ADR-008）'],
+          ['把手','视觉 7pt / 命中 10pt 分离（<span class="tag">design-system §4</span>）'],
+          ['键盘','本原型在浏览器里模拟键位；<b>真壳能否收到键＝Q-15 / B-014，M-0.5 探针 T-101</b>',"q"]]},
+  'UI-002':{name:'标注工具条 + 样式条',fr:'FR-ANN-001…007',hint:'选工具后在选区内绘制；改样式只影响之后的元素；<kbd>⌘Z</kbd> 撤销；<kbd>Tab</kbd> 切变体（P1）',
+    spec:[['工具集','9 件含<b>橡皮擦</b>（Q-03）。序号徽章/圆角/虚线在 Snipaste 属付费 PRO 档，我们进 P0 <span class="tag q">Q-03</span><span class="tag q">Q-12</span>',"q"],
+          ['色板','8 格内容色，<b>不随明暗模式变</b>；第 9 格＝取色（P1 放大镜）'],
+          ['作用域','样式改动不影响已绘制元素（FR-ANN-003/V-016）—— 本原型按此实现'],
+          ['位置','优先贴选区下沿外侧；越界翻上沿，再越界压进选区内 12pt'],
+          ['移出后','降到 70% 不透明、不消失 <span class="tag q">Q-14</span>（Snipaste 会消失，我们刻意不同）',"q"],
+          ['提交','复制/贴出/保存三个动作都带键位提示，鼠标用户也能学键盘']],
+    show:true},
+  'UI-003':{name:'贴图（浏览态）',fr:'FR-PIN-001…006/017 · D-04',hint:'滚轮缩放（指针为锚）· <kbd>⌘</kbd>+滚轮或 <kbd>⌘1</kbd>…<kbd>⌘9</kbd> 透明度 · <kbd>E</kbd> 进再编辑 · <kbd>⌘C</kbd> 复制 · <kbd>⌘W</kbd>/双击 关闭',
+    spec:[['无损分两层','<b>位图</b>：近邻放大 → 看得到像素方块（正确表现）；<b>矢量标注</b>：按显示倍率重绘 → 边缘恒锐利。这条是 D-04 最直观的收益（FR-PIN-003/V-033）'],
+          ['导出恒 100%','缩放只是显示态，复制/保存按原始像素出图'],
+          ['层级','能否盖住全屏 App <b>主要取决于 collectionBehavior</b>，不是把 level 调更高 <span class="tag block">B-003</span> → 探针 T-102',"block"],
+          ['不抢焦点','贴图出现/关闭不改前台（FR-PIN-004）；原型用 <span class="tag">事件日志</span> 演示"谁收到键"'],
+          ['角标','倍率 / 透明度 / <b>未导出</b>；未导出=退出后丢失（Q-06 的代价，UI 必须明示）'],
+          ['关闭语义','P0 只有一种＝销毁 <span class="tag q">Q-13</span>',"q"]]},
+  'UI-004':{name:'贴图内再编辑',fr:'FR-PIN-005 · FR-ANN-005 · ADR-005',hint:'这里改的是<b>同一份文档</b>：画完退出，贴图与导出结果一起变；撤销栈属于这张贴图',
+    spec:[['一套渲染器','遮罩预览 / 贴图显示 / 导出烘焙 三种 intent 共用同一渲染器，禁止给贴图另写一套（annotate-model §9）'],
+          ['画布不可改','P0 禁止在贴图里改画布尺寸；要更大画布就回遮罩重截'],
+          ['schema','改错字不必重截＝D-04 的存在理由；<span class="tag q">Q-12</span> 要确认这条值得它的内存与测试代价',"q"],
+          ['内存','单张 ≤ 源位图×1.5 是回退阀（NFR-005/V-018）—— 破线就回 Q-12，不许悄悄降级']],
+    show:true},
+  'UI-005':{name:'设置',fr:'FR-SET-001…003 · FR-HOT-002 · FR-EXP-003',hint:'改命名模板看实时预览；点"录制新键…"再按任意键',
+    spec:[['一屏放完','不做多标签：只有真会改的值（原则 1）'],
+          ['即时生效','改→落盘→生效→重启仍在（FR-SET-002 逐条实测清单）'],
+          ['录制新键','录制时必须<b>先注销旧注册</b>，否则被自己吞掉（hotkey §3 的坑）'],
+          ['功能键提示','F1/F3 在 MacBook 上可能是亮度/调度键 <span class="tag q">Q-02</span>',"q"],
+          ['⌘A','与"全选"冲突风险高，实测后可能改 ⌥⌘A <span class="tag block">B-006</span>',"block"],
+          ['权限行','P0 只需屏幕录制一项，这是卖点，要写进文案（B-005/V-021）']],
+    show:true},
+  'UI-006':{name:'菜单栏',fr:'FR-SET-001 · FR-PIN-006',hint:'点菜单项"截图"回 UI-001；"设置…"去 UI-005',
+    spec:[['常驻','LSUIElement，无 Dock 图标；菜单是唯一常驻 UI'],
+          ['关闭所有贴图','⌥⌘W，对应 PinRegistry.closeAll()'],
+          ['无历史入口','P0 不落盘（Q-06），所以这里没有"最近截图"'],
+          ['图标','SF Symbols 候选名待核对（design-system §5）']],
+    show:true},
+  'UI-007':{name:'权限引导',fr:'FR-CAP-006 · ADR-008',hint:'这一步不能省：未授权时截图得到黑图，用户无从下手',
+    spec:[['不退化成黑图','探测失败就不进会话，弹此窗（capture-pipeline §6）'],
+          ['按钮真跳面板','URL scheme 与面板名各版本不同 <span class="tag block">待实测 V-021</span>',"block"],
+          ['重启提示','授权变更通常需重启进程；ad-hoc 重签可能反复丢授权 <span class="tag block">B-015/T-104</span>',"block"],
+          ['文案','明说"这不是 bug"——黑图最容易被当成程序坏了']],
+    show:true},
+  'UI-008':{name:'放大镜 / 取色（P1 契约）',fr:'FR-CAP-014 · Q-07',hint:'在 UI-001 的选区附近移动指针即可看到真实像素采样与 #HEX',
+    spec:[['不是 F4','Snipaste 官方是"放大镜可见时按 <b>C</b> 复制色值"，我先前写 F4 是错的（gap §1，已订正）'],
+          ['采样源','对<b>冻结帧</b>采样，不对屏幕采样（ADR-008）'],
+          ['权限','W/A/S/D 逐像素取样需辅助功能权限 <span class="tag block">ADR-017 未开</span>',"block"],
+          ['档位','原型里取色已可用：点工具条第 9 格进入取色模式（P1 提前实现，因为渲染成本几乎为零）']],
+    show:true},
+  'UI-009':{name:'一次性提示',fr:'各失败模式 · screens §UI-009',hint:'提交/保存/无剪贴板图都会走这里',
+    spec:[['60 秒同类不重复','防刷屏；不用系统横幅（弃用+要授权）'],
+          ['错误要说下一步','"剪贴板里没有图像"＞"操作失败"'],
+          ['提交反馈','本原型的 toast 同时显示 复制/贴出/保存 三条出口的差别（ST-005 顺序：先收窗再烘焙）']],
+    show:true},
+};
+const ORDER = Object.keys(SCREENS);
+
+/* ================= 渲染 ================= */
+const ovl=document.getElementById('ovl'), selEl=document.getElementById('sel'),
+      annC=document.getElementById('annCanvas'), annCtx=annC.getContext('2d'),
+      handlesEl=document.getElementById('handles'), readout=document.getElementById('readout'),
+      warnClear=document.getElementById('warnClear'), barEl=document.getElementById('bar'),
+      loupe=document.getElementById('loupe'), pinsEl=document.getElementById('pins'),
+      pinLayer=document.getElementById('pinLayer'), spec=document.getElementById('spec'),
+      hintEl=document.getElementById('hint'), toast=document.getElementById('toast');
+
+function screenVars(){
+  const s = state.screen;
+  const overlayOn = ['UI-001','UI-002'].includes(s);
+  ovl.hidden = !overlayOn; handlesEl.style.display = overlayOn?'':'none';
+  const hasSel=!!state.sel;
+  selEl.style.display = hasSel?'':'none'; annC.style.display = hasSel?'':'none';
+  barEl.classList.toggle('off', !(overlayOn && hasSel) && s!=='UI-004');
+  pinLayer.style.pointerEvents = (s==='UI-003'||s==='UI-004')?'auto':'none';
+  pinLayer.style.opacity = (s==='UI-003'||s==='UI-004'||s==='UI-009')?1:.22;   // 贴图仍在，但不与当前屏抢注意力
+  if(s==='UI-008') showLoupe({x:700,y:180});
+  [...pinsEl.querySelectorAll('.pin')].forEach(p=>p.style.pointerEvents=pinLayer.style.pointerEvents);
+  document.getElementById('settings').classList.toggle('off', s!=='UI-005');
+  document.getElementById('gate').classList.toggle('off', s!=='UI-007');
+  document.getElementById('menu').classList.toggle('off', s!=='UI-006');
+  loupe.classList.toggle('off', !(s==='UI-008' || (overlayOn && state.sel && loupeWant)));
+  if(s==='UI-004'&&state.pins.length) positionBarForPin(state.pins[state.pins.length-1]);
+}
+let loupeWant=false;
+
+function renderOverlay(){
+  const s = state.sel;
+  const blocks=[document.getElementById('sc0'),document.getElementById('sc1'),document.getElementById('sc2'),document.getElementById('sc3')];
+  if(!s){ blocks.forEach((b,i)=>{b.style.display=i?'none':'';b.style.inset='0';});
+    readout.style.display='none'; warnClear.style.display='none';
+    selEl.classList.add('off'); handlesEl.innerHTML=''; screenVars(); return; }
+  const L=s.x,T=s.y,R=s.x+s.w,B=s.y+s.h;
+  const set=(b,st)=>{b.style.display='';b.style.left=st.l+'px';b.style.top=st.t+'px';b.style.width=st.w+'px';b.style.height=st.h+'px';};
+  set(blocks[0],{l:0,t:0,w:STAGE_W,h:T});
+  set(blocks[1],{l:0,t:B,w:STAGE_W,h:STAGE_H-B});
+  set(blocks[2],{l:0,t:T,w:L,h:B-T});
+  set(blocks[3],{l:R,t:T,w:STAGE_W-R,h:B-T});
+  selEl.classList.remove('off');
+  selEl.style.left=L+'px'; selEl.style.top=T+'px'; selEl.style.width=s.w+'px'; selEl.style.height=s.h+'px';
+  annC.style.left=L+'px'; annC.style.top=T+'px'; annC.style.width=s.w+'px'; annC.style.height=s.h+'px';
+  annC.className='sel';
+  drawAnnotations(annC,annCtx,px(s.w),px(s.h),s);
+  // 把手
+  handlesEl.innerHTML='';
+  const HS=[['nw',L,T],['n',(L+R)/2,T],['ne',R,T],['e',R,(T+B)/2],['se',R,B],['s',(L+R)/2,B],['sw',L,B],['w',L,(T+B)/2]];
+  HS.forEach(([h,x,y])=>{const d=document.createElement('div');d.className='hd';d.dataset.h=h;
+    d.style.left=x+'px';d.style.top=y+'px';d.style.position='absolute';handlesEl.appendChild(d);});
+  // 读数（右上内侧避让）
+  const pr=pixelRect(s);
+  readout.style.display=''; readout.textContent=`${pr.w}×${pr.h}${SCALE>1?' @'+SCALE+'x':''}`;
+  const rw=readout.offsetWidth||70, bottom = B+24<STAGE_H;
+  readout.style.left=(bottom? R-rw : R-rw)+'px'; readout.style.top=(bottom? B+8 : T+6)+'px';
+  warnClear.style.display = state.elements.length? '' : 'none';
+  if(state.elements.length){ warnClear.style.left=Math.max(6,L)+'px'; warnClear.style.top=(T+6)+'px'; }
+  positionBar();
+  screenVars();
+}
+function positionBar(){
+  const s=state.sel; if(!s) return;
+  const bw=barEl.offsetWidth||520, bh=barEl.offsetHeight||40;
+  let top=s.y+s.h+10; if(top+bh>STAGE_H-6) top=s.y-bh-10; if(top<6) top=Math.min(s.y+s.h- bh-6, STAGE_H-bh-6);
+  barEl.style.top=top+'px';
+  barEl.style.left=Math.max(6,Math.min(s.x, STAGE_W-bw-6))+'px';
+  const pop=document.getElementById('lwPop'), sp=document.getElementById('stylePop');
+  pop.style.left=barEl.style.left; pop.style.top=(top+bh+6)+'px';
+  sp.style.left=barEl.style.left; sp.style.top=(top+bh+6)+'px';
+}
+
+/** 标注绘制：文档坐标＝设备像素（y 向下）。
+ *  遮罩层：backing = 裁剪区的设备像素，factor=1，CSS 再缩到逻辑尺寸 → 与真壳"画布=选区像素"同构。
+ *  贴图矢量层：backing = docW×zoom，factor=zoom → 放大时标注按显示倍率重绘，边缘保持锐利。 */
+function drawAnnotations(cv,ctx,docW,docH){
+  cv.width=Math.max(1,Math.round(docW)); cv.height=Math.max(1,Math.round(docH));
+  ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,cv.width,cv.height);
+  state.elements.forEach(el=>paintElement(ctx,el,1));
+}
+function paintElement(ctx,el,factor){
+  const st=el.style, P=el.points.map(p=>({x:p.x*factor,y:p.y*factor}));
+  ctx.save(); ctx.lineWidth=st.width*factor; ctx.strokeStyle=st.color; ctx.fillStyle=st.color;
+  ctx.lineCap='round'; ctx.lineJoin='round';
+  ctx.setLineDash(st.dash==='dash'?[7*factor,5*factor]:st.dash==='dot'?[1*factor,4*factor]:[]);
+  const b=bounds(P);
+  if(el.kind==='rect'||el.kind==='blur'){
+    if(st.corner) rr(ctx,b.x,b.y,b.w,b.h,st.corner*factor); else ctx.beginPath(),ctx.rect(b.x,b.y,b.w,b.h);
+    ctx.stroke();
+    if(el.kind==='blur'){ ctx.save(); ctx.globalAlpha=.32; ctx.fillStyle='#8E8E93'; ctx.fill(); ctx.restore();
+      ctx.save(); ctx.globalAlpha=.5; ctx.fillStyle='#fff';
+      ctx.font=`${10*factor}px ui-monospace,monospace`; ctx.fillText('马赛克',b.x+6*factor,b.y+15*factor); ctx.restore(); }
+  } else if(el.kind==='ellipse'){ ctx.beginPath(); ctx.ellipse(b.x+b.w/2,b.y+b.h/2,Math.abs(b.w/2),Math.abs(b.h/2),0,0,7); ctx.stroke(); }
+  else if(el.kind==='arrow'){ const [a,z]=P; line(ctx,a,z); head(ctx,a,z,st); }
+  else if(el.kind==='polyline'){ for(let i=1;i<P.length;i++) line(ctx,P[i-1],P[i]); if(P.length>1) head(ctx,P[P.length-2],P[P.length-1],st); }
+  else if(el.kind==='freehand'){ ctx.globalAlpha=el.pen? .45:1; ctx.lineWidth=(el.pen? st.width*3.2:st.width)*factor;
+    if(P.length>1){ctx.beginPath();ctx.moveTo(P[0].x,P[0].y);P.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));ctx.stroke();} }
+  else if(el.kind==='text'){ ctx.setLineDash([]); ctx.font=`${(st.fontSize||18)*factor}px system-ui,sans-serif`;
+    ctx.fillStyle=st.color; el.text.split('\n').forEach((t,i)=>ctx.fillText(t,P[0].x,(P[0].y+(i+1)*1.32*st.fontSize)*factor)); }
+  else if(el.kind==='badge'){ const r=(st.fontSize||18)*.72*factor; ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(P[0].x,P[0].y,r,0,7); ctx.fill();
+    ctx.fillStyle='#fff'; ctx.font=`600 ${r*.95}px system-ui,sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(el.text||'1',P[0].x,P[0].y); }
+  else if(el.kind==='eraser'){ ctx.setLineDash([]); ctx.globalAlpha=.28; ctx.fillStyle=st.color; rr(ctx,b.x,b.y,b.w,b.h,3*factor); ctx.fill(); }
+  ctx.restore();
+}
+function line(ctx,a,b){ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
+function head(ctx,a,b,st){ const A=Math.atan2(b.y-a.y,b.x-a.x), s=st.width*3.4;
+  const ang=st.arrow==='double'? [0,Math.PI]:[0];
+  ang.forEach(k=>{ ctx.beginPath(); ctx.moveTo(b.x,b.y);
+    ctx.lineTo(b.x-Math.cos(A-0.5+k)*s,b.y-Math.sin(A-0.5+k)*s);
+    ctx.lineTo(b.x-Math.cos(A+0.5+k)*s,b.y-Math.sin(A+0.5+k)*s); ctx.closePath(); ctx.fill(); }); }
+function rr(ctx,x,y,w,h,r){ctx.beginPath();ctx.roundRect?ctx.roundRect(x,y,w,h,r):ctx.rect(x,y,w,h);ctx.closePath();}
+function bounds(P){const xs=P.map(p=>p.x),ys=P.map(p=>p.y);
+  return {x:Math.min(...xs),y:Math.min(...ys),w:Math.abs(Math.max(...xs)-Math.min(...xs)),h:Math.abs(Math.max(...ys)-Math.min(...ys))};}
+
+/* ================= 贴图（D-04 的可见证明） ================= */
+function renderPins(){
+  pinsEl.innerHTML='';
+  state.pins.forEach((pin,i)=>{
+    const wrap=document.createElement('div'); wrap.className='pin';
+    if(pin.zoom>1) wrap.classList.add('zoomin');
+    wrap.style.left=pin.x+'px'; wrap.style.top=pin.y+'px';
+    wrap.style.width=(pin.docW/SCALE*pin.zoom)+'px'; wrap.style.height=(pin.docH/SCALE*pin.zoom)+'px';
+    wrap.style.opacity=pin.opacity;
+    const img=document.createElement('canvas'); img.className='img'; img.width=pin.docW; img.height=pin.docH;
+    const vec=document.createElement('canvas'); vec.className='vec';
+    wrap.append(img,vec);
+    const bar=document.createElement('div'); bar.className='pbar';
+    bar.innerHTML=`<button class="tbtn" data-p="copy" title="复制 ⌘C"><svg viewBox="0 0 16 16"><rect x="5" y="5" width="8" height="8" rx="1.5"/><path d="M3 11V3h8"/></svg></button>
+      <button class="tbtn" data-p="save" title="保存 ⌘S"><svg viewBox="0 0 16 16"><path d="M8 2v8"/><path d="M4.5 7L8 10.5 11.5 7"/><path d="M3 13h10"/></svg></button>
+      <button class="tbtn" data-p="edit" title="编辑 E"><svg viewBox="0 0 16 16"><path d="M11 2.5L13.5 5 7 11.5 4 12l.5-3z"/></svg></button>
+      <button class="tbtn" data-p="close" title="关闭 ⌘W"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>`;
+    wrap.appendChild(bar);
+    const badge=document.createElement('div'); badge.className='badge'+((pin.zoom===1&&pin.opacity===1&&!pin.dirty)?' off':'');
+    badge.textContent=`${Math.round(pin.zoom*100)}%${pin.opacity<1?' 透明'+Math.round(pin.opacity*100)+'%':''}${pin.dirty?' 未导出':''}`;
+    wrap.appendChild(badge);
+    const ef=document.createElement('div'); ef.className='editframe'+(pin.edit?'':' off'); wrap.appendChild(ef);
+    pinsEl.appendChild(wrap);
+    // 位图：按文档像素裁剪真桌面（近邻由 CSS image-rendering 决定）
+    const src=document.getElementById('desk');
+    img.getContext('2d').drawImage(src,pin.srcX,pin.srcY,pin.docW,pin.docH,0,0,pin.docW,pin.docH);
+    // 矢量层：backing = 显示逻辑尺寸 × 浏览器 dpr，factor 把 doc 单位映到 backing
+    const dpr=window.devicePixelRatio||2;
+    const cssW=pin.docW/SCALE*pin.zoom, cssH=pin.docH/SCALE*pin.zoom;
+    vec.width=Math.max(1,Math.round(cssW*dpr)); vec.height=Math.max(1,Math.round(cssH*dpr));
+    const factor=vec.width/pin.docW;
+    const vctx=vec.getContext('2d'); vctx.setTransform(1,0,0,1,0,0); vctx.clearRect(0,0,vec.width,vec.height);
+    const backup=state.elements; state.elements=pin.elements;
+    pin.elements.forEach(el=>paintElement(vctx,el,factor));
+    if(pin._temp) paintElement(vctx,pin._temp,factor);      // 落笔中的实时预览
+    state.elements=backup;
+    if(pin.edit){ vctx.save(); vctx.setLineDash([3*dpr,3*dpr]); vctx.lineWidth=1*dpr; vctx.strokeStyle='#0A84FF';
+      pin.elements.forEach(el=>{const b=bounds(el.points.map(p=>({x:p.x*factor,y:p.y*factor})));
+        vctx.strokeRect(b.x-2*dpr,b.y-2*dpr,b.w+4*dpr,b.h+4*dpr);});
+      vctx.restore(); }
+    // 交互
+    // 交互：浏览态拖=移窗；编辑态拖=画标注（⇧+拖 在编辑态仍可移窗，UI-004 规格）
+    let g=null, stroke=null;
+    const docPoint=e=>{const r=wrap.getBoundingClientRect();
+      return {x:Math.round((e.clientX-r.left)/r.width*pin.docW),y:Math.round((e.clientY-r.top)/r.height*pin.docH)};};
+    wrap.addEventListener('pointerdown',e=>{
+      if(pinLayer.style.pointerEvents==='none') return;
+      if(e.target.closest('.pbar')) return;
+      wrap.setPointerCapture(e.pointerId);
+      if(pin.edit && !e.shiftKey && state.tool){
+        stroke={points:[docPoint(e)]};
+        logEvent(`编辑态落笔 ${state.tool}（改的是这份贴图自己的文档）`);
+        return;
+      }
+      g={mx:e.clientX,my:e.clientY,ox:pin.x,oy:pin.y};
+      if(pin.edit) logEvent('编辑态：未选工具 → 不移动窗；请选工具或按 ⇧ 拖');
+    });
+    wrap.addEventListener('pointermove',e=>{
+      if(stroke){ const p=docPoint(e), last=stroke.points[stroke.points.length-1];
+        const k=state.tool;
+        if(k==='freehand'||k==='polyline'){ if(Math.hypot(p.x-last.x,p.y-last.y)>4) stroke.points.push(p); }
+        else if(stroke.points.length<2) stroke.points.push(p); else stroke.points[1]=p;
+        pin._temp={kind:k,points:stroke.points,style:{...state.style}}; renderPins(); return; }
+      if(!g) return;
+      pin.x=g.ox+(e.clientX-g.mx); pin.y=g.oy+(e.clientY-g.my);
+      wrap.style.left=pin.x+'px'; wrap.style.top=pin.y+'px';
+    });
+    wrap.addEventListener('pointerup',e=>{
+      if(stroke&&state.tool){
+        pushHistoryFor(pin);
+        const k=state.tool;
+        pin.elements.push({id:String(Math.random()),kind:k,points:stroke.points,style:{...state.style},
+          text:k==='text'?'注意这里':k==='badge'?String(pin.elements.filter(x=>x.kind==='badge').length+1):'',
+          pen:k==='freehand'});
+        pin.dirty=true; stroke=null; renderPins(); logEvent(`贴图内新增 ${k}（元素 ${pin.elements.length}）`);
+        return;
+      }
+      stroke=null; g=null;
+    });
+    wrap.addEventListener('dblclick',()=>{ if(pin.edit) return;   // 编辑态双击＝折线结束（P0 语义）
+      state.pins=state.pins.filter(p=>p!==pin); renderPins(); toastMsg('贴图已关闭（P0＝销毁，Q-13）'); });
+    wrap.addEventListener('wheel',e=>{
+      e.preventDefault();
+      if(e.metaKey){ pin.opacity=Math.min(1,Math.max(.05,pin.opacity+(e.deltaY<0?.05:-.05))); logEvent(`透明度 ${Math.round(pin.opacity*100)}%`); }
+      else { const z=pin.zoom*(e.deltaY<0?1.1:1/1.1); pin.zoom=Math.min(8,Math.max(.05,z)); logEvent(`缩放 ${Math.round(pin.zoom*100)}% —— 看位图变方块、标注仍锐利（D-04）`);}
+      renderPins();
+    },{passive:false});
+    bar.addEventListener('click',e=>{
+      const k=e.target.closest('button')?.dataset.p; if(!k) return;
+      if(k==='copy'){ pin.dirty=false; renderPins(); toastMsg('已按 <b>100% 原始像素</b> 复制（FR-EXP-002）'); }
+      if(k==='save'){ pin.dirty=false; renderPins(); toastMsg('已保存 MacShot 2026-11-16 10.30.45.png'); }
+      if(k==='edit'){ pin.edit=!pin.edit; state.screen=pin.edit?'UI-004':'UI-003'; paint(); }
+      if(k==='close'){ state.pins=state.pins.filter(p=>p!==pin); renderPins(); }
+    });
+  });
+  if(state.screen==='UI-004'&&state.pins.length) positionBarForPin(state.pins[state.pins.length-1]);
+}
+function pushHistoryFor(pin){ pin.hist=pin.hist||[]; pin.hist.push(JSON.parse(JSON.stringify(pin.elements))); if(pin.hist.length>200)pin.hist.shift(); }
+function positionBarForPin(pin){
+  const bw=barEl.offsetWidth||520, bh=barEl.offsetHeight||40;
+  const w=pin.docW/SCALE*pin.zoom;
+  let top=pin.y+pin.docH/SCALE*pin.zoom+10;
+  if(top+bh>STAGE_H-6) top=pin.y-bh-10;
+  barEl.style.top=top+'px';
+  barEl.style.left=Math.max(6,Math.min(pin.x, STAGE_W-bw-6))+'px';
+}
+
+/* ================= 指针：新建 / 移动 / 缩放 / 绘制 ================= */
+stage.addEventListener('pointerdown',e=>{
+  if(state.screen==='UI-006'){ showMenuAt(e); return; }
+  const s=state.sel, pt=local(e);
+  if(!['UI-001','UI-002'].includes(state.screen)) return;
+  if(state.picking){ pickColor(pt); return; }
+  const h=e.target.closest('.hd');
+  if(h){ state.drag={mode:'resize',h:h.dataset.h,start:pt,rect:{...s}}; return; }
+  if(s&&inside(pt,s)&&state.tool){ state.draw={points:[toDoc(pt,s)]}; return; }
+  if(s&&inside(pt,s)){ state.drag={mode:'move',start:pt,rect:{...s},hadEls:state.elements.length}; return; }
+  state.drag={mode:'new',start:pt,rect:null,hadEls:state.elements.length};
+});
+stage.addEventListener('pointermove',e=>{
+  const pt=local(e);
+  if(['UI-001','UI-002'].includes(state.screen)&&state.sel&&(loupeWant||state.screen==='UI-008')) showLoupe(pt);
+  if(state.draw&&state.sel){ const s=state.sel;
+    const p=toDoc(pt,s); const last=state.draw.points[state.draw.points.length-1];
+    const kind=state.tool;
+    if((kind==='freehand'||kind==='polyline')|| state.draw.points.length===1)
+      if(Math.hypot(p.x-last.x,p.y-last.y)>3) state.draw.points.push(p); }
+  if(!state.drag) return;
+  const d=state.drag;
+  if(d.mode==='new'){
+    const x0=d.start.x,y0=d.start.y;
+    let x=Math.min(x0,pt.x),y=Math.min(y0,pt.y),w=Math.abs(pt.x-x0),h=Math.abs(pt.y-y0);
+    if(e.altKey){ const sd=Math.max(w,h); if(pt.x<x0) x=x0-sd; if(pt.y<y0) y=y0-sd; w=h=sd; }
+    state.sel=clamp({x,y,w,h});
+  } else if(d.mode==='move'){
+    state.sel=clamp({...d.rect,x:d.rect.x+(pt.x-d.start.x),y:d.rect.y+(pt.y-d.start.y)});
+  } else if(d.mode==='resize'){ state.sel=resize(d.rect,d.h,pt,e); }
+  renderOverlay();
+});
+addEventListener('pointerup',e=>{
+  if(state.draw&&state.sel&&state.draw.points.length){ commitElement(); }
+  state.draw=null;
+  if(state.drag){
+    const d=state.drag; state.drag=null;
+    if(state.sel&&state.sel.w<4&&state.sel.h<4){ state.sel=null; logEvent('点选（P0＝取消会话；P1 走窗口识别）'); }
+    if(d.hadEls&&state.elements.length===d.hadEls&&d.mode!=='new') {}
+    renderOverlay();
+  }
+});
+function local(e){const r=stage.getBoundingClientRect();
+  return {x:(e.clientX-r.left)/r.width*STAGE_W,y:(e.clientY-r.top)/r.height*STAGE_H};}
+function inside(p,s){return p.x>=s.x&&p.x<=s.x+s.w&&p.y>=s.y&&p.y<=s.y+s.h;}
+function clamp(s){const w=Math.max(4,Math.min(s.w,STAGE_W)),h=Math.max(4,Math.min(s.h,STAGE_H));
+  return {x:Math.max(0,Math.min(s.x,STAGE_W-w)),y:Math.max(0,Math.min(s.y,STAGE_H-h)),w,h};}
+function resize(r,h,p,e){
+  let {x,y,w}=r,{h:hh}=r, R=x+w,B=y+hh;
+  if(h.includes('w')) x=Math.min(p.x,R-4); if(h.includes('e')) R=Math.max(p.x,x+4);
+  if(h.includes('n')) y=Math.min(p.y,B-4); if(h.includes('s')) B=Math.max(p.y,y+4);
+  let out=clamp({x,y,w:R-x,h:B-y});
+  if(e.altKey){ const s=Math.min(out.w,out.h); out={...out,w:s,h:s}; }
+  if(out.w!==r.w||out.h!==r.h) noteResizeClear();
+  return out;
+}
+function toDoc(p,s){const pr=pixelRect(s);return {x:px(p.x-s.x),y:px(p.y-s.y)};}
+let lastSize=null;
+function noteResizeClear(){ if(!lastSize||!state.sel) {lastSize={...state.sel};return;}
+  if(state.elements.length&&(state.sel.w!==lastSize.w||state.sel.h!==lastSize.h)) logEvent('Q-11：改选区尺寸会清空标注（此处仅演示提示）');
+  lastSize={...state.sel}; }
+
+/* ================= 标注命令 ================= */
+function commitElement(){
+  const kind=state.tool; const pts=state.draw.points;
+  pushHistory();
+  const text = kind==='text'?'注意这里':kind==='badge'?String(nextBadge()):'';
+  state.elements.push({id:crypto.randomUUID?.()||String(Math.random()),kind,points:pts,
+    style:{...state.style,width:state.style.width},text,pen:kind==='freehand'&&state.toolPen==='pen'});
+  state.draw=null; lastSize={...state.sel};
+  renderOverlay(); logEvent(`新增 ${kind}（元素 ${state.elements.length} 个）`);
+}
+function nextBadge(){ return String(state.elements.filter(e=>e.kind==='badge').length+1); }
+function pushHistory(){ state.history.push(JSON.parse(JSON.stringify(state.elements))); state.future=[]; if(state.history.length>200)state.history.shift(); }
+function undo(){
+  if(state.screen==='UI-004'&&state.pins.length){          // 撤销栈属于这张贴图（ADR-005/annotate-model §7）
+    const pin=state.pins[state.pins.length-1], p=pin.hist?.pop();
+    if(!p) return toastMsg('这张贴图没有可撤销的动作');
+    pin.elements=p; pin.dirty=true; renderPins(); return logEvent('贴图内撤销（栈不随退出编辑清空）');
+  }
+  const p=state.history.pop(); if(!p) return toastMsg('没有可撤销的动作');
+  state.future.push(state.elements.slice()); state.elements=p; renderOverlay(); logEvent('撤销（一次拖拽＝一条记录，ADR-011）');
+}
+function redo(){ const n=state.future.pop(); if(!n) return; state.history.push(state.elements.slice()); state.elements=n; renderOverlay(); }
+
+/* ================= 提交出口 ================= */
+function commit(intent){
+  if(state.screen==='UI-004'&&state.pins.length){          // 再编辑态的出口对象是贴图，不是会话
+    const pin=state.pins[state.pins.length-1];
+    if(intent==='cancel'){ pin.edit=false; state.screen='UI-003'; paint(); return logEvent('退出再编辑（撤销栈保留）'); }
+    pin.dirty=false; renderPins();
+    return toastMsg(intent==='save'?'已保存（含贴图内新增的标注）':'已复制 100% 烘焙结果 —— 与贴图显示同一渲染器（FR-EXP-002）');
+  }
+  if(intent==='cancel'){ state.sel=null; state.elements=[]; state.history=[]; renderOverlay();
+    return toastMsg('已取消：剪贴板未写入、未产生贴图（FR-SESS-002 判据）'); }
+  if(!state.sel) return toastMsg('先框选区域');
+  const s=state.sel, pr=pixelRect(s);
+  if(intent==='pin'){
+    state.pins.push({elements:JSON.parse(JSON.stringify(state.elements)),srcX:pr.x,srcY:pr.y,docW:pr.w,docH:pr.h,
+      x:Math.max(8,STAGE_W-pr.w/SCALE-120),y:120,zoom:1,opacity:1,dirty:true,edit:false,w:pr.w,h:pr.h});
+    state.sel=null; state.elements=[]; state.history=[];
+    state.screen='UI-003'; paint();
+    return toastMsg('已贴出（<b>⌘P 不写剪贴板</b>，ST-005）：贴图带的是文档，不是烘焙图');
+  }
+  if(intent==='copy'){ state.pins.forEach(p=>p.dirty=false); toastMsg('已复制：PNG + TIFF 双表示，尺寸 '+pr.w+'×'+pr.h+'（ADR-014）'); }
+  if(intent==='save'){ toastMsg('已保存 MacShot 2026-11-16 10.30.45.png',true); }
+  logEvent('提交 → 先收窗（ST-005 第 2 步），烘焙在后台');
+  state.sel=null; state.elements=[]; state.history=[]; renderOverlay();
+}
+function toastMsg(html,act){ document.getElementById('toastMsg').innerHTML=html;
+  toast.classList.remove('off'); document.getElementById('toastAct').style.display=act?'':'none';
+  clearTimeout(toast._t); toast._t=setTimeout(()=>toast.classList.add('off'),act?4200:2600); }
+
+/* ================= 取色 / 放大镜 ================= */
+function showLoupe(pt){
+  loupe.classList.remove('off');
+  const c=document.getElementById('loupeC'), x=Math.round(pt.x*SCALE), y=Math.round(pt.y*SCALE);
+  c.width=17;c.height=17; c.getContext('2d').drawImage(desk,x-8,y-8,17,17,0,0,17,17);
+  const d=desk.getContext('2d').getImageData(x,y,1,1).data;
+  const hex='#'+[d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase();
+  document.getElementById('lhex').textContent=hex;
+  document.getElementById('lxy').textContent=`X:${Math.round(pt.x)} Y:${Math.round(pt.y)}`;
+  loupe._hex=hex;
+  const r=stage.getBoundingClientRect(), sc=r.width/STAGE_W;
+  let lx=pt.x+22, ly=pt.y+22; if(lx+170>STAGE_W) lx=pt.x-192; if(ly+206>STAGE_H) ly=pt.y-206;
+  loupe.style.left=lx+'px'; loupe.style.top=ly+'px';
+}
+function pickColor(pt){
+  showLoupe(pt); loupeWant=true;
+  state.style=loupe._hex? {...state.style,color:loupe._hex}:state.style;
+  state.picking=false; loupeWant=false; logEvent(`取色 ${loupe._hex??'#000000'}（P1 放大镜提前可用）`);
+  renderSwatches();
+}
+
+/* ================= 工具条构建 ================= */
+const TOOLS=[['rect','rectangle'],['ellipse','oval'],['arrow','arrow'],['polyline','折线'],['freehand','画笔'],
+             ['text','T'],['badge','①'],['blur','马赛克'],['eraser','橡皮']];
+function buildTools(){
+  const t=document.getElementById('tools');
+  t.innerHTML=TOOLS.map(([k,label])=>`<button class="tbtn" data-tool="${k}" title="${label}">${icon(k)}</button>`).join('');
+  const sw=document.getElementById('swatches');
+  const PAL=['#E83347','#FF9500','#FFCC00','#34C759','#0A84FF','#AF52DE','#000000','#FFFFFF'];
+  sw.innerHTML=PAL.map(c=>`<button class="sw" data-c="${c}" style="background:${c}" aria-pressed="${c===state.style.color}"></button>`).join('')
+    +`<button class="sw more" id="pickBtn" title="取色（P1 放大镜，按 C 复制色值）"></button>`;
+  sw.addEventListener('click',e=>{const b=e.target.closest('.sw'); if(!b) return;
+    if(b.id==='pickBtn'){ state.picking=true; loupeWant=true; toastMsg('取色模式：在画面上点一下（<b>C 复制色值</b>＝官方键位，非 F4）'); return; }
+    state.style.color=b.dataset.c; renderSwatches(); logEvent('描边色 → '+b.dataset.c+'（只影响之后的元素）');});
+  t.addEventListener('click',e=>{const b=e.target.closest('.tbtn'); if(!b) return;
+    state.tool=state.tool===b.dataset.tool?null:b.dataset.tool;
+    if(state.tool==='freehand') state.toolPen = b.dataset.tool;
+    [...t.children].forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.tool===state.tool)));
+    barEl.classList.remove('off'); document.getElementById('lwPop').classList.add('off'); document.getElementById('stylePop').classList.add('off');
+    screenVars();});
+  document.getElementById('lw').addEventListener('input',e=>{state.style.width=+e.target.value;
+    document.getElementById('lwVal').textContent=e.target.value+'pt'; document.getElementById('lwChip').textContent=e.target.value+'pt';});
+  document.getElementById('lwChip').onclick=()=>toggle('lwPop');
+  document.getElementById('styleChip').onclick=()=>toggle('stylePop');
+  function toggle(id){const el=document.getElementById(id);const on=el.classList.contains('off');
+    document.getElementById('lwPop').classList.add('off');document.getElementById('stylePop').classList.add('off');
+    el.classList.toggle('off',!on);}
+  document.querySelectorAll('#stylePop .chipx').forEach(b=>b.onclick=()=>{
+    const g=b.dataset; const key=g.arrow?'arrow':g.dash?'dash':'corner';
+    document.querySelectorAll(`#stylePop .chipx`).forEach(x=>{ if((x.dataset.arrow&&key==='arrow')||(x.dataset.dash&&key==='dash')||(x.dataset.corner&&key==='corner')) x.setAttribute('aria-pressed','false');});
+    b.setAttribute('aria-pressed','true'); state.style[key]= key==='corner'? +g.corner : g[key];
+    logEvent('样式 → '+key+' '+state.style[key]+'（不影响已有元素）');});
+}
+function renderSwatches(){document.querySelectorAll('#swatches .sw[data-c]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.c===state.style.color)));}
+function icon(k){const m={rect:'<rect x="2.5" y="3.5" width="11" height="9" rx="1"/>',ellipse:'<ellipse cx="8" cy="8" rx="5.5" ry="4.5"/>',
+  arrow:'<path d="M3 13L13 3"/><path d="M8 3h5v5"/>',polyline:'<path d="M2 13l4-6 3 4 5-6"/>',freehand:'<path d="M2 12c2-6 4 4 6-2s2 4 6-3"/>',
+  text:'<path d="M3 4h10"/><path d="M8 4v9"/>',badge:'<circle cx="8" cy="8" r="5.5"/><path d="M6.5 6l1.5 4 1.5-4"/>',
+  blur:'<rect x="2.5" y="3.5" width="11" height="9" rx="1"/><path d="M2.5 8h11M6 3.5v9M10 3.5v9"/>',
+  eraser:'<path d="M4 12h9"/><path d="M5 10l4-5 4 3-4 4z"/>'};
+  return `<svg viewBox="0 0 16 16">${m[k]||''}</svg>`;}
+
+/* ================= 键盘（Q-15 的审点就在这一栏） ================= */
+const events=[];
+function logEvent(t){ events.unshift(`<b>${t}</b>`); if(events.length>40)events.pop(); renderSpecLog(); }
+addEventListener('keydown',e=>{
+  if(['UI-003','UI-004'].includes(state.screen)&&state.pins.length){
+    const pin=state.pins[state.pins.length-1];
+    if(e.metaKey&&/^[0-9]$/.test(e.key)){ const v=e.key==='0'?1:+e.key/10; pin.opacity=v; renderPins(); logEvent(`⌘${e.key} → 透明度 ${Math.round(v*100)}%`); e.preventDefault(); return; }
+    if(e.key==='e'||e.key==='E'){ pin.edit=!pin.edit; state.screen=pin.edit?'UI-004':'UI-003'; paint(); logEvent('切换再编辑态（同一份文档）'); return; }
+    if((e.key==='c'||e.key==='C')&&e.metaKey){ pin.dirty=false; renderPins(); toastMsg('已复制贴图内容（100% 烘焙）'); return; }
+    if((e.key==='w'||e.key==='W')&&e.metaKey){ state.pins.pop(); renderPins(); toastMsg('贴图关闭＝销毁（Q-13）'); e.preventDefault(); return; }
+  }
+  if(e.key==='Escape'){ if(state.sel){commit('cancel');} return; }
+  if(e.key==='Enter'&&state.sel){ commit('copy'); return; }
+  if((e.key==='c'||e.key==='C')&&e.metaKey&&!e.shiftKey){ commit('copy'); e.preventDefault(); return; }
+  if((e.key==='p'||e.key==='P')&&e.metaKey){ commit('pin'); e.preventDefault(); return; }
+  if((e.key==='s'||e.key==='S')&&e.metaKey){ commit(e.shiftKey?'save':'save'); e.preventDefault(); return; }
+  if((e.key==='z'||e.key==='Z')&&e.metaKey){ e.shiftKey?redo():undo(); e.preventDefault(); return; }
+  if(e.key==='Delete'&&state.elements.length){ pushHistory(); state.elements.pop(); renderOverlay(); logEvent('删除最后一个元素（P0 单选）'); return; }
+  if(e.altKey&&e.code==='KeyC'){ loupeWant=!loupeWant; logEvent('⌥ 强制呼出/收起放大镜（P1 契约）'); }
+  if(['1','2','3','4','5'].includes(e.key)&&state.sel){ state.style.width=+e.key; document.getElementById('lwChip').textContent=e.key+'pt'; logEvent('笔宽档位 '+e.key+'（P1，档位属 Snipaste PRO）'); }
+});
+
+/* ================= 右栏规格渲染 ================= */
+function paintSpec(){
+  const sc=SCREENS[state.screen];
+  spec.innerHTML=`<h2><span class="id">${state.screen}</span> ${sc.name}</h2>
+    <div style="color:var(--shell-ink-2);font-size:11px">${sc.fr}</div>
+    <div class="spec"><h3>这一屏要裁的规格</h3><table>${sc.spec.map(r=>`<tr><td style="width:64px">${r[0]}</td><td>${r[1]}${r[2]==='q'?' <span class="tag q">待裁决</span>':r[2]==='block'?' <span class="tag block">卡点</span>':''}</td></tr>`).join('')}</table></div>
+    <div class="spec"><h3>状态读数</h3><table>
+      <tr><td>phase</td><td><b>${state.phase}</b> → 选区 ${state.sel?'有':'无'} · 元素 ${state.elements.length} 个</td></tr>
+      <tr><td>scale</td><td><b>${SCALE}x</b>（切换顶栏"2x 屏"看读数与像素对齐变化）</td></tr>
+      <tr><td>贴图</td><td>${state.pins.length} 张${state.pins.some(p=>p.dirty)?' · 含<b style="color:var(--warn)">未导出</b>':''}</td></tr>
+    </table></div>
+    <div class="spec"><h3>键盘事件（对照 Q-15）</h3><div class="log" id="evlog">${events.map(x=>`<div>${x}</div>`).join('')||'<div>还没按键</div>'}</div></div>`;
+  hintEl.innerHTML=sc.hint;
+}
+function renderSpecLog(){const l=document.getElementById('evlog'); if(l) l.innerHTML=events.map(x=>`<div>${x}</div>`).join('')||'<div>还没按键</div>';}
+
+/* ================= 屏导航 ================= */
+function paint(){
+  ORDER.forEach(id=>{const b=document.querySelector(`.chip[data-s="${id}"]`); if(b) b.setAttribute('aria-current',String(id===state.screen));});
+  paintSpec(); screenVars();
+  if(state.screen==='UI-002'){ barEl.classList.remove('off'); if(!state.sel){ state.sel=clamp({x:250,y:170,w:430,h:250}); state.elements=state.elements.length?state.elements:[
+      {id:'seed1',kind:'arrow',points:[{x:px(20),y:px(150)},{x:px(300),y:px(60)}],style:{color:'#E83347',width:4,dash:'solid',arrow:'single'}}]; } }
+  if(state.screen==='UI-003'&&!state.pins.length){
+    const s=state.sel||clamp({x:250,y:170,w:430,h:250}), pr=pixelRect(s);
+    state.pins=[{elements:JSON.parse(JSON.stringify(state.elements)),srcX:pr.x,srcY:pr.y,docW:pr.w,docH:pr.h,
+      x:640,y:210,zoom:1,opacity:1,dirty:true,edit:false}]
+    ; state.sel=null; logEvent('演示贴图：由遮罩 ⌘P 提交而来');
+  }
+  if(state.screen==='UI-004'){ if(!state.pins.length) state.screen='UI-003'; else state.pins.forEach((p,i)=>p.edit=i===state.pins.length-1); }
+  else state.pins.forEach(p=>p.edit=false);
+  if(state.screen==='UI-002'&&!state.sel) state.sel=clamp({x:250,y:170,w:430,h:250});
+  renderOverlay(); renderPins(); paintSpec(); placeCallouts();
+}
+function buildChips(){
+  document.getElementById('chips').innerHTML=ORDER.map(id=>
+    `<button class="chip" role="tab" data-s="${id}"><span class="n">${id.replace('UI-','')}</span>${SCREENS[id].name}</button>`).join('');
+  document.getElementById('chips').addEventListener('click',e=>{const b=e.target.closest('.chip'); if(!b)return;
+    state.screen=b.dataset.s; state.phase=b.dataset.s==='UI-001'?'selecting':'idle'; loupeWant=(b.dataset.s==='UI-008'); paint();});
+}
+function ruler(){const r=document.getElementById('ruler');
+  r.innerHTML=[0,200,400,600,800,1000,1200].map(v=>`<i style="left:${v/STAGE_W*100}%">${v}</i>`).join('')
+   +`<span style="position:absolute;right:6px;top:1px;color:var(--shell-ink-2);font-size:9px">逻辑 px · 舞台 ${STAGE_W}×${STAGE_H}</span>`;}
+function showMenuAt(e){ const m=document.getElementById('menu'); m.classList.remove('off');
+  const pt=local(e); m.style.left=Math.min(pt.x,STAGE_W-256)+'px'; m.style.top=Math.min(pt.y,STAGE_H-260)+'px'; }
+document.getElementById('menu').addEventListener('click',e=>{const mi=e.target.closest('.mi'); if(!mi)return;
+  if(mi.dataset.go){ state.screen=mi.dataset.go; paint(); }
+  if(mi.textContent.includes('截图')) { state.screen='UI-001'; state.sel=null; paint(); toastMsg('F1 → 已冻结屏幕（模拟）'); }
+  document.getElementById('menu').classList.add('off');});
+document.getElementById('theme').onclick=e=>{const t=document.documentElement.dataset.theme==='dark'?'light':'dark';
+  document.documentElement.dataset.theme=t; e.currentTarget.setAttribute('aria-pressed',String(t==='dark')); e.currentTarget.textContent=t==='dark'?'浅色':'深色';};
+document.getElementById('scaleBtn').onclick=e=>{SCALE=SCALE===2?1:2; e.currentTarget.setAttribute('aria-pressed',String(SCALE===2));
+  e.currentTarget.textContent=SCALE+'x 屏'; drawScene(); lastSize=null; renderOverlay(); logEvent(`切换 scale=${SCALE} → 读数与两边分别取整的结果随之变化（FR-CAP-004/V-002）`);};
+document.getElementById('callops').onclick=e=>{state.callouts=!state.callouts;e.currentTarget.setAttribute('aria-pressed',String(state.callouts));
+  document.querySelectorAll('.callout').forEach(c=>c.classList.toggle('off',!state.callouts));};
+document.getElementById('undo').onclick=undo; document.getElementById('redo').onclick=redo;
+document.querySelectorAll('[data-commit]').forEach(b=>b.onclick=()=>commit(b.dataset.commit));
+document.getElementById('toastAct').onclick=()=>toastMsg('打开所在目录（FR-EXP-013 属 P1，这里只是占位）');
+document.querySelectorAll('.seg').forEach(sg=>sg.addEventListener('click',e=>{const b=e.target.closest('button'); if(!b)return;
+  [...sg.children].forEach(x=>x.setAttribute('aria-pressed',String(x===b))); logEvent('设置：'+(sg.dataset.set||'')+' → '+b.textContent.trim());}));
+document.querySelectorAll('.keyfld').forEach(k=>k.addEventListener('click',()=>{
+  document.querySelectorAll('.keyfld').forEach(x=>x.classList.remove('rec')); k.classList.add('rec');
+  logEvent('录制新键：已注销旧注册（否则会被自己吞掉，hotkey §3）');}));
+addEventListener('keydown',e=>{const rec=document.querySelector('.keyfld.rec'); if(!rec)return;
+  const s=(e.metaKey?'⌘':'')+(e.altKey?'⌥':'')+(e.shiftKey?'⇧':'')+(e.ctrlKey?'⌃':'')+ (e.key.length===1?e.key.toUpperCase():e.key);
+  rec.textContent=s; rec.classList.remove('rec'); logEvent('新键 '+s+' → 注册结果需实测（B-004 OSStatus）');});
+const tpl=document.getElementById('tpl');
+function tplRender(){ let v=tpl.value.replace('{yyyy}','2026').replace('{MM}','11').replace('{dd}','16')
+  .replace('{HH}','10').replace('{mm}','30').replace('{ss}','45').replace('{width}','860').replace('{height}','500')
+  .replace('{index}','001').replace('{tool}','MacShot'); document.getElementById('tplOut').textContent=v+'.png'; }
+tpl.addEventListener('input',tplRender);
+
+/* ================= 启动 ================= */
+function fit(){
+  const vp=document.getElementById('viewport');
+  const k=(vp.clientWidth||STAGE_W)/STAGE_W;
+  stage.style.transform=`scale(${k})`;
+}
+function boot(){
+  drawScene(); buildChips(); buildTools(); ruler(); tplRender(); fit();
+  state.sel=clamp({x:250,y:170,w:430,h:250}); lastSize={...state.sel};
+  state.phase='selecting';
+  paint();
+  logEvent('舞台就绪：按 <b>⌘P</b> 提交成贴图，再看 D-04 的放大差别');
+  setTimeout(placeCallouts,60);
+}
+function placeCallouts(){
+  const put=(el,text)=>{ if(!el) return; const c=document.createElement('div'); c.className='callout'; c.textContent=text;
+    const sr=stage.getBoundingClientRect(), er=el.getBoundingClientRect();
+    c.style.left=Math.round(er.left-sr.left)+'px'; c.style.top=Math.round(er.top-sr.top-15)+'px';
+    c.dataset.for=el.id||el.className; stage.appendChild(c); if(!state.callouts)c.classList.add('off'); };
+  // 已存在则复用，避免重复打点
+  stage.querySelectorAll('.callout').forEach(c=>c.remove());
+  put(readout,'设备像素读数');
+  put(handlesEl.firstElementChild,'视觉 7pt / 命中 10pt');
+  put(barEl,'工具 9 件（Q-03）');
+  put(pinsEl.querySelector('.badge'),'未导出角标（Q-06 代价）');
+}
+addEventListener('resize',()=>{fit();renderOverlay();});
+boot();
+</script>
+</body>
+</html>

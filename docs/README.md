@@ -51,6 +51,7 @@
 | `templates/task-card.md` | 六项必填任务卡 + 粒度参考 | 模板 | 已落 |
 | `templates/adr.md` | ADR 模板（含"否决方案+翻案决策门"要求） | 模板 | 已落 |
 | `templates/spec-doc.md` | 模块/屏幕/状态机共用规格模板 + 反面清单 | 模板 | 已落 |
+| `../prototypes/index.html` | **可操作原型**（9 屏共用一套标注文档；拖选区/画标注/贴出/缩放/取色都能真跑） | 校对辅助，**非真源**（规格以 `design/screens.md` 为准） | 已落（E-014） |
 | `../spikes/README.md` | 未裁决代码停放规则 + `stash@{0}` 说明 | **非真源** | 已落 |
 | `../App` `../Config` `../Packages` `../Makefile` `../scripts` | 工程骨架 | 代码 | **不存在**（M-0，第 0 档红） |
 
@@ -73,7 +74,7 @@
 
 | 缺口 | 处理归属 |
 |---|---|
-| 可视化原型稿（HTML/图片） | `T-009` 待你决定要不要 |
+| 原型能证伪的只有"几何/像素/交互手感"；**证伪不了** TCC 授权、window level 盖全屏、未激活窗收键（那三项是 T-101/T-102/V-021 的活） | 已在 `prototypes/index.html` 右栏逐项标明"原型态 vs 待实测" |
 | ADR-017…021 正文（元素识别、历史存储、贴图 level、自启、模糊核） | 各自触发时机见 `adr/README.md` 待补表 |
 | `MSSettings` 默认值全字段表（现散在 `keymap.md`/`export-clipboard.md`） | M-0 的 `T-016` 一并收口 |
 | 英文文案对照表（`MSStrings` 的 en 列） | M-5 `T-070…` |

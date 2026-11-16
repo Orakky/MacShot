@@ -10,6 +10,7 @@ macOS 原生截图工具：**快速截图 → 标注 → 贴图置顶 → 一键
 | 需求清单（P0 见 §0 统计，每条带判据） | ✅ 已成文，待逐条 `accepted` |
 | 技术架构（8 份）+ ADR（16 条：4 accepted / 12 proposed） | ✅ 已成文，**proposed 项不可落地为代码** |
 | 设计原型（token + 逐屏线框 + 状态机 + 键位） | ✅ 已成文，待裁决 |
+| 可操作原型（9 屏共用一套标注文档） | ✅ `prototypes/index.html`；数学与路径已量测（E-014），**视觉观感需你在真浏览器目测**（E-015） |
 | 里程碑 M-0…M-6 + 待办/已办/卡点台账 | ✅ 已成文 |
 | 工程骨架、构建脚本、任何 `.swift` | ⛔ 未开始（`docs/tasks/todo.md` 第 0 档仍红，硬约束见 `docs/README.md` §4） |
 
@@ -24,11 +25,12 @@ macOS 原生截图工具：**快速截图 → 标注 → 贴图置顶 → 一键
 
 ## 我要看什么（按裁决顺序）
 
-1. `docs/charter.md` §6 —— **Q-01…Q-15 待你签字**，这是解锁编码的唯一门槛（Q-15 建议先做 M-0.5 探针再签）
-2. `docs/adr/README.md` —— 12 条 `proposed` 决策（含每条的否决方案与翻案条件）
-3. `docs/requirements/requirements.md` —— P0 清单与判据（条数只在 §0 统计）；§3 是 P1
-4. `docs/design/screens.md` —— 逐屏线框（遮罩 / 工具条 / 贴图 / 再编辑 / 设置 / 菜单 / 权限窗）
-5. `docs/plan/roadmap.md` + `docs/tasks/todo.md` / `done.md` / `blocked.md`
+1. **先打开 `prototypes/index.html`**（可操作原型，9 屏一套标注文档）—— 手感对不对、D-04 值不值，看它比看表快
+2. `docs/charter.md` §6 —— **Q-01…Q-15 待你签字**，这是解锁编码的唯一门槛（Q-15 建议先做 M-0.5 探针再签）
+3. `docs/adr/README.md` —— 12 条 `proposed` 决策（含每条的否决方案与翻案条件）
+4. `docs/requirements/requirements.md` —— P0 清单与判据（条数只在 §0 统计）；§3 是 P1
+5. `docs/design/screens.md` —— 逐屏线框规格（真源；原型只是对照）
+6. `docs/plan/roadmap.md` + `docs/tasks/todo.md` / `done.md` / `blocked.md`
 
 协作方式（人 + agent）写在 `AGENTS.md` 与 `docs/protocol/agent-playbook.md`。
 

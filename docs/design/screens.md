@@ -3,6 +3,7 @@
 > 真源：**屏幕与元素规格**（`UI-00n`）。数值一律引用 `docs/design/design-system.md` 的 token；状态机见 `docs/design/state-machines.md`；键位见 `docs/design/keymap.md`。
 > 线框是"位置与层级"的约定，不是像素稿；实现时以元素规格表为准。
 > P0 屏 = UI-001…UI-007；UI-008/UI-009 属 P1 但契约先定（避免后面返工）。
+> **可操作对照**：`prototypes/index.html`（T-060，证据 E-014）—— 9 屏共用一套标注文档，可拖选区/画标注/⌘P 贴出/缩放/取色。规格仍以本文为准；原型只回答"手感对不对"，**不证明** TCC、window level、键盘焦点（那是 T-101/T-102/V-021）。
 
 ---
 
