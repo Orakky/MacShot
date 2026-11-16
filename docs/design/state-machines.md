@@ -37,8 +37,8 @@ stateDiagram-v2
 | 8 | `selecting` | `toolSelected(k)` 且无选区 | `selecting` | `toast("先框选区域")`，**不进 editing** | ST-001 非法项 |
 | 9 | `selecting` | `drawBegan` 且有选区 | `editing` | `beginElement(kind)` | FR-ANN-001 |
 | 10 | `editing` | `drawEnded` | `selecting` | `commitElement` → 历史合并 1 条 | FR-ANN-005 |
-| 11 | `editing` | `commit(.copy)` | `committing` | `bake`、`writePasteboard`、`closeOverlay` | FR-EXP-001 |
-| 12 | `editing` | `commit(.pin)` | `committing` | `openPin(.document)`、`closeOverlay`（**不写剪贴板**） | `export-clipboard.md` §5 |
+| 11 | `editing` | `commit(.copy)` | `committing` | `closeOverlay` → `bake` → `writePasteboard`（顺序见 ST-005） | FR-EXP-001 |
+| 12 | `editing` | `commit(.pin)` | `committing` | `closeOverlay` → `openPin(.document)`（**不写剪贴板**） | `export-clipboard.md` §5 |
 | 13 | `selecting` | `cancel` | `idle` | `closeOverlay`；**无剪贴板 effect** | FR-SESS-002 |
 | 14 | `committing` | `effectsDone` | `idle` | 释放会话持有的冻结帧 | — |
 | 15 | 任意非 idle | `displayChanged` | 不变（用快照） | 记 `capture.display-snapshot-stale` | FR-SESS-004 |
@@ -87,18 +87,18 @@ open → 浏览 ⇄ 编辑 → (复制/保存 → 仍浏览，清除"未导出")
 
 ## ST-005 提交意图路由
 
-`CommitIntent` → Effect 序列的唯一表（真源在 `docs/architecture/export-clipboard.md` §5，本文只列**会话侧**顺序）：
+`CommitIntent` → Effect 序列的唯一表（意图语义真源在 `docs/architecture/export-clipboard.md` §5）。会话侧顺序固定为：
 
 ```
 commit(intent):
-  1) 停输入子态（文字提交/放弃）
-  2) baking（后台）
-  3) 按 intent 执行：copy → writePasteboard | save → panel|quickSave | pin → openPin(document)
-  4) closeOverlay（先收窗，再做耗时的事？—— 不：收窗在第 4 步，保证"提交即消失"的观感，
-     耗时步骤用 intent 的完成回调决定 toast）
-  5) phase = idle
+  1) 停输入子态（文字已提交/放弃）
+  2) closeOverlay —— 立即收窗（观感：提交即消失）
+  3) 后台 baking（渲染 → 位图，或 pin 直接拿文档）
+  4) 按 intent 执行副作用：copy → writePasteboard | save → panel|quickSave | pin → openPin
+  5) 完成回调：仅 save 与失败时出 toast；phase = idle
 ```
-第 4 步的顺序是刻意的：**窗先消失，导出在后台完成**。反了会让用户以为卡住（这条来自 NFR 的延迟目标，实测后若发现"提交后贴图迟迟不出现"再调）。
+
+第 2 步必须在第 3 步之前：先收窗再烘焙，用户不会觉得卡在提交上；导出的失败通过 toast 补偿（`screens.md#UI-009`）。若实测发现"提交后贴图明显延迟出现"，先查 baking 耗时（`t.crop→doc-ready`），**不要**把收窗挪到烘焙之后来"掩盖"。ST-001 第 11/12 行的 Effect 顺序以本节为准。
 
 ## ST-006 权限门
 

@@ -2,14 +2,14 @@
 build/
 DerivedData/
 build/Derived/
+.build/                 # swift build / swift test 在包目录下生成
 *.app/
 *.dmg
 *.xcarchive
 .swiftpm/
 Package.resolved.bak
 
-# 交付素材（截图基线之外的都算素材，见 docs/protocol/git-and-release.md §1）
-/prototypes/shots/
+# 交付素材（Tests/Fixtures 里的渲染基线除外，见文件末尾）
 *.tmp.png
 
 # 编辑器与系统

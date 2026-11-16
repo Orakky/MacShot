@@ -7,7 +7,7 @@ macOS 原生截图工具：**快速截图 → 标注 → 贴图置顶 → 一键
 | 层 | 状态 |
 |---|---|
 | 范围裁决 D-01…D-04 | ✅ 已签（见下表） |
-| 需求清单（P0 32 条，每条带判据） | ✅ 已成文，待逐条 `accepted` |
+| 需求清单（P0 见 §0 统计，每条带判据） | ✅ 已成文，待逐条 `accepted` |
 | 技术架构（8 份）+ ADR（16 条：4 accepted / 12 proposed） | ✅ 已成文，**proposed 项不可落地为代码** |
 | 设计原型（token + 逐屏线框 + 状态机 + 键位） | ✅ 已成文，待裁决 |
 | 里程碑 M-0…M-6 + 待办/已办/卡点台账 | ✅ 已成文 |
@@ -24,9 +24,9 @@ macOS 原生截图工具：**快速截图 → 标注 → 贴图置顶 → 一键
 
 ## 我要看什么（按裁决顺序）
 
-1. `docs/charter.md` §6 —— **Q-01…Q-13 待你签字**，这是解锁编码的唯一门槛
+1. `docs/charter.md` §6 —— **Q-01…Q-15 待你签字**，这是解锁编码的唯一门槛（Q-15 建议先做 M-0.5 探针再签）
 2. `docs/adr/README.md` —— 12 条 `proposed` 决策（含每条的否决方案与翻案条件）
-3. `docs/requirements/requirements.md` —— P0 32 条与判据；§3 是 P1 清单
+3. `docs/requirements/requirements.md` —— P0 清单与判据（条数只在 §0 统计）；§3 是 P1
 4. `docs/design/screens.md` —— 逐屏线框（遮罩 / 工具条 / 贴图 / 再编辑 / 设置 / 菜单 / 权限窗）
 5. `docs/plan/roadmap.md` + `docs/tasks/todo.md` / `done.md` / `blocked.md`
 

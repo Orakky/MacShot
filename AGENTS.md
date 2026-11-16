@@ -7,7 +7,7 @@ macOS 原生截图 → 标注 → 贴图置顶 → 剪贴板 工具（形态参�
 **未经裁决不写实现代码。** 现状：
 
 - 已裁决：D-01 首版只做四大件 / D-02 本机 ad-hoc 签名 / D-03 Xcode + SPM / D-04 贴图携带可编辑标注层（见 `docs/charter.md` §1）。
-- 未裁决：`docs/charter.md` §6 的 Q-01…Q-11，与 `docs/adr/README.md` 中状态为 `proposed` 的行。
+- 未裁决：`docs/charter.md` §6 的 Q-01…Q-15，与 `docs/adr/README.md` 中状态为 `proposed` 的行。
 - 已有一版骨架代码，**收起在 `stash@{0}`**（"architecture-spike"）。它是 D-0x 之前凭假设写的，不要 `git stash pop`、不要当既成事实引用。要复用需先对照 accepted ADR 逐条核对。
 
 进入编码的门槛：`docs/README.md` §4 的判据全部满足。
@@ -19,12 +19,15 @@ macOS 原生截图 → 标注 → 贴图置顶 → 剪贴板 工具（形态参�
 ## 2. 命令（M-0 落地后生效，届时由 `docs/runbook/build-and-verify.md` 转正）
 
 ```sh
-make doctor            # 环境自检：Xcode / SDK / 证书 / 权限
+make doctor            # 环境自检：Xcode / SDK / 证书 / 构建号 / 权限 / 未验证项计数
 make build             # xcodebuild 无头构建 .app
-make test              # swift test（ Packages/MacShotKit ，无需 Xcode GUI）
-make run               # 构建并启动（开发用）
-make dmg               # 产出 build/MacShot.dmg（ad-hoc 签名）
-make check             # 本地门禁：build + test + 静态检查（lint 视 ADR-015）
+make test              # swift test（Packages/MacShotKit，无需 Xcode GUI）
+make run               # 构建并启动（开发用；先杀旧进程）
+make release           # Release 配置构建
+make dmg               # 产出 build/MacShot-<version>.dmg（ad-hoc 签名）
+make install           # 装到 /Applications 或 ~/Applications（去 quarantine）
+make check             # 本地门禁：build + test + 风格/依赖方向/文档一致性
+make clean             # 清 build 与 Derived
 scripts/reset-tcc.sh   # 重置屏幕录制授权（排查黑图）
 ```
 

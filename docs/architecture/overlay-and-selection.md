@@ -7,7 +7,7 @@
 | 项 | 取值 | 理由 |
 |---|---|---|
 | 类 | `NSWindow` borderless（非 `NSPanel`） | 遮罩需要成为会话期的事件焦点，但它**不夺系统前台**（见 §2） |
-| level | `.screenSaver` 之上、`.mainMenu` 之上（具体数值待实测，记 ADR-019 一并定） | 必须盖住包括菜单栏在内的全部内容 |
+| level | `.statusBar`（=25）或 `.statusBar + 1`，**实测后定，记 ADR-019** | 必须盖住菜单栏（`.mainMenu`=24）与 Dock（`.dock`=20）。**原稿写"`.screenSaver` 之上"是错的**：`.screenSaver`=1000，远高于菜单栏，用它会让遮罩盖住屏幕保护/锁屏并可能与系统保护冲突；也不要用 `CGShieldingWindowLevel()`（那是锁屏层级）。正确的升序是 `.floating`(3) < `.modalPanel`(8) < `.dock`(20) < `.mainMenu`(24) < `.statusBar`(25) < `.popUpMenu`(101) |
 | 覆盖范围 | **单个显示器的整屏**（Q-09 推荐 A） | 跨屏选区 P2；多屏时选光标所在屏 |
 | 尺寸 | = 该显示器 `logicalFrame` | 位图 1:1 铺满，无缩放 |
 | `ignoresMouseEvents` | false | 要接事件 |

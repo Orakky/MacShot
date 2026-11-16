@@ -9,7 +9,7 @@
 |---|---|---|
 | 类 | `NSPanel` + `[.nonactivatingPanel, .hudWindow 否]` | FR-PIN-004：出现/聚焦/关闭都不改用户输入焦点 |
 | `styleMask` | `.borderless`（P0 无系统标题栏；边框属 P1 视觉件） | 贴图是内容本身 |
-| `level` | **待定，ADR-019**。候选（由低到高）：`.floating` < `.tornOffMenu` < `.mainMenu + 1` < `.statusBar` < `.modalPanel` < `.popUpMenu` < `CGWindowLevelForKey(.maximumWindow)` | 判据 FR-PIN-001：要能盖在**全屏 Space 的 Safari / Keynote 演示**之上 |
+| `level` | **待定，ADR-019**。正确升序：`.floating`(3) = `.tornOffMenu`(3) < `.modalPanel`(8) < `.dock`(20) < `.mainMenu`(24) < `.statusBar`(25) < `.popUpMenu`(101) < `.screenSaver`(1000) < `CGWindowLevelForKey(.cursorWindow)`。候选值只取 `.statusBar`、`.statusBar + 1`、`.popUpMenu` 三档。**原稿把 `.modalPanel` 排在 `.mainMenu` 之后是错的。** 另需明确：能否盖住全屏 App，**主要取决于 `collectionBehavior`（`.fullScreenAuxiliary` + `.canJoinAllSpaces`），不是 level 越大越好** —— 所以必须实测（V-010），不要凭"调高 level"了事 | 判据 FR-PIN-001：要能盖在**全屏 Space 的 Safari / Keynote 演示**之上 |
 | `collectionBehavior` | `[.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]` | `.fullScreenAuxiliary` 是能进入全屏 Space 的关键；`.stationary` 使其不随 Mission Control 挪动（P1 再评估副作用） |
 | `hasShadow` | true（P0 默认开） | Snipaste 边框/阴影属视觉件，P1 可关 |
 | `isMovableByWindowBackground` | true | FR-PIN-002"任意处拖拽"；但绘制层要能区分"拖窗"与"画标注"（编辑态下关掉） |
@@ -45,7 +45,7 @@ viewBounds (逻辑点) = canvasSize(px) / displayScale(base) × zoom
 | 位图绘制 | `interpolationQuality = .none`（近邻）。放大 >100% 时看到像素方块是**正确表现**，不是 bug |
 | 标注绘制 | 与位图同一 CTM，因此矢量在 200% 依旧锐利（FR-PIN-003 判据） |
 | 缩小到 <100% | 位图近邻下采样会丢细节/走样 → P0 用 `.medium` 下采样，并只在此档生效；此规则写进判据（避免"缩小变糊"被当成 bug） |
-| 导出/复制 | **永远按 100% 出图**，不受当前 zoom 影响（Snipaste 把"复制未缩放原图"当 PRO 卖点，说明这是行业共识的正确行为） |
+| 导出/复制 | **永远按 100% 出图**，不受当前 zoom 影响。依据只是**推断**：Snipaste 把"复制/保存未缩放原图"作为 PRO 功能（`docs/reference/snipaste-gap.md` §4），可推断其缩放属于显示态；无官方说明，故不声称"与 Snipaste 一致"，只说这是我们的实现选择 |
 
 `⌘`+滚轮被透明度占用（§6），因此缩放用**无修饰滚轮**，`⇧`+滚轮留给"宽度约束缩放"（P1）。
 

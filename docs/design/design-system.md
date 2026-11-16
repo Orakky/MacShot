@@ -76,6 +76,8 @@
 | `radius.1` | 4pt | 小按钮/角标 |
 | `radius.2` | 8pt | 浮层 |
 | `radius.3` | 12pt | 设置窗卡片 |
+| `sel.handle.size` | 7pt | 选区把手直径（视觉） |
+| `sel.handle.hit` | 10pt | 选区把手命中半径（交互，≠ 视觉尺寸） |
 | `stroke.thin` | 1pt | 选区、描边 |
 | `shadow.float` | 见 `float.shadow` | 浮层 |
 

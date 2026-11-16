@@ -12,6 +12,19 @@
 | 准出判据 | ① `xcodebuild … build` 无头成功（贴日志尾行）② 在 `App/` 放一个空 `.swift` 不改 pbxproj 即被纳入编译 ③ `swift test` 全绿（含 MSCore 几何用例）④ `make run` 出菜单栏图标且 `LSUIElement` 生效（Dock 无图标）⑤ `make check` 在无网络下跑通（ADR-015 判据归档）⑥ 依赖方向静态检查能**故意**造一条反向 import 并报错（自证可用） |
 | 风险 | `stash@{0}` 的骨架是裁决前写的：**不许 pop**，只作参考；恢复前先对照 accepted ADR 逐条核对（`modules.md` §12 已列 3 处不符） |
 
+## M-0.5 技术探针（半天–1 天，**先证伪再开工**）
+
+> 2026-11-16 审查新增。理由：当前有 4 个假设"错了就要返工"，而它们的验证成本都远低于返工成本。探针代码放 `spikes/probe-01/`，验完转正或删除（`spikes/README.md` 规则）。
+
+| 探针 | 验证什么 | 通过判据 | 失败则 |
+|---|---|---|---|
+| `T-101` 键盘与前台 | borderless 遮罩在"不激活 app"下能否收到 `Esc`/`Enter`；`canBecomeKey` 与 `addLocalMonitor` 的实际边界；激活后关闭能否可靠还原原 app | 形成一张"激活与否 × 键盘可达 × 前台是否变化"的三态实测表 | 按 Q-15 选 A（允许短暂激活）并改 `FR-SESS-003` 判据与 `ADR-002` 后果 |
+| `T-102` 贴图层级 | `.statusBar`/`.statusBar+1`/`.popUpMenu` × `collectionBehavior` 组合，在全屏 Space 的 Safari / Keynote 演示 / 菜单栏下是否可见可点 | 得到能稳定满足 FR-PIN-001 的最小 level 组合，写入 ADR-019 | 若都不可行 → 改 FR-PIN-001 的承诺（例如只在普通 Space 置顶），并同步 `screens.md#UI-003` |
+| `T-103` 采集一帧 | `SCScreenshotManager` 单帧的耗时、尺寸、scale、色彩描述；与 `NFR-001` 的 300ms 对照 | `t.hotkey→frozen` 有 20 次读数；像素尺寸与 `pixelRect` 预期一致 | 延迟不达标 → 回到 ADR-007 比较 SCStream 预热方案（并把数据填进 ADR） |
+| `T-104` 签名与授权 | ad-hoc 重签 vs 钥匙串自建代码签名证书，重装后是否丢屏幕录制授权 | 两种方式各重装 2 次，记录授权是否保留 | 结论写进 `runbook/permissions-tcc.md` 与 ADR-004 风险条；影响 `make sign` 实现 |
+
+**准出**：四张实测表落地，Q-15 有裁决依据，ADR-019/ADR-007 至少一条可从 `proposed` 转 `accepted`。探针阶段**不写模块代码**（只允许 `spikes/` 下的单文件 app 或脚本）。
+
 ## M-1 采集与像素正确性
 
 | 项 | 内容 |

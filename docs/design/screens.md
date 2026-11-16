@@ -33,7 +33,7 @@
 | 1 | 冻结帧底图 | 铺满 | 1:1 像素，`interpolationQuality=.none` | 恒在 | FR-CAP-001 |
 | 2 | 暗化层 | 选区外四块矩形 | `overlay.scrim` | 无选区时铺满 | 原则 1 |
 | 3 | 选区描边 | 选区边界 | 外 `selection.stroke` 1pt + 内 `selection.stroke.inner` 1pt | 无选区时隐藏 | 对比度 §8 |
-| 4 | 把手 ×8 | 四角 + 四边中点 | 直径 `radius.1`+? =7pt 实心，命中半径 10pt | hover 时放大到 9pt | FR-CAP-003 |
+| 4 | 把手 ×8 | 四角 + 四边中点 | 直径 `sel.handle.size`(7pt)，命中半径 `sel.handle.hit`(10pt) | hover 时视觉放大到 9pt（命中区不变） | FR-CAP-003 |
 | 5 | 尺寸读数药丸 | 选区右下外侧 8pt；越界则翻内侧 | `font.readout` 12pt，`text.onDark`，底 `pin.badge.surface`，`radius.1` | 拖拽中常显；静止 600ms 后淡出（`dur.fast`）；减少动效时不淡出 | FR-CAP-002 |
 | 6 | 缩放倍率标记 `@2x` | 跟在尺寸后 | 同上 | scale==1 时不显示 | FR-CAP-002 |
 | 7 | 清空标注警告 | 选区下方居中，浮层 | `warn` 图标 + `text.primary`，底 `float.surface` | 仅 `elements` 非空且发生选区尺寸变化时 | Q-11、FR-ANN-012 |

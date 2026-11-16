@@ -7,7 +7,7 @@
 
 1. `AGENTS.md`（根）——纪律与命令
 2. `docs/charter.md` ——范围、术语、模块名、ID 规则、裁决状态
-3. `docs/requirements/requirements.md` ——P0 32 条与判据
+3. `docs/requirements/requirements.md` ——P0 清单与判据（条数只在 §0 维护）
 4. `docs/plan/roadmap.md` → `docs/tasks/todo.md` ——领当前这一档活
 5. 干活时按需读：`docs/architecture/<对应模块>.md`、`docs/design/screens.md`、`docs/protocol/verification.md`
 
@@ -16,10 +16,10 @@
 | 路径 | 内容 | 真源地位 | 状态 |
 |---|---|---|---|
 | `AGENTS.md` | agent 入口：纪律、命令、领活、禁做 | 纪律摘要（正文 `protocol/agent-playbook.md`） | 已落 |
-| `charter.md` | 范围/术语/命名/ID/D-01…D-04/Q-01…Q-14 | **最高** | 已落，§6 待签字 |
+| `charter.md` | 范围/术语/命名/ID/D-01…D-04/Q-01…Q-15 | **最高** | 已落，§6 待签字 |
 | `README.md`（本文件） | 文档地图、冲突消解序、当前阶段 | 索引 | 已落 |
 | `requirements/vision.md` | 定位、3 场景、G-01…G-05 成功指标、反定位 | 愿景 | 已落，待裁决 |
-| `requirements/requirements.md` | FR P0 32 条（带判据）/ P1 34 / P2 / 不做 | 功能需求 | 已落，逐条待转 accepted |
+| `requirements/requirements.md` | FR P0（条数见 §0）/ P1 / P2 / 不做 | 功能需求 | 已落，逐条待转 accepted |
 | `requirements/nfr.md` | NFR-001…036（全部"目标值待实测"） | 非功能需求 | 已落，§9 待签字 |
 | `adr/README.md` | ADR 索引 + 状态（4 accepted / 12 proposed）+ 待补占位 | 决策状态 | 已落 |
 | `adr/ADR-001…016-*.md` | 16 条决策正文（含否决方案与翻案决策门） | 决策正文 | 已落，proposed 待签 |
@@ -63,7 +63,7 @@
 ## 4. 当前阶段与解锁条件
 
 **文档裁决期。** 解锁编码需要同时满足：
-1. `charter.md` §6 的 Q-01…Q-14 全部签字；
+1. `charter.md` §6 的 Q-01…Q-15 全部签字；
 2. `adr/README.md` 无 `proposed` 行；
 3. `requirements.md` §1 的 P0 行状态从 `待裁决` 转 `accepted`；
 4. `nfr.md` §9 的 4 项取舍确认。

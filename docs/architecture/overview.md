@@ -131,7 +131,7 @@ sequenceDiagram
 2. `MSAnnotationRenderer`：输入（文档 + 源位图 + scale + intent）→ 输出 CGImage，纯函数，可用基线 PNG 逐像素比对。
 3. `CaptureSession` 状态机：`reduce(event) -> (phase, effects)`，effects 是可断言的枚举（不直接操作窗口）。
 4. `Geometry` 族（`MSCore`）：无 AppKit 依赖，可 `swift test` 覆盖。
-5. `Clock` / `PasteboardWriting` / `FileSystem` 三个薄协议包住外部世界，禁止在能力层直接摸 `NSPasteboard.general`。
+5. `MSClock` / `MSPasteboardWriting` / `MSFileWriting` 三个薄协议包住外部世界（名字以 `modules.md` §1 为准，原稿此处写成 `Clock`/`FileSystem` 已订正），禁止在能力层直接摸 `NSPasteboard.general`。
 
 这 5 个接缝是 M-0 的准出项：没有它们，后续 P0 判据无法在无头环境验证。
 
