@@ -143,3 +143,68 @@ struct FakeHotKeyTests {
         #expect(fired == [.snip])
     }
 }
+
+/// 回归：2026-11-16 的"按 Esc 退不出去、只能杀进程"。根因是 effect 分发器有 `default: break`，
+/// 把 `.closeOverlay` 吞掉了。这里锁住"任何阶段取消都必须产生 closeOverlay"，
+/// 因为漏一次的代价是把用户的整台机器糊住。
+struct EscapeHatchTests {
+
+    private func cancelFrom(_ prefix: [MSSessionEvent]) -> [MSSessionEffect] {
+        var r = MSSessionReducer()
+        for e in prefix { _ = r.handle(e) }
+        let before = r.phase
+        let effects = r.handle(.commitRequested(.cancel))
+        #expect(r.phase == .idle, "从 \(before.rawValue) 取消后必须回到 idle，实际 \(r.phase.rawValue)")
+        return effects
+    }
+
+    @Test("刚冻结（还没拖框）就能取消")
+    func cancelWhileFrozen() {
+        let effects = cancelFrom([.hotKeyPressed(.snip)])
+        #expect(effects.contains(.closeOverlay), "frozen + Esc 必须收窗，否则遮罩糊住整屏")
+        #expect(effects.contains(.restoreFocus))
+    }
+
+    @Test("有选区、有标注时能取消")
+    func cancelAfterSelecting() {
+        let effects = cancelFrom([.hotKeyPressed(.snip), .overlayShown,
+                                  .selectionChanged(width: 200, height: 100)])
+        #expect(effects.contains(.closeOverlay))
+    }
+
+    @Test("绘制子态里能取消")
+    func cancelWhileEditing() {
+        let effects = cancelFrom([.hotKeyPressed(.snip), .overlayShown,
+                                  .selectionChanged(width: 200, height: 100), .drawBegan])
+        #expect(effects.contains(.closeOverlay))
+    }
+
+    @Test("采集失败也要收窗")
+    func failureClosesOverlay() {
+        var r = MSSessionReducer()
+        _ = r.handle(.hotKeyPressed(.snip))
+        let effects = r.handle(.captureFailed("permission"))
+        #expect(effects.contains(.closeOverlay))
+        #expect(effects.contains(.restoreFocus))
+    }
+
+    /// 结构性保险：effect 种类若增加而分发器没交代，perform(_:) 会编译失败。
+    /// 这条测试锁住枚举不被悄悄改名/删项，让那个编译期检查持续有效。
+    @Test("MSSessionEffect 的 case 集合稳定")
+    func effectCasesAreStable() {
+        let known: [MSSessionEffect] = [
+            .freeze,
+            .showOverlay,
+            .closeOverlay,
+            .restoreFocus,
+            .bakeAndCopy,
+            .openPin,
+            .saveToFile(panel: true),
+            .saveToFile(panel: false),
+            .showPermissionGate,
+            .toast("x"),
+            .log("y"),
+        ]
+        #expect(known.count == 11)
+    }
+}

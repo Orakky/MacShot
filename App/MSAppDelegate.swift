@@ -70,6 +70,7 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         buildStatusItem()
         registerHotKeys()
         observeDisplays()
+        observeResignActive()
         if PermissionProbe.screenRecording() == .denied { presentPermissionGate() }
         MSLog.info(.app, "ready hotkeys=\(self.settings.current.hotKeys.snip.display)/\(self.settings.current.hotKeys.pinClipboard.display)")
     }
@@ -183,7 +184,21 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if menu === statusMenu { statusItem?.menu = nil }
     }
 
-    @objc private func snip() { coordinator.handle(.snip) }
+    /// 遮罩开着却失去活跃状态（系统弹窗、别的 app 抢前台）→ 立刻收窗，绝不留一层吃点击的窗。
+    private func observeResignActive() {
+        NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification,
+                                               object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.coordinator.overlayVisible else { return }
+                MSLog.info(.app, "resigned active with overlay open → cancel session")
+                self.coordinator.cancelSession()
+            }
+        }
+    }
+
+    @objc private func snip() {
+        if coordinator.overlayVisible { coordinator.cancelSession() } else { coordinator.handle(.snip) }
+    }
     @objc private func snipFullScreen() { coordinator.handle(.fullScreen) }
     @objc private func pinClipboard() { coordinator.handle(.pinClipboard) }
     @objc private func closePins() { pins.closeAll() }

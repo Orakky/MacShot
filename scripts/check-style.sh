@@ -10,9 +10,9 @@ fail=0
 ban() {  # ban <说明> <grep -E 模式> [排除文件 glob]
   label="$1"; pattern="$2"; exclude="${3:-}"
   if [ -n "$exclude" ]; then
-    hits=$(grep -rn --include='*.swift' -E "$pattern" $SRC 2>/dev/null | grep -v -E "$exclude" || true)
+    hits=$(grep -rn --include='*.swift' -E "$pattern" $SRC 2>/dev/null | grep -v -E ':[0-9]+: *(//|///|\*)' | grep -v -E "$exclude" || true)
   else
-    hits=$(grep -rn --include='*.swift' -E "$pattern" $SRC 2>/dev/null || true)
+    hits=$(grep -rn --include='*.swift' -E "$pattern" $SRC 2>/dev/null | grep -v -E ':[0-9]+: *(//|///|\*)' || true)
   fi
   if [ -n "$hits" ]; then
     n=$(printf '%s\n' "$hits" | wc -l | tr -d ' ')
@@ -28,6 +28,7 @@ ban "禁用 try!"                     'try!'
 ban "禁用 as!"                      ' as! '
 ban "禁用 fatalError（除显式契约点）" 'fatalError\(' 'init\?\(coder'
 ban "禁止网络/遥测（NFR-030）"        'URLSession|NCConnection|CLLocationManager'
+ban "分发器禁止空转 default（B-018 事故形状）" 'default:[[:space:]]*break'
 ban "禁止造全局单例（系统 API 除外）"  '(NSApp|Self|[A-Z][A-Za-z]*)\.shared' \
   '(App/|ButtonBox|sharedHandler|NSWorkspace|NSApplication|NSColor|NSFont|NSScreen|NSPasteboard|NSUIElement|Logger|NSDocumentController)'
 

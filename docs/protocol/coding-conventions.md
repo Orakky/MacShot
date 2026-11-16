@@ -30,6 +30,18 @@
 - 禁止 `try!`、禁止 `fatalError`（除"逻辑不可能到达且到达即必须停"的一处，需注释说明）、禁止 `as!`。
 - 不写"不可能发生"的兜底分支；要写就写 `assert` + `blocked.md` 条目号。
 
+## 4b. 分发器必须穷举（由 2026-11-16 的事故新增）
+
+任何"把枚举翻译成动作"的 `switch`——effect / command / notification / intent——**禁止 `default` 空转**。
+反例（真出过事）：`perform(effect)` 里写 `default: break`，新增的 `.closeOverlay` 被静默丢掉，
+遮罩不关、整屏吃点击，用户只能远程 ssh 杀进程。
+
+规则：
+1. 分发器不写 `default`，让"忘了处理"变成编译错误；确需兜底时写 `case .a, .b: break // 由 X 流程处理`。
+2. 状态机的迁移表**可以**有 `default`，但必须是"拒绝并记录"而不是"什么都不做"（ST-001 非法迁移）。
+3. `scripts/check-style.sh` 拦 `default:\s*break`。
+4. 全屏模态（遮罩）必须有**至少两条**独立退出路径：键盘 Esc + 再按截图键；再加 app 失焦自动收窗兜底。
+
 ## 5. 并发
 - UI 相关类型 `@MainActor`；`AnnotationDocument`/`MSCaptureFrame`/样式几何为 `Sendable` 值类型。
 - 可变状态只允许在 `@MainActor` 宿主里；跨 actor 传副本不传引用。
@@ -74,3 +86,4 @@
 8. 新增 `public` 是否被别模块真的用到？
 9. 是否有未记 `blocked.md` 的假设？
 10. 本地化 key 是否齐（新中文串是否进了 `MSStrings`）？
+11. 有没有新增 `default:` 空转的分发器？全屏模态有没有两条以上退出路径？

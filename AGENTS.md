@@ -44,6 +44,7 @@ scripts/reset-tcc.sh   # 重置屏幕录制授权（排查黑图）
 8. 交付产物（`build/`、DMG、截图素材、`.idea/`）默认不入库。
 9. 遇到与文档矛盾的实现约束 → 记进 `docs/tasks/blocked.md` 并问用户，不自行改设计。
 10. 不引入第三方依赖，除非 ADR-015 被 accepted 且写明来源（本机当前**没有 brew**）。
+11. **分发器不许 `default:` 空转**（effect/command/intent 的 switch 必须穷举）。2026-11-16 的遮罩卡死事故就是 `default: break` 吞掉了 `closeOverlay`；`check-style.sh` 已拦。全屏模态必须有 ≥2 条退出路径。
 
 ## 4. 领活与并行
 

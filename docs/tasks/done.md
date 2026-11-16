@@ -61,6 +61,16 @@
 | E-027 | `FR-HOT-002` 改绑（录制→校验→注册→失败回滚→持久化）+ `FR-HOT-013` 左键直接截图、右键出菜单 | `make build` 通过；重启日志 `registered 1 = F1 / 2 = F3 / 3 = ⌘A`；新增 5 条 `MSKeyBindabilityTests`，套件从 47 → **52 条**通过 |
 | E-028 | 测试抓出两个自己的错 | ① `bindability()` 把 **keyCode 0（A 键）当成"未知键"** → 等于谁都绑不了 `⌘A`，而我们默认的全屏截图正是它；改为按 `keyNames` 表判定，并加断言 `⌘A` 可绑定 ② 我误以为显示次序是 `⌘⌥`，Apple 规范是 `⌃⌥⇧⌘` → 是测试期望写反，已按规范固定 |
 
+## 2026-11-16 严重缺陷：截图后 Esc 退不出（遮罩锁屏）
+
+| ID | 条目 | 证据 |
+|---|---|---|
+| E-029 | 根因定位并修复：`perform(effect)` 的 `default: break` 静默吞掉 `.closeOverlay`，状态机已正确产出该 effect（`V-008` 行 13 一直是绿的，所以单测没拦住），但没人执行 → 遮罩不收、整屏吃点击，只能 ssh 杀进程 | 定位方式＝读 `perform` 源码 + 确认 reducer 输出含 `.closeOverlay`；修法＝**删掉 `default` 改为穷举**（以后新增 effect 不处理就编译不过），并把另两处 `default: break`（权限分支、intent 分支）也改成显式列举 |
+| E-030 | 三条逃生阀（不再依赖"键一定要收到"）：① 遮罩开着再按 `F1` = 取消 ② app 失去活跃状态自动收窗 ③ `cancelSession()` 幂等，且状态机拒绝迁移时也强制关窗 | `MSSessionCoordinator.cancelSession/overlayVisible`；`MSAppDelegate.observeResignActive` 与 `snip()` 的 toggle 分支；单测 5 条 `EscapeHatchTests` 覆盖 frozen/selecting/editing/失败四种取消路径必须含 `.closeOverlay` |
+| E-031 | 制度性补强：`check-style.sh` 新增拦截 `default: break`；`coding-conventions.md` 新增 §4b「分发器必须穷举」；`AGENTS.md` 纪律第 11 条；评审清单加第 11 问 | 新规则一上线就在旧代码里查出 3 处真实空转（已修），证明它抓得住同类形状 |
+| E-032 | 套件与门禁 | `Test run with 57 tests in 16 suites passed`（47 → 52 → 57）；`make check` 全绿；`make build` 无 warning；重启后日志 `registered 1 = F1 / 2 = F3 / 3 = ⌘A` |
+
+
 ## 尚未完成 / 未验证（写清楚，避免被当成已完成）
 
 1. **没有任何可编译代码**：仓库只有文档 + 一个 HTML 原型。`make` 目标尚不存在（`AGENTS.md` §2 注明"待 M-0 落地生效"）。

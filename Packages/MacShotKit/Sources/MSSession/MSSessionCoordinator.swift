@@ -88,6 +88,10 @@ public struct MSSessionReducer: Sendable {
             phase = .selecting
             return [.log("element committed")]
 
+        case (.frozen, .commitRequested(.cancel)):
+            phase = .idle
+            return [.closeOverlay, .restoreFocus]
+
         case (.selecting, .commitRequested(let intent)), (.editing, .commitRequested(let intent)):
             guard hasSelection || intent == .cancel else { return [.toast("先框选区域")] }
             if intent == .cancel {
@@ -177,7 +181,13 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
     }
 
     private func startSnip() {
-        guard reducer.phase == .idle else { MSLog.info(.session, "session busy, ignoring"); return }
+        guard reducer.phase == .idle else {
+            // 再按一次截图键 = 取消当前会话。遮罩是全屏模态，键收不到时这条是不用重启电脑的出路。
+            let busyPhase = reducer.phase.rawValue
+            MSLog.info(.session, "snip pressed while active (\(busyPhase)) → cancel")
+            cancelSession()
+            return
+        }
         displaySnapshot = MSDisplayInventory.current()
         guard let display = MSDisplayInventory.display(under: NSEvent.mouseLocation, in: displaySnapshot) else {
             onToast?("找不到显示器"); return
@@ -185,11 +195,13 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
         activeDisplay = display
         frontAppBeforeSession = NSWorkspace.shared.frontmostApplication
         switch PermissionProbe.screenRecording() {
-        case .denied:
+        case .denied, .unknown:
+            // 探测不确定时按"缺权限"处理：宁可让用户确认一次，也不要交出一张黑图。
             run(.permissionState(.denied))
             onNeedsPermission?()
             return
-        default: break
+        case .granted:
+            break
         }
         let started = ContinuousClock.now
         run(.hotKeyPressed(.snip))
@@ -276,7 +288,8 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
                         case .failed(let e): self.onToast?("保存失败：\(e)")
                         }
                     }
-                default: break
+                case .cancel, .pin:
+                    break        // 这两个出口不写文件；显式列出，不用 default 兜
                 }
                 self.finishEffects()
             }
@@ -352,8 +365,26 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
 
     public func overlayPreferences(_ overlay: MSOverlayWindow) -> MSAppPreferences { preferences.current }
 
+    /// 幂等取消。Esc、再按截图键、app 失焦、采集报错都收敛到这里。
+    /// 即使状态机拒绝了这个迁移也强制收窗：卡住比丢掉一张截图严重得多。
+    public func cancelSession() {
+        let before = reducer.phase
+        run(.commitRequested(.cancel))
+        if reducer.phase == before {
+            closeOverlay()
+            reducer = MSSessionReducer()
+            restoreFocus()
+        }
+        let afterPhase = reducer.phase.rawValue
+        MSLog.info(.session, "cancelled from \(before.rawValue), now \(afterPhase)")
+    }
+
+    public var overlayVisible: Bool { overlay != nil }
+
     private func closeOverlay() {
+        guard overlay != nil else { return }
         overlay?.orderOut(nil)
+        overlay?.contentView = nil
         overlay = nil
         frozenFrame = nil
     }
@@ -388,13 +419,21 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
 
     // MARK: - effects
 
+    /// 没有 `default`：新增 effect 却忘了在这里交代，就编译不过。
+    /// B-018：`default: break` 曾把 `.closeOverlay` 静默吞掉 → 遮罩不收、整屏吃点击，
+    /// 看起来像整机卡死，只能杀进程。
     private func perform(_ effect: MSSessionEffect) {
         switch effect {
+        case .closeOverlay:       closeOverlay()
+        case .restoreFocus:       restoreFocus()
         case .showPermissionGate: onNeedsPermission?()
-        case .toast(let text): onToast?(text)
-        case .restoreFocus: restoreFocus()
-        case .log(let message): MSLog.info(.session, message)
-        default: break
+        case .toast(let text):    onToast?(text)
+        case .log(let message):   MSLog.info(.session, message)
+        // 下面这些由 startSnip()/commit() 的执行流落地，显式声明归属而不是静默丢弃。
+        case .freeze, .showOverlay:
+            MSLog.debug(.session, "effect handled by start flow: \(effect)")
+        case .bakeAndCopy, .openPin, .saveToFile:
+            MSLog.debug(.session, "effect handled by commit flow: \(effect)")
         }
     }
 
