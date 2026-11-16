@@ -54,7 +54,7 @@ JSON 形态（`.macshot` 未来即此 JSON + 位图，见 ADR-009）：
 
 字号换算规则：`style.fontSize` 存像素值；从 UI 上的"pt 档位"（12/14/18/24/32）换算成像素时用 `round(pt × scale)`，换算发生在创建元素那一刻（之后不再依赖 scale）。
 
-## 4. 工具集合（Q-03，推荐 8 件）与 `points` 语义
+## 4. 工具集合（Q-03，推荐 9 件，含橡皮擦）与 `points` 语义
 
 | kind | 中文 | points 语义 | 可多段 | 参与烘焙 | 备注 |
 |---|---|---|---|---|---|
@@ -66,6 +66,10 @@ JSON 形态（`.macshot` 未来即此 JSON + 位图，见 ADR-009）：
 | `text` | 文字 | [左上锚点] | 否 | 是 | **保留 `text`，不烘焙成形状**（FR-ANN-007） |
 | `badge` | 序号/文字徽章 | [圆心] | 否 | 是 | 自增序号，半径随文本变（§5.3） |
 | `blur` | 马赛克 / 模糊 | [起点, 对角点] | 否 | 是 | 需要源位图（§5.4） |
+| `eraser` | 橡皮擦 | **不产生元素** | — | — | 删除命中的**最上层**元素（z 最大）；一次点击＝一条撤销记录；没命中任何元素时**不入栈**（否则用户要按一次 `⌘Z` 才撤销"没发生的事"） |
+
+接线状态（2026-11-16）：`rect ellipse arrow polyline freehand(画笔/荧光笔两变体) blur badge eraser` 已在遮罩内可用（`MSTool`，键位按 `design/keymap.md` §3 真源；`rect` 此前占的是 `R`，与 §2 的"重复上次区域"撞车，已改回 `M`）。**`text`(T) 仍未接**——它要 field editor，属 M-4 收尾批（`FR-ANN-007`）。
+`badge`/`eraser` 的行为判据在 `Tests/MSOverlayTests/AnnotationToolTests.swift`（含"撤销把序号计数器一起退回"与"未填充形状只有轮廓可命中"两条实测出来的语义）。
 | `line` `spotlight` `crop` | 直线 / 聚光灯 / 二次裁剪 | 同上 | — | — | P1，Q-03 选项 B 才进 P0 |
 
 `Kind` 用枚举而非字符串：JSON 编码为稳定 rawValue。新增 kind 属于 schema 演进（加 rawValue，不改旧值）。

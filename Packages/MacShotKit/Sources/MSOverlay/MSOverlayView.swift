@@ -40,15 +40,17 @@ public enum OverlayChrome {
     public static func scrimAlpha(isDark: Bool) -> CGFloat { isDark ? 0.55 : 0.45 }
 }
 
-/// Keyboard-selectable tools. Letters follow `design/keymap.md` §3; `Q-03`'s 9 P0 tools minus
-/// text/badge, which need a field editor and land with the toolbar pass.
+/// Keyboard- and toolbar-selectable tools. Letters come from `design/keymap.md` §3 (真源)，
+/// 之前 `rect` 占的是 `R` —— 那是 §2 里"重复上次区域"（P1）的键，属于自己造冲突，已按表改回 `M`。
+/// 仍缺 `T`＝文字：它要 field editor，随文字批一起落地，这里不占空位。
 public enum MSTool: String, CaseIterable, Sendable {
-    case select, rect, ellipse, arrow, polyline, highlighter, pen, blur
+    case select, rect, ellipse, arrow, polyline, highlighter, pen, blur, badge, eraser
 
     public var letter: String {
         switch self {
-        case .select: "V"; case .rect: "R"; case .ellipse: "O"; case .arrow: "A"
+        case .select: "V"; case .rect: "M"; case .ellipse: "O"; case .arrow: "A"
         case .polyline: "L"; case .highlighter: "H"; case .pen: "P"; case .blur: "B"
+        case .badge: "N"; case .eraser: "E"
         }
     }
 
@@ -62,8 +64,14 @@ public enum MSTool: String, CaseIterable, Sendable {
         case .highlighter: .freehand
         case .pen: .freehand
         case .blur: .blur
+        case .badge: .badge
+        case .eraser: .eraser
         }
     }
+
+    /// 单击就完成语义的工具：不进入拖拽草稿（`annotate-model.md` §4）。
+    /// 橡皮擦不是"画一个 eraser 元素"——渲染器对 `.eraser` 明确不画任何东西，它是删元素的动作。
+    public var isClickAction: Bool { self == .badge || self == .eraser }
 
     var isFreehandPen: Bool { self == .pen }
 }
@@ -188,8 +196,9 @@ public final class MSOverlayView: NSView {
     public var lineWidth: Int = 3
     public var blurRadius: Int = 14
 
-    private var document: MSAnnotationDocument?
-    private var history = MSAnnotationHistory()
+    /// internal 而非 private：`@testable` 要直接喂文档、点一次动作、再看撤销栈（`AnnotationToolTests`）。
+    var document: MSAnnotationDocument?
+    var history = MSAnnotationHistory()
     private var dragMode: DragMode?
     private var draft: MSAnnotationElement?
     private var cachedComposite: CGImage?
@@ -477,6 +486,10 @@ public final class MSOverlayView: NSView {
             return
         }
         guard !hitToolbar(p) else { needsDisplay = true; return }
+        if tool.isClickAction, let sel = selection, sel.contains(p) {
+            performClickAction(at: docPoint(p, in: sel))
+            return
+        }
         if let tool = tool.annotationKind, let sel = selection, sel.contains(p) {
             dragMode = .draw(start: p)
             draft = MSAnnotationElement(kind: tool, points: [docPoint(p, in: sel), docPoint(p, in: sel)],
@@ -494,6 +507,34 @@ public final class MSOverlayView: NSView {
             dragMode = .newSize(anchor: p)
             setSelection(CGRect(origin: p, size: .zero))
         }
+    }
+
+    /// `N` 序号＝放一个自增徽章；`E` 橡皮擦＝删掉点到的最上层元素。
+    /// 两者都是"一次动作 = 一条撤销记录"（`ADR-011`）；徽章的计数自增和插入打包成一条，
+    /// 所以撤销徽章会把号码也退回去，不会留下空号。
+    func performClickAction(at dp: MSIntPoint) {
+        guard var doc = document else { return }
+        switch tool {
+        case .badge:
+            let before = doc.badgeCounter
+            let element = MSAnnotationElement(kind: .badge, points: [dp], style: currentStyle(), text: String(before))
+            history.apply(.composite([.insert(element), .badgeCounter(before: before, after: before + 1)]), to: &doc)
+            MSLog.info(.annotate, "badge #\(before) at \(dp.x),\(dp.y)")
+        case .eraser:
+            let p = CGPoint(x: dp.x, y: dp.y)
+            guard let victim = doc.elements.filter({ MSAnnotationGeometry.hitTest(p, element: $0, extraTolerance: 4) })
+                        .max(by: { $0.z < $1.z }) else {
+                MSLog.debug(.annotate, "eraser 没命中任何元素 \(dp.x),\(dp.y)")
+                return
+            }
+            history.apply(.remove(victim), to: &doc)
+            MSLog.info(.annotate, "eraser 删除 kind=\(victim.kind.rawValue) z=\(victim.z)")
+        default:
+            return
+        }
+        document = doc
+        cachedComposite = nil
+        needsDisplay = true
     }
 
     public override func mouseDragged(with event: NSEvent) {

@@ -89,6 +89,7 @@
 | E-044 | 实拍发现**看得见的 ✕ 在左下、点得到的 ✕ 在左上**：`OverlayChrome` 的命中区与四条单测都是对的，错在 `drawCancelButton` 自己又换算了一次 y（`bounds.height - visual.maxY`）。等于鼠标那条退出路径指向一片空白 | 修法是把坐标真相收回到一处：`OverlayChrome.cancelPaintRect/cancelHintOrigin`，视图内不再有任何换算。新增 `OverlayPaintTests` 用 `cacheDisplay` **离屏渲染后量像素**（阈值：命中区墨量 > 0.08、左下镜像 < 0.02；断言方向反了也会红——我第一版测试就把视图 y 直接当位图行号用，量反了）。闸口自证：临时装回旧换算 → `top=0.0 / bottom=0.32` 两条失败；还原 → 绿。套件 68 → **72** |
 | E-045 | 遮罩暗化层与规格不符：`design-system.md` §2.1 定的是 `overlay.scrim` 浅 45% / 深 55%，代码里却是我自造的"无选区 0.35 / 有选区 0.45"两个数（实拍反推 alpha≈0.365 才发现） | 改为 `OverlayChrome.scrimAlpha(isDark:)` 按外观取 token，两条绘制路径共用一个值。实测（深色档，三处静态区亮度比）0.440 / 0.434 / 0.440 ⇒ 反推 0.560 / 0.566 / 0.560，与 55% 在舍入误差内。判据落 `V-040`，数值单源仍在设计系统表 |
 | E-046 | 开了一条**实拍取证通道**：`screencapture -x -R…` 出 PNG + 我直接读图目视 + 自写亮度/差异脚本（`/tmp/imgdiff`）。E-015 那个"没有可视口、视觉未经目测"的缺口，原生界面这半边从此可验 | 用它当场量出：遮罩下菜单栏文字条亮度比 0.440，与 Dock 0.440 / 左栏 0.434 同档 ⇒ 遮罩窗（`level = statusBar+1`）**盖在系统菜单栏之上**，所以顶部 24pt 可以被框选（FR-CAP-002，判据 `V-041`）。同时纠正一次误判：我眼看缩略图以为"遮罩没变暗"，量出来是降了 36%，目视在缩略图上不可靠 |
+| E-047 | P0 工具面补到 8/9 件：`N` 序号徽章与 `E` 橡皮擦在遮罩内可用；顺带修掉一个自造的键位冲突——`rect` 之前占的是 `R`，而 `keymap.md` §2 把 `R` 分给「重复上次区域」（P1），真源是 `M` | `MSTool` 加 `badge/eraser` + `isClickAction`；徽章的 `insert` 与 `badgeCounter` 打包成**一条** composite（撤销不留空号）；橡皮擦删 z 最大的命中元素、**没命中就不入栈**。新增 `AnnotationToolTests` 3 条（套件 72 → **75**）。过程中实测出两条语义并写进 `annotate-model.md` §4：未填充形状的命中区是轮廓而非内部（我第一版测试点在框心里，橡皮擦当然删不掉）；空点压记录会让用户多按一次 `⌘Z`。`document/history/performClickAction` 从 private 降为 internal 当测试缝。缺的那一件是 `T` 文字（field editor），已开 B-024 |
 
 ## 尚未完成 / 未验证（写清楚，避免被当成已完成）
 
