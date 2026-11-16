@@ -15,6 +15,24 @@
 
 风险：不激活的 borderless 窗能否稳定收到键盘事件，是 M-2 的头号实测项（`V-006`）。备选方案（按优先级）：`addLocalMonitorForEvents` → `NSResponder` 链 → 临时 `activate(ignoringOtherApps: false)`。这条未验证前，`screens.md` 的键盘-only 判据不能算通过。
 
+## 1b. 键盘可达性：已实测（2026-11-16 16:14）
+
+两个条件必须同时成立，缺任何一个的表现都是"按 `Esc` 完全没反应"：
+
+1. **视图必须是 first responder**。`NSView.acceptsFirstResponder` 默认 `false`，borderless 窗也不会自动选人 → 必须 override `acceptsFirstResponder` / `becomeFirstResponder` 并 `makeFirstResponder(overlayView)`。
+2. **`NSApp.activate` 是异步的**。只抢一次 key 会停在 `isKeyWindow == false`（实测 `claimKey#0 key=false`，31ms 后 `claimKey#1 key=true`）→ 按 30/60/120/200/300/500ms 递进重试 `makeKeyAndOrderFront` + `makeFirstResponder`，每次记日志。
+
+退出路径因此有 **4 条**，其中 **3 条完全不依赖键盘**：
+
+| 路径 | 依赖 | 状态 |
+|---|---|---|
+| `Esc` | key window + responder | 代码侧 `key=true` 已实测；真机按键待用户确认 |
+| 左上角 **✕**（常驻，位置不随选区跑） | 鼠标 | 命中区 44pt，`OverlayChromeTests` 4 条锁死 |
+| **右键任意处** | 鼠标 | 直接取消 |
+| 再按一次截图键 / app 失焦 | 热键、通知 | `cancelSession()` 幂等 |
+
+`V-006` 的通过条件改为可机检：日志出现 `overlay claimKey#N key=true`。若始终 `key=false`，鼠标三条保证你不会被困在遮罩里。本地键监视器与全局 `Esc` 观察器必须在 `teardown()` 里摘除，否则会持续吃掉后续按键。
+
 ## 2. 焦点与前台策略
 
 - 会话开始：不改变 `NSWorkspace.frontmostApplication`（FR-SESS-003 判据）。

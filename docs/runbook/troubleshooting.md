@@ -44,10 +44,10 @@
 - 预防：`make doctor` 打印 `CDHash`/`Signature=adhoc` 便于对比；发布说明写明。
 
 ### P-008 遮罩收不到键盘
-- 症状：`F1` 后遮罩出现但 `Esc`/`Enter` 无效。
-- 根因候选：borderless 窗未 `canBecomeKey`；app 未激活导致键走 key equivalent 路径失败；local monitor 注册时机。
-- 处理顺序：`addLocalMonitorForEvents` → `canBecomeKey` 覆写 → 临时 `activate(ignoringOtherApps: false)`（最后手段，会动 FR-SESS-003 判据）。
-- 预防：M-2 的第一个实验就是它（`agent-playbook.md` §4 要求先做风险最高的一步）。
+- 症状：`F1` 后遮罩出现，`Esc` 与 `Enter` 全无反应；界面上也找不到任何可点的退出入口 → 只能杀进程。
+- 根因（实测结论，不是候选）：① `MSOverlayView` 从来不是 first responder（`acceptsFirstResponder` 默认 false，borderless 窗不自动选人）→ `keyDown` 根本没被调用；② `present()` 只抢一次 key，而 `NSApp.activate` 是异步的，实测第 0 次 `key=false`。
+- 处理：responder 覆写 + 30…500ms 递进重试抢 key（每次记日志）+ 本地键监视器 + 全局 `Esc` 观察器；再加**三条纯鼠标出路**（左上 ✕、右键任意处、再按截图键）。
+- 预防：`OverlayChromeTests` 4 条锁命中区；`V-006` 以 `claimKey#N key=true` 为通过条件；规范 §4b 要求全屏模态必须有 ≥2 条退出路径；`teardown()` 必须摘监视器。
 
 ## 2. 追加条目模板
 

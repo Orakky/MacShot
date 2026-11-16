@@ -409,6 +409,7 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
 
     private func closeOverlay() {
         guard overlay != nil else { return }
+        overlay?.teardown()
         overlay?.orderOut(nil)
         overlay?.contentView = nil
         overlay = nil

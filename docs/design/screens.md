@@ -38,7 +38,8 @@
 | 5 | 尺寸读数药丸 | 选区右下外侧 8pt；越界则翻内侧 | `font.readout` 12pt，`text.onDark`，底 `pin.badge.surface`，`radius.1` | 拖拽中常显；静止 600ms 后淡出（`dur.fast`）；减少动效时不淡出 | FR-CAP-002 |
 | 6 | 缩放倍率标记 `@2x` | 跟在尺寸后 | 同上 | scale==1 时不显示 | FR-CAP-002 |
 | 7 | 清空标注警告 | 选区下方居中，浮层 | `warn` 图标 + `text.primary`，底 `float.surface` | 仅 `elements` 非空且发生选区尺寸变化时 | Q-11、FR-ANN-012 |
-| 8 | 放大镜（P1） | 跟随指针，避让选区边界 | 见 `UI-008` | — | FR-CAP-014 |
+| 8 | **取消按钮 ✕** | **左上角固定**（距边 14pt），不随选区移动 | 视觉 28pt 圆底 + 白 ✕；命中区 44pt（`OverlayChrome`，可测） | **无选区时也必须可见**，旁边一句"Esc 或点此 ✕ 退出（右键也退出）" | FR-SESS-002 |
+| 9 | 放大镜（P1） | 跟随指针，避让选区边界 | 见 `UI-008` | — | FR-CAP-014 |
 
 ### 交互（详见 `overlay-and-selection.md` §4）
 

@@ -6,6 +6,25 @@ import MSCapture
 import MSCore
 import MSSettings
 
+/// 遮罩上"看得见、点得到"的固定控件。命中区永远比视觉区大（`hit.min` 规范）。
+public enum OverlayChrome {
+    public static let cancelVisual: CGFloat = 28
+    public static let cancelHit: CGFloat = 44
+    public static let margin: CGFloat = 14
+
+    /// 右上角取消按钮的**命中区**（视图坐标，y 向上 → 右上即 maxY 一侧）。
+    public static func cancelHitRect(in bounds: CGRect) -> CGRect {
+        CGRect(x: bounds.minX + margin, y: bounds.maxY - cancelHit - margin,
+               width: cancelHit, height: cancelHit)
+    }
+
+    public static func cancelVisualRect(in bounds: CGRect) -> CGRect {
+        let hit = cancelHitRect(in: bounds)
+        let inset = (cancelHit - cancelVisual) / 2
+        return hit.insetBy(dx: inset, dy: inset)
+    }
+}
+
 /// Keyboard-selectable tools. Letters follow `design/keymap.md` §3; `Q-03`'s 9 P0 tools minus
 /// text/badge, which need a field editor and land with the toolbar pass.
 public enum MSTool: String, CaseIterable, Sendable {
@@ -67,11 +86,74 @@ public final class MSOverlayWindow: NSWindow {
     public override var canBecomeKey: Bool { true }
     public override var canBecomeMain: Bool { false }
 
+    private var keyMonitor: Any?
+    private var escapeWatch: Any?
+
+    /// 顺序很关键：先 activate，再 makeKey，再把焦点交给视图。
+    /// app 未激活时设 key window 不生效，`keyDown` 就不会进来——11-16 那次"Esc 完全没反应"
+    /// 是这个时序 + 视图从来不是 first responder 两件事叠在一起。
     public func present() {
         setFrame(displayFrame, display: false)
+        NSApp.activate(ignoringOtherApps: true)      // Q-15 临时默认档 A
         makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)      // Q-15 default A; see overlay-and-selection.md §2
+        makeFirstResponder(overlayView)
+        installKeyMonitor()
         overlayView.needsDisplay = true
+        installEscapeWatch()
+        claimKey(attempt: 0)
+    }
+
+    /// `NSApp.activate` 是异步的：只抢一次会停在 `isKeyWindow == false` 上，键事件进不来。
+    /// 逐步重试并记日志，哪一次成功一目了然（16:13 的实测就是 key=false / responder=true）。
+    private func claimKey(attempt: Int) {
+        makeKeyAndOrderFront(nil)
+        makeFirstResponder(overlayView)
+        let keyed = isKeyWindow
+        let focused = firstResponder is MSOverlayView
+        MSLog.info(.capture, "overlay claimKey#\(attempt) key=\(keyed) responder=\(focused)")
+        if keyed { return }
+        guard attempt < 6 else {
+            MSLog.error(.capture, "overlay never became key window: 键盘不可用，只能靠 ✕/右键退出")
+            return
+        }
+        let delays: [Double] = [0.03, 0.06, 0.12, 0.2, 0.3, 0.5]
+        DispatchQueue.main.asyncAfter(deadline: .now() + delays[attempt]) { [weak self] in
+            self?.claimKey(attempt: attempt + 1)
+        }
+    }
+
+    /// 最后一道保险：全局监听 `Esc`。它不消费事件，只在遮罩确实开着时收窗；
+    /// 没有输入监控权限时不会触发，因此鼠标出路（✕ / 右键）仍是主兜底。
+    private func installEscapeWatch() {
+        guard escapeWatch == nil else { return }
+        escapeWatch = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, event.keyCode == 53 else { return }
+            Task { @MainActor in
+                guard self.isVisible, self.overlayView.window != nil else { return }
+                MSLog.info(.capture, "global Esc watched → cancel")
+                self.overlayView.cancelViaEscape()
+            }
+        }
+    }
+
+    /// 遮罩是否还摊在屏幕上（不叫 isVisible：那是 NSWindow 自己的属性名）。
+
+    /// 本地监视器：responder 链断了也还能收到键，`Esc`/`Enter` 至少留一条通路。
+    private func installKeyMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [weak self] event in
+            guard let self, event.type == .keyDown,
+                  let view = self.contentView as? MSOverlayView else { return event }
+            return view.handleKey(event) ? nil : event
+        }
+    }
+
+    /// 收窗前必须摘掉监视器，否则它会一直吃掉后续所有按键（B-022）。
+    public func teardown() {
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        keyMonitor = nil
+        if let escapeWatch { NSEvent.removeMonitor(escapeWatch) }
+        escapeWatch = nil
     }
 
     private var displayFrame: NSRect { frame }
@@ -117,6 +199,11 @@ public final class MSOverlayView: NSView {
 
     public override var isFlipped: Bool { false }
     public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    /// NSView 默认不接受键盘焦点，borderless 窗也不会自动选人 ——
+    /// 漏掉这两个 override 的后果是 `keyDown` 永不被调用，`Esc` 表现为"完全没反应"。
+    public override var acceptsFirstResponder: Bool { true }
+    public override func becomeFirstResponder() -> Bool { true }
 
     var delegate: MSOverlayDelegate? { host?.overlayDelegate }
 
@@ -185,6 +272,29 @@ public final class MSOverlayView: NSView {
             ctx.fill(bounds)
             drawHint(in: ctx)
         }
+        drawCancelButton(in: ctx)
+    }
+
+    /// 常驻退出入口：左上角（不跟选区跑，任何时刻都在同一个位置，闭眼也能点到）。
+    private func drawCancelButton(in ctx: CGContext) {
+        let visual = OverlayChrome.cancelVisualRect(in: bounds)
+        let top = bounds.height - visual.maxY                 // 视图 y 向上 → 画到左上
+        let rect = CGRect(x: visual.minX, y: top, width: visual.width, height: visual.height)
+        ctx.saveGState()
+        ctx.setFillColor(MSColorRGBA.rgba(0, 0, 0, 0.55).cgColor)
+        ctx.fillEllipse(in: rect)
+        ctx.setStrokeColor(MSColorRGBA.rgb(255, 255, 255).cgColor)
+        ctx.setLineWidth(1.6)
+        ctx.setLineCap(.round)
+        let r = rect.insetBy(dx: rect.width * 0.3, dy: rect.height * 0.3)
+        ctx.move(to: r.origin); ctx.addLine(to: CGPoint(x: r.maxX, y: r.maxY))
+        ctx.move(to: CGPoint(x: r.minX, y: r.maxY)); ctx.addLine(to: CGPoint(x: r.maxX, y: r.minY))
+        ctx.strokePath()
+        ctx.restoreGState()
+        NSAttributedString(string: "  Esc 或点此 ✕ 退出截图（右键也退出） ", attributes: [
+            .font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor.white,
+            .backgroundColor: NSColor.black.withAlphaComponent(0.55),
+        ]).draw(at: NSPoint(x: rect.maxX + 10, y: rect.midY - 9))
     }
 
     /// Inside the selection we show the composited (bitmap + annotations) crop at 1:1 device
@@ -270,8 +380,8 @@ public final class MSOverlayView: NSView {
             .font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor.white,
             .backgroundColor: NSColor.black.withAlphaComponent(0.62),
         ]
-        NSAttributedString(string: " 拖拽框选 · Enter 贴出 · ⌘C 复制 · Esc 取消 ",
-                           attributes: attrs).draw(at: NSPoint(x: bounds.midX - 130, y: bounds.midY))
+        NSAttributedString(string: " 拖拽框选 · Enter 贴出 · ⌘C 复制 · Esc / 点 ✕ / 右键 退出 ",
+                           attributes: attrs).draw(at: NSPoint(x: bounds.midX - 178, y: bounds.midY))
     }
 
     // MARK: - toolbar (compact; tool letters are the primary path)
@@ -346,6 +456,11 @@ public final class MSOverlayView: NSView {
 
     public override func mouseDown(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
+        if OverlayChrome.cancelHitRect(in: bounds).contains(p) {
+            MSLog.info(.overlay, "cancel button pressed")
+            if let host { delegate?.overlayDidCancel(host) }
+            return
+        }
         guard !hitToolbar(p) else { needsDisplay = true; return }
         if let tool = tool.annotationKind, let sel = selection, sel.contains(p) {
             dragMode = .draw(start: p)
@@ -421,6 +536,15 @@ public final class MSOverlayView: NSView {
         needsDisplay = true
     }
 
+    /// 右键＝退出截图。给"键盘完全失灵"的人留一条鼠标出路。
+    public override func rightMouseDown(with event: NSEvent) {
+        MSLog.info(.overlay, "right click → cancel")
+        cancel()
+    }
+
+    private func cancel() { if let host { delegate?.overlayDidCancel(host) } }
+    public func cancelViaEscape() { MSLog.info(.overlay, "cancel via Esc path"); cancel() }
+
     /// View point (y-up) → canvas pixel of the current selection (y-down).
     private func docPoint(_ p: NSPoint, in sel: CGRect) -> MSIntPoint {
         let s = display.scale
@@ -453,37 +577,48 @@ public final class MSOverlayView: NSView {
     // MARK: - keyboard
 
     public override func keyDown(with event: NSEvent) {
+        if !handleKey(event) { super.keyDown(with: event) }
+    }
+
+    /// 返回是否已消费。遮罩同时挂了本地事件监视器（`MSOverlayWindow`），
+    /// 因为键到底走 responder 还是 monitor 取决于 app 激活时序，两条都要通。
+    @discardableResult
+    public func handleKey(_ event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         switch event.keyCode {
-        case 53: delegate?.overlayDidCancel(host!)                       // Esc
+        case 53:
+            guard let host else { return false }
+            delegate?.overlayDidCancel(host)
+            return true                                                       // Esc
         case 36, 76:                                                       // Enter
-            commit(defaultIntent(from: delegate?.overlayPreferences(host!)))
-        case 8:                                                            // C
-            if flags.contains(.command) { delegate?.overlay(host!, didRequest: .copy) }
-        case 35:                                                            // P
-            if flags.contains(.command) { delegate?.overlay(host!, didRequest: .pin) }
-        case 1:                                                             // S
-            if flags.contains(.command) {
-                delegate?.overlay(host!, didRequest: flags.contains(.shift) ? .quickSave : .savePanel)
-            }
-        case 49 where flags.contains(.option):                             // Space+⌥ toggles nothing; placeholder
-            break
-        case 6 where flags.contains(.command):                             // ⌘Z
-            if flags.contains(.shift) { redo() } else { undo() }
-        case 51, 117:                                                      // Delete / Backspace
-            deleteSelectedOrLast()
+            commit(defaultIntent(from: host.flatMap { delegate?.overlayPreferences($0) })); return true
+        case 8 where flags.contains(.command):                             // ⌘C
+            guard let host else { return false }
+            delegate?.overlay(host, didRequest: .copy); return true
+        case 35 where flags.contains(.command):                            // ⌘P
+            guard let host else { return false }
+            delegate?.overlay(host, didRequest: .pin); return true
+        case 1 where flags.contains(.command):                             // ⌘S / ⌘⇧S
+            guard let host else { return false }
+            delegate?.overlay(host, didRequest: flags.contains(.shift) ? .quickSave : .savePanel); return true
+        case 49 where flags.contains(.option):                             // ⌥Space 预留
+            return false
+        case 6 where flags.contains(.command):                             // ⌘Z / ⇧⌘Z
+            if flags.contains(.shift) { redo() } else { undo() }; return true
+        case 51, 117:                                                       // Delete / Backspace
+            if selection == nil { return false }
+            deleteSelectedOrLast(); return true
         default:
+            guard selection != nil || MSTool.allCases.contains(where: { $0.letter.lowercased() == event.charactersIgnoringModifiers?.lowercased() }) else { return false }
             if let t = MSTool.allCases.first(where: { $0.letter.lowercased() == event.charactersIgnoringModifiers?.lowercased() }),
-               !flags.contains(.command) {
-                tool = t
-            } else if event.charactersIgnoringModifiers?.lowercased() == "]" {
-                lineWidth = min(12, lineWidth + 1); needsDisplay = true
-            } else if event.charactersIgnoringModifiers?.lowercased() == "[" {
-                lineWidth = max(1, lineWidth - 1); needsDisplay = true
-            } else {
-                super.keyDown(with: event)
+               !flags.contains(.command) { tool = t; return true }
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "]": lineWidth = min(12, lineWidth + 1); needsDisplay = true; return true
+            case "[": lineWidth = max(1, lineWidth - 1); needsDisplay = true; return true
+            default: return false
             }
         }
+        return false
     }
 
     private func defaultIntent(from prefs: MSAppPreferences?) -> MSCommitIntent {
