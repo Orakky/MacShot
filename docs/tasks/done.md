@@ -78,11 +78,15 @@
 | E-033 | 撤回我此前的错误结论：E-022 说"已验证真机采集"，实际是**在终端里跑二进制、继承了 Terminal 的屏幕录制授权**，不能证明 MacShot.app 自身可用 | `open MacShot.app --args --snip-now` → `preflight=denied` + `SCStreamErrorDomain -3801 用户拒绝了…TCC`，35ms 返回且无系统弹窗；`make install` 到 `~/Applications` 后同样；`tccutil reset` 后同样 |
 | E-034 | 修掉我自己造的**死锁**：`startSnip()` 原先在 preflight=denied 时直接弹引导窗并放弃采集，而 macOS 只在应用真的尝试采集时才把它写进「屏幕录制」列表 → 越检查越无法授权 | 现在无论如何先试一次采集；失败按 `-3801` 归类为权限缺失 → 调 `CGRequestScreenCaptureAccess()` + 引导窗；引导窗新增「清除旧授权记录」按钮（`MSTcc.resetScreenCapture`，参数全常量） |
 | E-035 | 错误分类与文案 | 新增 `MSCaptureError.isPermissionDenied/describe` + `MSCaptureTests` 4 条（套件 57 → **61**）；一次失败只出一条提示，`Error Domain=…` 原文不再出现在用户界面 |
+| E-036 | `Esc` 无效的真根因取证（不是"候选"）：日志 `overlay claimKey#0 key=false responder=true` → 31ms 后 `claimKey#1 key=true`。两因叠加——① `MSOverlayView` 从未被选为 first responder（`acceptsFirstResponder` 默认 false，borderless 窗不自动选人）→ `keyDown` 压根没被调用；② `present()` 只抢一次 key，而 `NSApp.activate` 是异步的 | `MSOverlayView` 覆写 `acceptsFirstResponder`/`becomeFirstResponder` + `makeFirstResponder(overlayView)`；`claimKey(attempt:)` 30…500ms 递进重试（每次记日志，上限 6 次）+ 本地键监视器 + 全局 `Esc` 观察器。判据：`V-006` 以 `claimKey#N key=true` 为通过条件 |
+| E-037 | 遮罩加**三条纯鼠标出路**（键盘万一不通也不至于被锁在屏幕外）：左上角常驻 ✕（`OverlayChrome.cancelHitRect`，可视 28pt／命中 44pt）、右键任意处取消、再按一次截图热键取消；`teardown()` 必摘本地/全局监视器 | 新增纯函数 `OverlayChrome`（坐标系与命中区可单测）+ `OverlayChromeTests` 4 条；`perform(effect)` 删掉 `default: break`（就是它吞了 `.closeOverlay`），规范 §4b 从此禁用该写法。套件 61 → 65 |
+| E-038 | 修"每次启动都问权限"里属于我的那半边：拒绝路径原来每次都调 `CGRequestScreenCaptureAccess()`，每按一次 `F1` 就再敲一次门 | `MSSessionCoordinator.requestPermissionOnce()`：每个进程生命周期只申请一次，之后只走引导窗；系统申请做成可注入 `permissionRequester`（单测因此能跑拒绝路径而不真弹框）+ `PermissionThrottleTests` 断言 3 次调用只申请 1 次。套件 65 → **66**。剩下那半边是签名身份，见 Q-18 / P-002 |
+| E-039 | 把"ad-hoc 每次重编都换身份"从推断做成对照实验：**源码一字未改**，只 `make clean && make build` | 二进制 sha256 `5f074f41…`→`fdc887c9…`；`codesign -d -r-` 的 `designated => cdhash H"0f85ca84…"`→`H"ec5d7ed3…"`。ad-hoc（`TeamIdentifier=not set`）能匹配的就是这一串 hash ⇒ 重装/重编必失效，**Q-18 的 B（手工重勾）在开发循环里不可用**，能救的只有稳定身份（A 自签证书 / C Developer ID）|
 
 ## 尚未完成 / 未验证（写清楚，避免被当成已完成）
 
-1. **没有任何可编译代码**：仓库只有文档 + 一个 HTML 原型。`make` 目标尚不存在（`AGENTS.md` §2 注明"待 M-0 落地生效"）。
-2. **未实机验证任何 macOS API 行为**：屏幕录制权限流程、`SCScreenshotManager` 延迟、贴图在全屏 Space 上的可见性、未激活窗口的键盘可达性、`RegisterEventHotKey` 冲突返回码 —— 全部标 `待实测`（现由 M-0.5 的 `T-101…T-104` 承接）。
+1. **可交付物尚未成立**：代码已能构建（M-0 落地，`make check` 全绿，套件 **66**），但**当前装的还是旧版**——`~/Applications/MacShot.app`（cdhash `a92824b4…`）不含 E-036/E-037 的 `Esc` 与 ✕ 修复；受 B-023 约束，Q-18 未答复前我不再 `make install`。
+2. **macOS API 行为：部分实测、部分仍空**。已取证：屏幕录制拒绝码 `-3801`（E-033）、单帧采集延迟 79…133ms（E-022 复测）、`RegisterEventHotKey` 冲突码 `-9878`、遮罩 key 抢取的 `claimKey#0 false → #1 true`。**未测**：贴图在全屏 Space 上的可见性（T-101/V-010）、Retina 2x 与非整数缩放与多屏（B-016，本机只有 1 块 1x 屏）、剪贴板跨 app 矩阵（V-003）。
 3. **原型的视觉观感未经目测**：E-015 说明了原因（无可视口）。它证明了数学与状态路径，不等于"看起来对"——第一次在真浏览器里打开时请顺手校对：工具条是否压住选区内容、贴图投影与角标位置、设置窗 460pt 是否够用。
 4. `.gitignore` 已建立（忽略 `build/`、`.build/`、`.idea/`、`*.app`、`*.dmg`；`Tests/Fixtures/**/*.png` 例外保留）。Q-10 仍待你确认 `.idea/` 是否真按推荐忽略。
 5. 提交记录：`4127a1e`（文档集）→ `c6f819b`（审查修订）→ 本轮原型为第三个提交；`git push` 由你在终端执行。

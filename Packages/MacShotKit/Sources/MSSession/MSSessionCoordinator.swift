@@ -158,6 +158,12 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
     public var onToast: ((String) -> Void)?
     public var onNeedsPermission: (() -> Void)?
 
+    /// 向系统申请屏幕录制权限的动作做成可注入的：单测必须能跑拒绝路径而不真的弹系统框。
+    var permissionRequester: () -> PermissionState = { PermissionProbe.requestScreenRecording() }
+    /// 本次进程内向系统申请过几次，供断言与日志。
+    private(set) var permissionRequestCount = 0
+    private var didAskSystemForPermission = false
+
     public init(capturer: any ScreenCapturing, preferences: any MSReadingPreferences,
                 pins: MSPinRegistry, clipboard: MSClipboardWriter) {
         self.capturer = capturer
@@ -182,6 +188,19 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
     }
 
     /// 用户能看懂的失败说明，绝不把 NSError 原样甩到屏幕上（`UI-009`）。
+    /// 采集被系统拒了 ⇒ 向 TCC 申请权限。每个进程生命周期内只申请一次：同一身份被拒过一次后
+    /// 系统不会再弹框，反复申请只会把"每次启动都要权限"的观感放大（2026-11-16 用户报告）。
+    func requestPermissionOnce() {
+        guard !didAskSystemForPermission else {
+            MSLog.info(.capture, "capture.perm-missing 本次启动已申请过(\(self.permissionRequestCount))，不再触发系统框")
+            return
+        }
+        didAskSystemForPermission = true
+        permissionRequestCount += 1
+        let after = permissionRequester()
+        MSLog.error(.capture, "capture.perm-missing after request=\(after.rawValue)")
+    }
+
     private func reportCaptureFailure(_ detail: String) {
         frozenFrame = nil
         run(.captureFailed(detail))
@@ -234,9 +253,7 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
                 self.frozenFrame = nil
                 switch error {
                 case .permissionMissing:
-                    // 采集被系统拒了：申请一次（弹系统框 / 写入列表项），再显示引导窗。
-                    let after = PermissionProbe.requestScreenRecording()
-                    MSLog.error(.capture, "capture.perm-missing after request=\(after.rawValue)")
+                    requestPermissionOnce()
                     self.run(.captureFailed("permission"))
                     self.finishEffects()
                     self.onNeedsPermission?()

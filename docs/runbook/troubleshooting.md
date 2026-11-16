@@ -8,7 +8,7 @@
 | ID | 症状 | 状态 |
 |---|---|---|
 | P-001 | 截图全黑 / 只有壁纸 | 预期，未遇 |
-| P-002 | 重装后需要重新授权 | 预期（ad-hoc），未实测 |
+| P-002 | 重装后需要重新授权 / 每次启动都问权限 | **实测确认**（ad-hoc 无 DR，TCC 按 cdhash 记账）→ Q-18 |
 | P-003 | 遮罩出现时背景仍在动 | 不应发生（ADR-008 语义），出现即 bug |
 | P-004 | 选区边缘多/少 1px | 预期（非整数缩放），已由 ADR-013 §3 步针对 |
 | P-005 | 热键 `F1` 变成亮度键 | 预期（MacBook 功能键），未实测 |
@@ -37,11 +37,17 @@
 - 处理：① 系统设置里若已有 MacShot → 勾选并重启 app；② 若没有/勾不上 → 走方案 A（本地自签证书）或 C（Developer ID）。
 - 预防：`startSnip()` 不再因 preflight 早退；引导窗加了「清除旧授权记录」（`tccutil reset`）。
 
-### P-002 重装后需要重新授权
-- 症状：每次 `make install` 后屏幕录制要重勾。
-- 根因：ad-hoc 签名身份随构建变化，TCC 按身份记账（ADR-004 风险条）。
-- 处理：按 `permissions-tcc.md` §2 重授权；确认 `make sign` 不随手 `--force --deep`。
-- 预防：`make doctor` 打印 `CDHash`/`Signature=adhoc` 便于对比；发布说明写明。
+### P-002 重装后需要重新授权 / 每次启动都问权限（**实测确认**）
+- 症状：每次 `make install` 之后，屏幕录制要重勾；且 app 一启动就弹系统权限框。
+- 根因（三条，前两条实测过）：
+  1. **签名身份每次构建都在变——连"不改代码"都救不了。** `codesign -d -r-` 实测：
+     - ad-hoc 签名 `Signature=adhoc`、`TeamIdentifier=not set`，可用来匹配的**只有一串 cdhash**：`designated => cdhash H"a92824b480…"`。
+     - **对照实验（2026-11-16，源码一字未改，只 `make clean && make build`）**：二进制 sha256 `5f074f41…` → `fdc887c9…`，cdhash `0f85ca84…` → `ec5d7ed3…`。
+     ⇒ 每次重编都是"另一个 app"：旧授权对它无效（采集 `-3801`），且因为新身份从没被决议过，申请权限会**再弹一次系统框**。这就是"每次启动都要问权限"的全部机制。
+  2. **我在拒绝路径上每次都申请。** `MSSessionCoordinator` 原来一遇 `-3801` 就调 `CGRequestScreenCaptureAccess()`，于是每按一次 `F1`、每次启动自动截图都可能再敲一次门。已改为**每个进程生命周期只申请一次**（`requestPermissionOnce()` + 注入式 `permissionRequester`，`E-038`）。
+  3. 旁因：多份副本 = 多个身份。`~/Applications/MacShot.app`、`build/Derived/…/MacShot.app`、终端里裸跑的二进制是不同路径 + 不同 cdhash，列表里会堆出好几个 MacShot，你以为批过的那个不是当前这个。
+- 处理：按 `permissions-tcc.md` §2 重授权（勾完必须重启 app 才生效）；治本走章程 **Q-18** 方案 A（本地自签证书，身份跨构建稳定）。
+- 预防：`make doctor` 打印 `CDHash`/`Signature=adhoc` 便于对比；**答复 Q-18 之前不再随手 `make install`**（B-023）。
 
 ### P-008 遮罩收不到键盘
 - 症状：`F1` 后遮罩出现，`Esc` 与 `Enter` 全无反应；界面上也找不到任何可点的退出入口 → 只能杀进程。

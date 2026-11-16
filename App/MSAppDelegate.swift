@@ -372,8 +372,10 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                                object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
             MSLog.info(.app, "screen parameters changed pins=\(self.pins.count)")
-            self.pins.reanchorAll(to: NSScreen.main)
-            self.refreshPermissionMenuItem()
+            Task { @MainActor in
+                self.pins.reanchorAll(to: NSScreen.main)
+                self.refreshPermissionMenuItem()
+            }
         }
     }
 

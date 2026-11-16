@@ -4,6 +4,10 @@ import Testing
 import MSHotKey
 import MSCore
 import MSTestSupport
+import MSSettings
+import MSExport
+import MSPin
+import MSCapture
 
 /// `docs/design/state-machines.md` ST-001, row by row, plus the illegal migrations the spec says
 /// must be rejected. Head-only: no window, no screen, no permission (`V-008`).
@@ -206,5 +210,32 @@ struct EscapeHatchTests {
             .log("y"),
         ]
         #expect(known.count == 11)
+    }
+}
+
+// MARK: - 权限申请的节流（2026-11-16 用户报告"每次启动都要权限"）
+
+/// 只读偏好桩：测试不依赖磁盘与 UserDefaults。
+struct MSFakePreferences: MSReadingPreferences {
+    var current: MSAppPreferences = .init()
+}
+
+@Suite("采集被拒时的权限申请次数")
+struct PermissionThrottleTests {
+    @MainActor
+    @Test("同一进程内向系统只申请一次")
+    func requestOnce() {
+        let coord = MSSessionCoordinator(capturer: MSFakeCapturer(),
+                                         preferences: MSFakePreferences(),
+                                         pins: MSPinRegistry(),
+                                         clipboard: MSClipboardWriter(pasteboard: MSFakePasteboard()))
+        var asked = 0
+        coord.permissionRequester = { asked += 1; return PermissionState.denied }
+        #expect(coord.permissionRequestCount == 0)
+        coord.requestPermissionOnce()
+        coord.requestPermissionOnce()
+        coord.requestPermissionOnce()
+        #expect(asked == 1)
+        #expect(coord.permissionRequestCount == 1)
     }
 }
