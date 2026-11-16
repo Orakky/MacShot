@@ -109,3 +109,53 @@ struct MSSelectionGeometryTests {
         #expect(MSSelectionGeometry.snapped(103, to: [0, 100, 200], tolerance: 1) == nil)
     }
 }
+
+/// 热键改绑的接受/拒绝规则（FR-HOT-002）。这条判错的结果是"用户改了键，app 从此吃字"，
+/// 所以规则必须是纯函数 + 有表，不能留在 UI 回调里。
+struct MSKeyBindabilityTests {
+    private func rule(_ code: UInt16, command: Bool = false, option: Bool = false,
+                      control: Bool = false, shift: Bool = false) -> MSKeyCombo.Bindability {
+        MSKeyCombo.bindability(keyCode: code, command: command, option: option, control: control, shift: shift)
+    }
+
+    @Test("纯功能键可绑定，但要提示 fn")
+    func plainFunctionKeys() {
+        #expect(rule(122) == .functionKeyNeedsHint)                    // F1
+        #expect(rule(99, command: true) == .ok)                        // ⌘F3
+    }
+
+    @Test("普通字符键必须有修饰键，否则拒绝")
+    func ordinaryKeysNeedModifier() {
+        #expect(rule(0) == .needsModifier)                             // A
+        #expect(rule(0, command: true) == .ok)                         // ⌘A
+        #expect(rule(0, option: true) == .ok)                          // ⌥A
+        #expect(rule(0, shift: true) == .needsModifier, "只有 ⇧ 不算修饰键")
+    }
+
+    @Test("Esc / Space / Return 被拒（会被系统或输入法吃掉）")
+    func reservedKeys() {
+        #expect(rule(53, command: true) == .reserved)
+        #expect(rule(49, command: true, option: true) == .reserved)
+    }
+
+    @Test("默认值本身必须通过自己的规则（否则首启就是坏体验）")
+    func defaultsAreLegal() {
+        for combo in [MSKeyCombo.f1, MSKeyCombo.f3, MSKeyCombo(keyCode: 0, command: true)] {
+            #expect(MSKeyCombo.bindability(keyCode: combo.keyCode, command: combo.command,
+                                           option: combo.option, control: combo.control, shift: combo.shift).isBindable,
+                    "\(combo.display) 应可绑定")
+        }
+    }
+
+    @Test("显示名与 keyCode 一一对应，不再出现 F1 显示成 A 的那类错位")
+    func displayMatchesCode() {
+        #expect(MSKeyCombo.f1.display == "F1")
+        #expect(MSKeyCombo.f3.display == "F3")
+        #expect(MSKeyCombo(keyCode: 0, command: true).display == "⌘A")
+        // Apple 的修饰键次序是 ⌃⌥⇧⌘，所以 ⌥ 在 ⌘ 之前才是规范写法。
+        #expect(MSKeyCombo(keyCode: 1, command: true, option: true).display == "⌥⌘S")
+        #expect(MSKeyCombo(keyCode: 0, command: true).display == "⌘A", "keyCode 0 必须是 A，不能被当成未知键")
+        // 查表落空时绝不允许静默变成 0 号键（A）——这正是 11-16 那个 bug 的形状
+        #expect(MSKeyCombo(keyCode: 122).display != "A")
+    }
+}

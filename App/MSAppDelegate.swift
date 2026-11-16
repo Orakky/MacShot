@@ -46,7 +46,7 @@ final class MSPNGItem: NSObject, NSPasteboardWriting {
 }
 
 @MainActor
-final class MSAppDelegate: NSObject, NSApplicationDelegate {
+final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let settings = MSSettingsStore(directory: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
         .appendingPathComponent("MacShot", isDirectory: true))
     private let pins = MSPinRegistry()
@@ -56,6 +56,7 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate {
     private var permissionWindow: NSWindow?
     private var settingsWindow: NSWindow?
     private var toastController: MSToast?
+    private var hotKeyEditor: MSHotKeyEditor?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         MSLog.info(.app, "launched version=\(Bundle.main.shortVersion) scale=\(NSScreen.main?.backingScaleFactor ?? 0)")
@@ -82,27 +83,62 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - hot keys
 
+    private func combos(from prefs: MSAppPreferences) -> [(MSHotKeyID, MSKeyCombo)] {
+        [(.snip, prefs.hotKeys.snip),
+         (.pinClipboard, prefs.hotKeys.pinClipboard),
+         (.fullScreen, prefs.hotKeys.fullScreen)]
+    }
+
+    /// 改绑一条：先注销，注册新键；失败则把旧键装回去（FR-HOT-002 判据）。
+    @discardableResult
+    private func rebind(_ id: MSHotKeyID, to combo: MSKeyCombo) -> MSRegistrationResult {
+        let old = combos(from: settings.current).first { $0.0 == id }?.1
+        let result = register(id, combo)
+        if case .ok = result {
+            settings.update { apply(combo, id, to: &$0) }
+            showToast("\(id.name) → \(combo.display)")
+        } else if let old {
+            _ = register(id, old)
+            showToast("\(combo.display) 注册失败，已恢复 \(old.display)")
+        }
+        hotKeyEditor?.restoreTitles(from: settings.current)
+        return result
+    }
+
+    private func apply(_ combo: MSKeyCombo, _ id: MSHotKeyID, to prefs: inout MSAppPreferences) {
+        switch id {
+        case .snip: prefs.hotKeys.snip = combo
+        case .pinClipboard: prefs.hotKeys.pinClipboard = combo
+        case .fullScreen: prefs.hotKeys.fullScreen = combo
+        }
+    }
+
+    @discardableResult
+    private func register(_ id: MSHotKeyID, _ combo: MSKeyCombo) -> MSRegistrationResult {
+        hotKeys.unregister(id)
+        return hotKeys.register(combo, id: id) { [weak self] in
+            Task { @MainActor in self?.coordinator.handle(id) }
+        }
+    }
+
     private func registerHotKeys() {
-        let prefs = settings.current
-        let map: [(MSHotKeyID, MSKeyCombo)] = [
-            (.snip, prefs.hotKeys.snip),
-            (.pinClipboard, prefs.hotKeys.pinClipboard),
-            (.fullScreen, prefs.hotKeys.fullScreen),
-        ]
-        for (id, combo) in map {
-            let result = hotKeys.register(combo, id: id) { [weak self] in
-                Task { @MainActor in self?.coordinator.handle(id) }
-            }
+        for (id, combo) in combos(from: settings.current) {
+            let result = register(id, combo)
             if case .alreadyTaken = result { showToast("热键 \(combo.display) 已被占用") }
         }
     }
 
     // MARK: - status item
 
+    /// 左键＝直接截图，右键（或 ⌃ 点击）＝菜单。挂 item.menu 会让左键只能弹菜单，
+    /// 所以这里不设 menu，改由按钮自己分发（FR-HOT-013）。
     private func buildStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.title = "✂"
-        item.button?.toolTip = "MacShot（\(settings.current.hotKeys.snip.display) 截图）"
+        item.button?.target = self
+        item.button?.action = #selector(statusItemClicked(_:))
+        item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        item.button?.toolTip = "左键截图（\(settings.current.hotKeys.snip.display)）· 右键菜单"
         let menu = NSMenu()
         menu.addItem(withTitle: "截图", action: #selector(snip), keyEquivalent: "").target = self
         menu.addItem(withTitle: "全屏截图", action: #selector(snipFullScreen), keyEquivalent: "").target = self
@@ -116,7 +152,8 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "关于 MacShot", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "退出 MacShot", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        item.menu = menu
+        menu.delegate = self
+        statusMenu = menu
         statusItem = item
         refreshPermissionMenuItem()
     }
@@ -125,6 +162,25 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate {
         let granted = PermissionProbe.screenRecording() == .granted
         statusItem?.menu?.item(withTitle: "屏幕录制权限：检测中…")?.title =
             granted ? "屏幕录制权限：已授予" : "⚠ 屏幕录制权限：未授予"
+    }
+
+    private var statusMenu: NSMenu?
+
+    @objc private func statusItemClicked(_ sender: Any?) {
+        guard let event = NSApp.currentEvent else { coordinator.handle(.snip); return }
+        let wantsMenu = event.type == .rightMouseUp || event.modifierFlags.contains(.control)
+        if wantsMenu { popStatusMenu() } else { coordinator.handle(.snip) }
+    }
+
+    private func popStatusMenu() {
+        guard let item = statusItem, let menu = statusMenu else { return }
+        item.menu = menu
+        item.button?.performClick(nil)
+    }
+
+    // 菜单关闭后必须收回 item.menu，否则下一次左键又只会弹菜单
+    func menuDidClose(_ menu: NSMenu) {
+        if menu === statusMenu { statusItem?.menu = nil }
     }
 
     @objc private func snip() { coordinator.handle(.snip) }
@@ -210,7 +266,14 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate {
         stack.addArrangedSubview(seg)
 
         stack.addArrangedSubview(label("热键", weight: .semibold))
-        stack.addArrangedSubview(label("截图 \(settings.current.hotKeys.snip.display) · 贴出剪贴板 \(settings.current.hotKeys.pinClipboard.display) · 全屏 \(settings.current.hotKeys.fullScreen.display)"))
+        let editor = MSHotKeyEditor()
+        editor.currentPrefs = { [weak self] in self?.settings.current ?? MSAppPreferences() }
+        editor.unregister = { [weak self] id in self?.hotKeys.unregister(id) }
+        editor.onCommit = { [weak self] id, combo in self?.rebind(id, to: combo) ?? .failed(-1) }
+        editor.onResetToDefaults = { [weak self] in self?.resetHotKeys() }
+        stack.addArrangedSubview(editor.build(prefs: settings.current))
+        editor.restoreTitles(from: settings.current)
+        hotKeyEditor = editor
         stack.addArrangedSubview(label("MacBook 上 F1/F3 可能被系统当作亮度/调度键：需在系统设置开启「将 F1、F2 等键用作标准功能键」，或按 fn。",
                                        color: .secondaryLabelColor))
 
@@ -242,6 +305,14 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow = window
+    }
+
+    private func resetHotKeys() {
+        let defaults = MSAppPreferences.HotKeys.standard
+        for (id, combo) in combos(from: MSAppPreferences(hotKeys: defaults)) { _ = register(id, combo) }
+        settings.update { $0.hotKeys = defaults }
+        hotKeyEditor?.restoreTitles(from: settings.current)
+        showToast("热键已恢复默认")
     }
 
     @objc private func commitChanged(_ sender: NSSegmentedControl) {

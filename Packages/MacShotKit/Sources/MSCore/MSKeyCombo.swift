@@ -63,3 +63,51 @@ public struct MSKeyCombo: Hashable, Sendable, Codable {
         103: "F11", 111: "F12",
     ]
 }
+
+// MARK: - 可绑定性判定（纯函数，UI 只负责显示结果）
+
+public extension MSKeyCombo {
+    /// 系统保留/合成键：允许用户绑上去但要先警告——它们往往抢不过输入法、登录框或触摸板手势。
+    static let riskyKeyCodes: Set<UInt16> = [53 /* Esc */, 49 /* Space */, 36 /* Return */, 76 /* keypad Enter */]
+
+    enum Bindability: Equatable, Sendable {
+        case ok
+        case functionKeyNeedsHint          // 纯 F1…F12：合法，但 MacBook 上可能要按 fn
+        case needsModifier                  // 既没有修饰键也不是功能键 → 会吃掉日常输入
+        case reserved                       // Esc/Space 等
+        case unsupported
+
+        public var isBindable: Bool {
+            switch self { case .ok, .functionKeyNeedsHint: return true; default: return false }
+        }
+
+        public var message: String? {
+            switch self {
+            case .ok: return nil
+            case .functionKeyNeedsHint: return "F 键在部分键盘上需要同时按 fn；若无效请改用 ⌘/⌥ 组合"
+            case .needsModifier: return "需要 ⌘、⌥ 或 ⌃ 之一（否则会和日常输入冲突）"
+            case .reserved: return "这个键被系统或输入法占用风险高，换一个"
+            case .unsupported: return "无法识别这个按键"
+            }
+        }
+    }
+
+    /// 判定规则集中在这一处，设置窗与热键服务共用（同一事实只有一个家）。
+    static func bindability(keyCode: UInt16, command: Bool, option: Bool, control: Bool, shift: Bool) -> Bindability {
+        let hasModifier = command || option || control
+        if riskyKeyCodes.contains(keyCode) { return .reserved }
+        if functionKeyCodes.values.contains(keyCode) { return hasModifier ? .ok : .functionKeyNeedsHint }
+        // keyCode 0 是 A 键，不是"未知"——写成 0 ⇒ 非法会让 ⌘A 这类常见组合被拒（11-16 自查抓出）。
+        guard keyCode <= 127, keyNames[keyCode] != nil else { return .unsupported }
+        return hasModifier ? .ok : .needsModifier
+    }
+
+    /// `shift` 只作为大小写呈现（⌘⇧A 与 ⌘A 是不同的注册项，所以 shift 参与判定但不计入"有修饰键"）。
+    static func bindability(keyCode: UInt16, modifiers: Set<String>) -> Bindability {
+        bindability(keyCode: keyCode,
+                    command: modifiers.contains("command"),
+                    option: modifiers.contains("option"),
+                    control: modifiers.contains("control"),
+                    shift: modifiers.contains("shift"))
+    }
+}
