@@ -82,6 +82,7 @@
 | E-037 | 遮罩加**三条纯鼠标出路**（键盘万一不通也不至于被锁在屏幕外）：左上角常驻 ✕（`OverlayChrome.cancelHitRect`，可视 28pt／命中 44pt）、右键任意处取消、再按一次截图热键取消；`teardown()` 必摘本地/全局监视器 | 新增纯函数 `OverlayChrome`（坐标系与命中区可单测）+ `OverlayChromeTests` 4 条；`perform(effect)` 删掉 `default: break`（就是它吞了 `.closeOverlay`），规范 §4b 从此禁用该写法。套件 61 → 65 |
 | E-038 | 修"每次启动都问权限"里属于我的那半边：拒绝路径原来每次都调 `CGRequestScreenCaptureAccess()`，每按一次 `F1` 就再敲一次门 | `MSSessionCoordinator.requestPermissionOnce()`：每个进程生命周期只申请一次，之后只走引导窗；系统申请做成可注入 `permissionRequester`（单测因此能跑拒绝路径而不真弹框）+ `PermissionThrottleTests` 断言 3 次调用只申请 1 次。套件 65 → **66**。剩下那半边是签名身份，见 Q-18 / P-002 |
 | E-039 | 把"ad-hoc 每次重编都换身份"从推断做成对照实验：**源码一字未改**，只 `make clean && make build` | 二进制 sha256 `5f074f41…`→`fdc887c9…`；`codesign -d -r-` 的 `designated => cdhash H"0f85ca84…"`→`H"ec5d7ed3…"`。ad-hoc（`TeamIdentifier=not set`）能匹配的就是这一串 hash ⇒ 重装/重编必失效，**Q-18 的 B（手工重勾）在开发循环里不可用**，能救的只有稳定身份（A 自签证书 / C Developer ID）|
+| E-040 | Q-18 你裁定 **B**（不建证书、不碰钥匙串）⇒ 日常入口做成 `make run-term`：build 后直接 `exec` 产物二进制，先杀旧进程 | 实测同一 PID 起来就有 `launched version=0.1.0 scale=1.0` → `capture.backend=screenCaptureKit` → `registered 1 = F1` / `2 = F3` / `3 = ⌘A` → `ready hotkeys=F1/F3`；读日志必须带 `--info`（`log show --last 1m --info --predicate 'subsystem == "com.macshot.app"'`，不带 `--info` 是空的，我踩了一次）。**边界写进 runbook**：这条路借的是终端的授权，不能当 .app 自身可用的证据（V-021 仍开）|
 
 ## 尚未完成 / 未验证（写清楚，避免被当成已完成）
 

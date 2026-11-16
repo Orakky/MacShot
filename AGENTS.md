@@ -22,7 +22,8 @@ macOS 原生截图 → 标注 → 贴图置顶 → 剪贴板 工具（形态参�
 make doctor            # 环境自检：Xcode / SDK / 证书 / 构建号 / 权限 / 未验证项计数
 make build             # xcodebuild 无头构建 .app
 make test              # swift test（Packages/MacShotKit，无需 Xcode GUI）
-make run               # 构建并启动（开发用；先杀旧进程）
+make run               # 构建并 open 启动（诊断用；会换 cdhash，见 Q-18=B）
+make run-term          # 构建后直接 exec 产物二进制 —— 日常入口（借终端的屏幕录制授权，不弹框）
 make release           # Release 配置构建
 make dmg               # 产出 build/MacShot-<version>.dmg（ad-hoc 签名）
 make install           # 装到 /Applications 或 ~/Applications（去 quarantine）

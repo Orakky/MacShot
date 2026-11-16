@@ -5,7 +5,7 @@ DERIVED   := build/Derived
 PRODUCT   := $(DERIVED)/Build/Products/Debug/MacShot.app
 VERSION   := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Config/Info.plist 2>/dev/null)
 
-.PHONY: doctor build release test run dmg install check clean sign probe probe-permission
+.PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission
 
 doctor:
 	@sh scripts/doctor.sh
@@ -25,6 +25,13 @@ test:
 run: build
 	@pkill -x MacShot 2>/dev/null || true
 	@open "$(PRODUCT)" && echo "→ 已启动；状态栏应出现 ✂，按 F1 截图"
+
+# Q-18=B：ad-hoc 签名的 .app 每次重编都换 cdhash ⇒ TCC 授权每次失效（P-002/E-039）。
+# 直接 exec 产物时，采集归属终端已授予的屏幕录制权限，开发循环不受影响；代价是
+# 这条路证明不了 .app 自身身份可用（V-021 因此仍闭不了，见 E-033）。
+run-term: build
+	@pkill -x MacShot 2>/dev/null || true
+	@"$(PRODUCT)/Contents/MacOS/MacShot"
 
 probe: build
 	@"$(PRODUCT)/Contents/MacOS/MacShot" --probe-capture

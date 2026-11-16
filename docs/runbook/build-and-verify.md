@@ -11,6 +11,7 @@
 | `make test` | `swift test --package-path Packages/MacShotKit` | 全绿；`MSCoreTests`/`MSAnnotateTests`/`MSSessionTests`/`MSSettingsTests` 四个 target 都有用例数（0 视为失败，防空套件） | 包内是否有 UI 依赖泄漏（违反 ADR-012） |
 | `make check` | doctor + build + test + 门禁脚本 | §2 全部规则绿 | 具体规则脚本输出 |
 | `make run` | build + `open build/MacShot.app`（先杀旧进程） | 菜单栏出现图标且 `log stream` 有 `app.launched`；Dock 无图标（LSUIElement） | 权限、签名变化 |
+| `make run-term` | build + 直接 `exec` 产物内的二进制（Q-18 裁定 B 的日常入口） | `log show --info --predicate 'subsystem=="com.macshot.app"'` 出现 `launched`/`capture.backend`/`registered 1 = F1`；采集借**终端**已授予的屏幕录制权限，因此不弹框 | 这条路**证明不了 .app 自身身份可用**（E-033 的坑）；V-021 不能据此标绿 |
 | `make release` | Release 配置构建 | 同 build，另加 `strip` 后体积读数（写进 done.md） | 优化导致的编译期差异 |
 | `make dmg` | `hdiutil create` 打包 `.app`（含 `/Applications` 软链接） | 挂载后能看到 app；`codesign -dv` 显示 `Signature=adhoc` | `hdiutil` 权限 |
 | `make install` | 复制到 `/Applications`（或 `~/Applications`），**清除 quarantine 属性** | 复制后 `xattr -l` 无 `com.apple.quarantine`；启动成功 | 目录权限 |
