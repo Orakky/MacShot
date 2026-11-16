@@ -1,0 +1,29 @@
+# 已办台账（附证据）
+
+> 规则：**没有证据不写已办**。证据 = 命令输出尾行 / 文件路径 / 读数 / 实拍描述。日期用绝对日期。
+> 已完成条目的正文迁到所属文档，本表只留一行 + 指针。
+
+## 2026-11-16 文档裁决期（Wave 0：定范围）
+
+| ID | 条目 | 证据 |
+|---|---|---|
+| E-001 | 环境事实核实 | `swift --version` → `Apple Swift version 6.2.4 … Target: arm64-apple-macosx15.0`；`xcodebuild -version` → `Xcode 26.3 (17C529)`；`xcrun --sdk macosx --show-sdk-version` → `26.2`；`sw_vers` → `15.7.4 (24G517)`；`ls /opt/homebrew/bin/brew` → `No such file or directory`；`security find-identity -v -p codesigning` → `0 valid identities found`。这些事实直接生成了 ADR-003/004/015 的结论 |
+| E-002 | 4 项范围裁决取得（D-001…D-004） | 用户在会话中选择：只做四大件最小闭环 / 本机 ad-hoc 直装 / Xcode 工程 + 本地 SPM / 贴图携带可编辑标注层。已落纸 `docs/charter.md` §1 |
+| E-003 | 过早写下的骨架收起（不是删除） | `git stash push -u -m "architecture-spike: …" -- Packages App` → `git stash list` = `stash@{0}: On main: architecture-spike…`；`git stash show --include-untracked --stat` = `9 files changed, 874 insertions(+)`；`find App Packages -type f` → 空。落纸为 `docs/architecture/modules.md` §12 的 3 处不符与 `T-018` 处置项 |
+| E-004 | 文档宪法与地图落地 | `docs/charter.md`（范围/术语/模块/ID/Q 表/非谈判项）、`docs/README.md`（真源分配 + 冲突消解序 + 当前阶段判据）、`AGENTS.md`（纪律 + 命令 + 领活） |
+| E-005 | 需求清单可裁决版落地 | `docs/requirements/requirements.md`：P0 32 条带判据、P1 34 条、P2 12 项、明确不做 6 项；准入纪律"无归属大件即降 P1"（`ADR-006`） |
+| E-006 | Snipaste 事实核查（一手来源） | `docs/reference/snipaste-gap.md`，7 节全部带出处（docs.snipaste.com 的 getting-started / key-bindings / PRO / FAQ / Troubleshooting / Changelog + developer.apple.com 的 SCStream / SCScreenshotManager / CGWindowListCreateImage / CGDisplayCreateImage）；由后台研究 agent 取得（`【示例】研究助手`，32 次工具调用） |
+| E-007 | 研究结论**推翻**了我先前 3 处假设并据此订正 | ① 取色不是 `F4`：官方是"放大镜可见时按 `C`"→ 改 `requirements.md#FR-CAP-012/013/014`、`keymap.md` §1/§2（原先写的"⇧+方向=10px"也是杜撰，官方是 `⌘`/`⇧`+方向做扩大/缩小）② 序号徽章与"二次编辑"是 Snipaste **PRO** 功能 → `charter.md` D-04 行加知情提示 + 新增 Q-12 ③ 剪贴板 PNG/TIFF 双表示**无官方出处** → Q-04 依据改为目标应用实测矩阵（`ADR-014`）④ 附加：橡皮擦是免费档功能而我漏了 → Q-03 从 8 件改 9 件 |
+| E-008 | 架构层落地 8 份 | `docs/architecture/{overview,modules,capture-pipeline,overlay-and-selection,annotate-model,pin-window,export-clipboard,hotkey-and-permissions}.md`；含依赖图、坐标契约、渲染器三 intent、贴图 level 风险、内存粗算（4K 整屏 3840×2160×4 ≈ 33MB 为**粗算待实测**） |
+| E-009 | ADR 16 条落地（4 accepted / 12 proposed） | `docs/adr/README.md` + `ADR-001`…`ADR-016`；每条含"已考虑并否决的方案 + 什么证据会翻案"（决策门），非只写结论 |
+| E-010 | 设计层落地 4 份 | `docs/design/{design-system,screens,state-machines,keymap}.md`；UI-001…UI-009 逐屏线框 + 元素规格表 + 屏↔需求对照表（含已发现的缺口：多屏切换、贴图分组）；ST-001…ST-006 迁移与非法迁移用例 |
+| E-011 | NFR 与愿景落地 | `docs/requirements/nfr.md`（NFR-001…036，全部标"目标值待实测"）、`docs/requirements/vision.md`（3 场景 + 5 个可观察成功指标 G-01…G-05） |
+| E-012 | 计划与台账落地 | `docs/plan/roadmap.md`（M-0…M-6 准入/交付/准出判据）、`docs/tasks/todo.md`（第 0 档 T-001…009 为裁决项；编码档全部标 `待裁决`）、本文件 |
+
+## 本会话未做的事（写清楚，避免被当成已完成）
+
+1. **没有任何可编译代码**：仓库当前只有文档与空目录。`make` 目标尚不存在（`AGENTS.md` §2 已注明"待 M-0 落地生效"）。
+2. **未实机验证任何 macOS API 行为**：屏幕录制权限流程、`SCScreenshotManager` 延迟、贴图在全屏 Space 上的可见性、未激活窗口的键盘可达性、`RegisterEventHotKey` 冲突返回码 —— 全部标 `待实测`。
+3. **没有可视化原型稿**（HTML/图片）：目前只有 `screens.md` 的线框，是否需要视觉稿 = T-009。
+4. **`.gitignore` 尚未建立**（`.idea/` 仍未被跟踪，属 Q-10）。
+5. **未提交**：本轮全部文档尚未 commit（按你的习惯：批次收口即提交，等裁决一轮之后再提）。

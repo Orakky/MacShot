@@ -1,0 +1,26 @@
+# 构建产物与临时物
+build/
+DerivedData/
+build/Derived/
+*.app/
+*.dmg
+*.xcarchive
+.swiftpm/
+Package.resolved.bak
+
+# 交付素材（截图基线之外的都算素材，见 docs/protocol/git-and-release.md §1）
+/prototypes/shots/
+*.tmp.png
+
+# 编辑器与系统
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# 本地覆盖（含个人路径/凭据，永不入库）
+*.local
+.envrc
+
+# 例外：渲染基线是要入库的（人工确认过的判据资产）
+!Packages/MacShotKit/Tests/Fixtures/**/*.png
