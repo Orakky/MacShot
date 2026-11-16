@@ -30,6 +30,9 @@ make install           # 装到 /Applications 或 ~/Applications（去 quarantin
 make check             # 本地门禁：build + test + 风格/依赖方向/文档一致性
 make clean             # 清 build 与 Derived
 make probe             # 采一帧并打印尺寸/耗时/权限（V-001/V-019 取证）
+make probe-menu        # 打印状态栏菜单行与"权限行是否真挂在菜单上"（常驻读数行的取证）
+make icon              # assets/branding 的 SVG → build/macshot.icns（只用系统工具）
+make appicon           # build + icon + 注入 .icns 与菜单栏 SVG + 重签（run/run-term/probe/dmg/install/check 都走它）
 scripts/reset-tcc.sh   # 重置屏幕录制授权（排查黑图）
 ```
 

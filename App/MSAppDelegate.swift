@@ -144,7 +144,15 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// 所以这里不设 menu，改由按钮自己分发（FR-HOT-013）。
     private func buildStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.title = "✂"
+        if let glyph = MSStatusGlyph.image() {
+            item.button?.image = glyph
+            item.button?.imagePosition = .imageOnly
+            MSLog.info(.app, "status glyph=\(MSStatusGlyph.pointSize)pt template ink=\(String(format: "%.2f", MSStatusGlyph.inkCoverage(of: glyph)))")
+        } else {
+            // 素材没注入也要留得下入口：回落文字，并把缺素材这件事说出口（不静默）。
+            MSLog.error(.app, "status glyph missing（\(MSStatusGlyph.resourceName).svg 不在 bundle 里）→ 回落 ✂ 文本")
+            item.button?.title = "✂"
+        }
         item.button?.target = self
         item.button?.action = #selector(statusItemClicked(_:))
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -158,6 +166,7 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let perm = NSMenuItem(title: "屏幕录制权限：检测中…", action: #selector(openPermissionSettings), keyEquivalent: "")
         perm.target = self
         menu.addItem(perm)
+        permissionMenuItem = perm
         menu.addItem(withTitle: "设置…", action: #selector(openSettings), keyEquivalent: ",").target = self
         menu.addItem(withTitle: "关于 MacShot", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         menu.addItem(.separator())
@@ -170,8 +179,23 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func refreshPermissionMenuItem() {
         let granted = PermissionProbe.screenRecording() == .granted
-        statusItem?.menu?.item(withTitle: "屏幕录制权限：检测中…")?.title =
-            granted ? "屏幕录制权限：已授予" : "⚠ 屏幕录制权限：未授予"
+        permissionMenuItem?.title = granted ? "屏幕录制权限：已授予" : "⚠ 屏幕录制权限：未授予"
+        // 回读而不是打印"打算设的值"：这一行拿到 nil 就说明引用没握住（旧 bug 的形状就是查不到项、静默不更新）。
+        MSLog.info(.app, "permission menu row=\(self.permissionMenuItem?.title ?? "nil（行没握住）")")
+    }
+
+    /// 持引用而不是按标题查：标题一旦从"检测中…"改成结果，再按原标题查就永远是 nil，
+    /// 这一行就会永远停在第一次的值上（实测过的失效形状）。
+    private var permissionMenuItem: NSMenuItem?
+
+    /// `--probe-menu`：把"权限行这次真的换过话"做成可打印的证据。
+    /// `attached` 是关键——握住的对象必须就是菜单里那一行，否则写了也白写。
+    func probeStatusMenu(refreshes: Int = 3) {
+        for i in 0..<max(1, refreshes) {
+            refreshPermissionMenuItem()
+            let attached = self.statusMenu?.items.contains(where: { $0 === self.permissionMenuItem }) ?? false
+            MSLog.info(.app, "probe-menu#\(i) rows=\(self.statusMenu?.items.count ?? -1) attached=\(attached) permRow=\(self.permissionMenuItem?.title ?? "nil")")
+        }
     }
 
     private var statusMenu: NSMenu?

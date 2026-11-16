@@ -7,7 +7,7 @@ RELEASE   := $(DERIVED)/Build/Products/Release/MacShot.app
 ICNS      := build/macshot.icns
 VERSION   := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Config/Info.plist 2>/dev/null)
 
-.PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission icon appicon
+.PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission probe-menu icon appicon
 
 doctor:
 	@sh scripts/doctor.sh
@@ -25,32 +25,32 @@ release:
 icon:
 	@sh scripts/make-icon.sh
 
-# 往 .app 里加资源会让原 ad-hoc 签名失效 ⇒ 每次注入后重签（D-02）
+# 往 .app 里加资源会让原 ad-hoc 签名失效 ⇒ 注入后重签（D-02）。
+# appicon = "把产物做成能用的一份"，所以 run/run-term/probe 都挂在它上面，不让开发入口跑在缺素材的 bundle 上。
 appicon: build icon
-	@mkdir -p "$(PRODUCT)/Contents/Resources"
-	@cp $(ICNS) "$(PRODUCT)/Contents/Resources/macshot.icns"
-	@codesign --force --sign - --timestamp=none "$(PRODUCT)" >/dev/null
-	@echo "→ icon 已装入 $(PRODUCT)"
+	@sh scripts/inject-brand.sh "$(PRODUCT)"
 
 test:
 	@cd Packages/MacShotKit && swift test 2>&1 | tail -3
 
-run: build
+run: appicon
 	@pkill -x MacShot 2>/dev/null || true
-	@open "$(PRODUCT)" && echo "→ 已启动；状态栏应出现 ✂，按 F1 截图"
+	@open "$(PRODUCT)" && echo "→ 已启动；状态栏应出现品牌图形，按 F1 截图"
 
 # Q-18=B：ad-hoc 签名的 .app 每次重编都换 cdhash ⇒ TCC 授权每次失效（P-002/E-039）。
 # 直接 exec 产物时，采集归属终端已授予的屏幕录制权限，开发循环不受影响；代价是
 # 这条路证明不了 .app 自身身份可用（V-021 因此仍闭不了，见 E-033）。
-run-term: build
+run-term: appicon
 	@pkill -x MacShot 2>/dev/null || true
 	@"$(PRODUCT)/Contents/MacOS/MacShot"
 
-probe: build
+probe: appicon
 	@"$(PRODUCT)/Contents/MacOS/MacShot" --probe-capture
 
-probe-permission: build
+probe-permission: appicon
 	@"$(PRODUCT)/Contents/MacOS/MacShot" --probe-permission
+probe-menu: appicon
+	@"$(PRODUCT)/Contents/MacOS/MacShot" --probe-menu
 
 sign: build
 	codesign --force --sign - --timestamp=none "$(PRODUCT)"
@@ -59,9 +59,7 @@ sign: build
 dmg: release icon
 	@mkdir -p build
 	@rm -f build/MacShot-$(VERSION).dmg
-	@mkdir -p "$(RELEASE)/Contents/Resources"
-	@cp $(ICNS) "$(RELEASE)/Contents/Resources/macshot.icns"
-	@codesign --force --sign - --timestamp=none "$(RELEASE)" >/dev/null
+	@sh scripts/inject-brand.sh "$(RELEASE)"
 	hdiutil create -volname MacShot -srcfolder "$(RELEASE)" \
 	  -ov -format UDZO build/MacShot-$(VERSION).dmg
 	@echo "→ build/MacShot-$(VERSION).dmg"
@@ -78,7 +76,7 @@ check: doctor
 	@sh scripts/check-deps.sh
 	@python3 scripts/check-docs.py
 	@$(MAKE) --no-print-directory test
-	@$(MAKE) --no-print-directory build
+	@$(MAKE) --no-print-directory appicon
 	@echo "✔ check 通过"
 
 clean:

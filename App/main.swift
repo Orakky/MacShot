@@ -8,6 +8,7 @@ import MSCore
 //   MacShot                    → menu bar agent
 //   MacShot --probe-capture    → capture once, print the result, exit (V-001/V-019 evidence)
 //   MacShot --probe-permission → print TCC state, exit
+//   MacShot --probe-menu       → 打印状态栏菜单行与"权限行是否真挂在菜单上"，exit
 // --snip-now：以 LaunchServices 启动的"真 app 身份"立即触发一次截图。
 // 用途是权限取证——直接在终端跑二进制会继承 Terminal 的屏幕录制授权，测不出 app 自己的状态。
 if CommandLine.arguments.contains("--snip-now") {
@@ -58,6 +59,18 @@ if CommandLine.arguments.contains("--probe-capture") {
         exit(degenerate ? 4 : 0)
     }
     dispatchMain()
+}
+
+if CommandLine.arguments.contains("--probe-menu") {
+    let app = NSApplication.shared
+    let delegate = MainActor.assumeIsolated { MSAppDelegate(autoSnip: false) }
+    app.delegate = delegate
+    app.setActivationPolicy(.accessory)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+        MainActor.assumeIsolated { delegate.probeStatusMenu() }
+        exit(0)
+    }
+    app.run()
 }
 
 let app = NSApplication.shared

@@ -35,6 +35,7 @@
 | `design/screens.md` | UI-001…UI-009 线框 + 元素规格 + 屏↔需求对照 | 屏幕规格 | 已落，待裁决 |
 | `design/state-machines.md` | ST-001…ST-006 迁移表与非法迁移 | 状态机 | 已落 |
 | `design/keymap.md` | 键位总表（含 Snipaste 对应与出处） | 键位 | 已落，默认值随 Q-02 |
+| `design/brand.md` | 定稿图形 C4、文件边界、运行时装载实测与图标管线 | 品牌图形 | 已落（图形已定稿，视觉两项未过目） |
 | `plan/roadmap.md` | M-0…M-6 准入/交付/准出判据 | 里程碑 | 已落 |
 | `tasks/todo.md` | 第 0 档裁决项 T-001…009 + 编码档 T-010… | 待办 | 已落，第 0 档全红 |
 | `tasks/done.md` | E-001…E-012 证据 + "本会话未做的事" | 已办 | 已落 |
