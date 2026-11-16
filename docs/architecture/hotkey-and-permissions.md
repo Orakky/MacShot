@@ -29,7 +29,7 @@ handler 内：只做一件事 —— DispatchQueue.main.async { 触发 }   // �
 | keyCode 常量 | 集中一张表（`F1=122`、`F3=99`、`A=0`…），禁止散落魔数；表由 `MSHotKey` 拥有 |
 | modifier | `cmdKey/shiftKey/optionKey/controlKey`，⌘ 与 ⌃ 必居其一**或**纯功能键（Snipaste 默认 `F1` 就是纯功能键，所以不能强制要求修饰键） |
 | 纯功能键风险 | MacBook 上 `F1/F3` 默认是亮度/Mission Control，需 `fn` 或在系统设置开启"作为标准功能键"→ 设置窗必须显示这行提示（Q-02 附带事实，`UI-005`） |
-| 冲突 | `RegisterEventHotKey` 返回"已存在"错误时 → 置 `conflicts`，状态栏标记 + 文案（P1 `FR-HOT-011`；P0 至少记日志并在设置窗显示"注册失败"）。具体 OSStatus 数值**待实测**（`T-004`） |
+| 冲突 | `RegisterEventHotKey` 返回 **-9878**（`eventHotKeyExistsErr`，2026-11-16 实测，E-023）→ 置 `conflicts`，状态栏标记 + 文案（P1 `FR-HOT-011`；P0 已实现为一次性 toast + 错误日志） |
 | 重绑 | 改设置时：先全部 `UnregisterEventHotKey` → 注册新集合 → 失败则回滚旧集合并报错（不许出现"新旧都能触发"或"全都失效"）（FR-HOT-002） |
 | 录制控件 | 设置窗里按新键时，**先注销**该 id 的旧注册，否则会被自己吞掉（这是自测才能发现的坑，写在这里） |
 | 睡眠/唤醒、退出 | 监 `NSWorkspace.willPowerOff`/`didWake`；退出前注销全部（FR-HOT-001 稳定性） |

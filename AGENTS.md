@@ -2,21 +2,21 @@
 
 macOS 原生截图 → 标注 → 贴图置顶 → 剪贴板 工具（形态参考 Snipaste）。Swift + AppKit，Xcode 工程 + 本地 SPM 多模块包。
 
-## 0. 当前阶段：文档裁决期（先读这条）
+## 0. 当前阶段：M-0 已落地，裁决与实现并行（先读这条）
 
-**未经裁决不写实现代码。** 现状：
+用户 2026-11-16 放行开发：**未签决策按 `docs/charter.md` §6 顶部的临时默认档实现**，不再是"没签就不能写"。现状：
 
 - 已裁决：D-01 首版只做四大件 / D-02 本机 ad-hoc 签名 / D-03 Xcode + SPM / D-04 贴图携带可编辑标注层（见 `docs/charter.md` §1）。
 - 未裁决：`docs/charter.md` §6 的 Q-01…Q-15，与 `docs/adr/README.md` 中状态为 `proposed` 的行。
-- 已有一版骨架代码，**收起在 `stash@{0}`**（"architecture-spike"）。它是 D-0x 之前凭假设写的，不要 `git stash pop`、不要当既成事实引用。要复用需先对照 accepted ADR 逐条核对。
+- 正式代码在 `App/` + `Packages/MacShotKit/` + `MacShot.xcodeproj`（10 模块 + 47 条单测）。`stash@{0}` 那份旧骨架已 `apply` 并按 accepted ADR 改写完毕（`modules.md` §12 的 3 处不符都处理了），**不要再 pop 第二次**。
 
-进入编码的门槛：`docs/README.md` §4 的判据全部满足。
+改任何被临时默认档覆盖的行为前，先看 §6 表并问用户；改了就去更新那张表（文档与代码同批提交，NFR-036）。
 
 ## 1. 上岗顺序
 
 `docs/charter.md` → `docs/requirements/requirements.md` → `docs/plan/roadmap.md`（取当前 M）→ `docs/tasks/todo.md`（取一个 T）→ 按需读 `docs/architecture/<模块>.md` 与 `docs/design/screens.md`。
 
-## 2. 命令（M-0 落地后生效，届时由 `docs/runbook/build-and-verify.md` 转正）
+## 2. 命令（已生效，与 `docs/runbook/build-and-verify.md` 一致）
 
 ```sh
 make doctor            # 环境自检：Xcode / SDK / 证书 / 构建号 / 权限 / 未验证项计数
@@ -28,6 +28,7 @@ make dmg               # 产出 build/MacShot-<version>.dmg（ad-hoc 签名）
 make install           # 装到 /Applications 或 ~/Applications（去 quarantine）
 make check             # 本地门禁：build + test + 风格/依赖方向/文档一致性
 make clean             # 清 build 与 Derived
+make probe             # 采一帧并打印尺寸/耗时/权限（V-001/V-019 取证）
 scripts/reset-tcc.sh   # 重置屏幕录制授权（排查黑图）
 ```
 

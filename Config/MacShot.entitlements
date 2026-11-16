@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App Sandbox intentionally absent: ADR-004. Adding it would restrict cross-Space pins,
+	     arbitrary export directories and the tccutil-based troubleshooting flow. -->
+	<key>com.apple.security.get-task-allow</key>
+	<true/>
+</dict>
+</plist>

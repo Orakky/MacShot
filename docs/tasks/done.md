@@ -43,6 +43,17 @@
 | E-019 | **ADR-013 的算术自我纠正**：用 `ROUND_HALF_UP`（等价 Swift `.rounded()`）实测 20 组坐标 | 结论：**2x 下"两边分别取整"与 naive 完全一致**；差 1px 出现在 **1x + 半点坐标**（x=100.5,w=200.5 → 201 vs **200**；x=0.5,w=100.5 → 101 vs **100**；x=64.5,w=37.5 → 38 vs **37**）与 **1.799x**（361 vs **360**）。本 ADR 早先"这是为非整数缩放准备的"表述不准，已在 ADR-013 与 `capture-pipeline.md` §4 改正：它是每次选区都要走的路径，不是外接屏特例 |
 | E-020 | ADR-009 / ADR-013 补"展开说明"章节供你裁决 | ADR-009 展开：这条实际决定 ①内存类型形状 ②将来序列化的字节契约 ③版本兼容策略三件事，JSON 换回来的是"夹具能手写 + 出问题能 `cat` + diff 可读"，代价约 3–4KB/20 元素（估算待实测）；并把问题收敛成两个：是否接受字段只增不改语义、是否接受 M-1 冻结 |
 
+## 2026-11-16 M-0 落地（编码开闸）
+
+| ID | 条目 | 证据 |
+|---|---|---|
+| E-021 | 工程骨架可运行：`App/` + `Config/` + `MacShot.xcodeproj`（同步文件夹组）+ 10 模块 SPM 包 + `Makefile` + 3 个门禁脚本 | `make check` 全绿：doctor 通过 → check-style/deps/docs 通过 → `Test run with 47 tests in 14 suites passed` → `** BUILD SUCCEEDED **` → 产物 `build/Derived/Build/Products/Debug/MacShot.app`。ADR-001 的核心前提得证：新增 `App/main.swift` 的探针分支**未改 pbxproj** 即被编译 |
+| E-022 | 首次真机采集（M-1 地基） | `MacShot --probe-capture` → `permission=granted`、`displays=KG251Q:1920x1080@x1.0px1920x1080`、`backend=screenCaptureKit`、`degenerate=false`、5 次耗时 `0.133/0.081/0.082/0.080/0.079 s`、中心像素 `#27272C`。ADR-007 主路成立；NFR-001 的 300ms 预算里纯采集只占 ~80ms |
+| E-023 | 热键注册与冲突路径实测 | 启动日志 `registered 1 = F1` / `registered 2 = F3` / `registered 3 = ⌘A`；冲突实测 `OSStatus=-9878`（B-004 关闭：真实值不是 -9877） |
+| E-024 | 修掉会毁掉默认体验的 bug：`functionKey(122)` 把 keyCode 当 F 序号查表 → 落空返回 0 → **F1 被静默注册成 A 键**，第二条热键随之冲突 | 现象来自日志读数 `registered 1 = A`（不是读代码看出来的）。修法：`functionKey(_:)` 只接受 1…12 且越界 `preconditionFailure`，另加 `.f1/.f3` 常量；回归断言 `hotKeys.snip.display == "F1"` 已进 MSSettingsTests |
+| E-025 | `MSCore` 去掉 `import AppKit` | 被 `check-deps.sh` 拦下后，把屏幕清单枚举移到 `MSCapture.MSDisplayInventory`；`MSCore` 回到纯值类型，显示器列表同时变成可注入参数（测试接缝变好） |
+| E-026 | M-0 未覆盖 | 遮罩的拖框/标注/提交需人手验证；V-003 粘贴矩阵、V-010 层级、V-006 键盘与前台均未测；本机单屏 1x，Retina/2x 与多屏路径在此机无法证伪 |
+
 ## 尚未完成 / 未验证（写清楚，避免被当成已完成）
 
 1. **没有任何可编译代码**：仓库只有文档 + 一个 HTML 原型。`make` 目标尚不存在（`AGENTS.md` §2 注明"待 M-0 落地生效"）。

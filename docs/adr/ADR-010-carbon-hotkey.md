@@ -34,12 +34,12 @@ Carbon `InstallEventHandler(GetEventDispatcherTarget())` + `RegisterEventHotKey(
 
 ## 后果
 正面：零额外权限（P0 只需屏幕录制一项，`hotkey-and-permissions.md` §4 的关键卖点）；行为与 Snipaste 同族实现一致。
-负面：Carbon API 是旧框架（但 Apple 未提供等价替代且长期未变）；纯功能键（`F1/F3`）在 MacBook 上可能与系统媒体键冲突 → 需要 `fn` 或系统设置开关（Q-02 附带事实）；冲突只能靠返回码判断，**具体 OSStatus 数值待实测**。
+负面：Carbon API 是旧框架（但 Apple 未提供等价替代且长期未变）；纯功能键（`F1/F3`）在 MacBook 上可能与系统媒体键冲突 → 需要 `fn` 或系统设置开关（Q-02 附带事实）；冲突只能靠返回码判断，实测值 **-9878**（`eventHotKeyExistsErr`，E-023）。
 连带义务：改绑时先注销后注册、失败回滚（`FR-HOT-002` 判据）；设置窗录制新键时必须先注销当前注册。
 
 ## 判据
 1. 实拍：在 Safari 前台按 `F1` 能进遮罩（FR-HOT-001）。
-2. 注册失败路径可观测：故意把 `F1` 给别的 app 占用，设置窗出现"注册失败"且日志有 OSStatus 值（填进本文，替换"待实测"）。
+2. 注册失败路径可观测：**部分达成**（E-023）——同键二次注册实测返回 `OSStatus=-9878`，日志与一次性提示均可见；"被别的 app 占用"的场景仍待测。
 3. 睡眠唤醒后热键仍有效（`V-0xx`）。
 
 ## 受影响

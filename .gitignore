@@ -2,7 +2,8 @@
 build/
 DerivedData/
 build/Derived/
-.build/                 # swift build / swift test 在包目录下生成
+# SPM 在包目录下生成（swift build / swift test）
+.build/
 *.app/
 *.dmg
 *.xcarchive
@@ -10,6 +11,7 @@ build/Derived/
 Package.resolved.bak
 
 # 交付素材（Tests/Fixtures 里的渲染基线除外，见文件末尾）
+# 交付素材（截图基线之外）
 *.tmp.png
 
 # 编辑器与系统
