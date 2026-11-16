@@ -71,6 +71,14 @@
 | E-032 | 套件与门禁 | `Test run with 57 tests in 16 suites passed`（47 → 52 → 57）；`make check` 全绿；`make build` 无 warning；重启后日志 `registered 1 = F1 / 2 = F3 / 3 = ⌘A` |
 
 
+## 2026-11-16 权限阻塞（B-021）
+
+| ID | 条目 | 证据 |
+|---|---|---|
+| E-033 | 撤回我此前的错误结论：E-022 说"已验证真机采集"，实际是**在终端里跑二进制、继承了 Terminal 的屏幕录制授权**，不能证明 MacShot.app 自身可用 | `open MacShot.app --args --snip-now` → `preflight=denied` + `SCStreamErrorDomain -3801 用户拒绝了…TCC`，35ms 返回且无系统弹窗；`make install` 到 `~/Applications` 后同样；`tccutil reset` 后同样 |
+| E-034 | 修掉我自己造的**死锁**：`startSnip()` 原先在 preflight=denied 时直接弹引导窗并放弃采集，而 macOS 只在应用真的尝试采集时才把它写进「屏幕录制」列表 → 越检查越无法授权 | 现在无论如何先试一次采集；失败按 `-3801` 归类为权限缺失 → 调 `CGRequestScreenCaptureAccess()` + 引导窗；引导窗新增「清除旧授权记录」按钮（`MSTcc.resetScreenCapture`，参数全常量） |
+| E-035 | 错误分类与文案 | 新增 `MSCaptureError.isPermissionDenied/describe` + `MSCaptureTests` 4 条（套件 57 → **61**）；一次失败只出一条提示，`Error Domain=…` 原文不再出现在用户界面 |
+
 ## 尚未完成 / 未验证（写清楚，避免被当成已完成）
 
 1. **没有任何可编译代码**：仓库只有文档 + 一个 HTML 原型。`make` 目标尚不存在（`AGENTS.md` §2 注明"待 M-0 落地生效"）。

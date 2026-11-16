@@ -22,7 +22,29 @@
 
 程序内探测：`CGPreflightScreenCaptureAccess()` / `CGRequestScreenCaptureAccess()`，可用最低版本 **待实测**（不预设 macOS 14 一定有）；不可用时退化为"抓一帧 + 黑图启发式"（`capture-pipeline.md` §6）。
 
-## 3. ad-hoc 签名的特有坑（ADR-004 风险条）
+## 2b. 实测结论（2026-11-16，MacShot 0.1.0 / macOS 15.7.4）
+
+**ad-hoc 签名的 app 会被屏幕录制直接预拒绝，且不弹授权框。** 三条实测证据：
+
+| 试法 | 结果 |
+|---|---|
+| 终端直接跑二进制 `…/MacShot --probe-capture` | `granted`，能截图 —— 但那是**继承 Terminal 的授权**，不代表 app 自己有权 |
+| `open MacShot.app --args --snip-now`（DerivedData 路径） | `preflight=denied` → SCK 抛 `SCStreamErrorDomain -3801`，**35ms 返回，无系统弹窗** |
+| `make install` 后从 `~/Applications` 跑 | 同样 `-3801` 预拒绝 |
+| `tccutil reset ScreenCapture com.macshot.app` 后再试 | 仍 `-3801` |
+
+因此曾经的"preflight 未授权就放弃采集"是**双重错误**：既拿不到授权，又让 app 永远进不了系统列表。现在改成：无论如何先真试一次采集，失败再引导。
+
+### 三条出路（按代价排序）
+
+| 方案 | 做法 | 代价 | 状态 |
+|---|---|---|---|
+| B. 手动勾选 | 系统设置 → 隐私与安全性 → 屏幕录制与系统音频录制，看列表里有没有 MacShot，有就勾上 → 重启 app | 零改动，但重装/重签后可能要重勾 | **先试这个** |
+| A. 本地自签证书 | 钥匙串建一个 Code Signing 自签身份，`codesign -s "MacShot Dev"`，让 TCC 身份跨构建稳定 | 需要 sudo 改系统信任；只解决"稳定"，不保证 adhoc 之外的预拒绝消失 → **必须先小样验证** | 待验证（B-015/T-104） |
+| C. 开发者证书 | Developer ID 签名 | 99 美元/年 + 外网 | 目前无账号 |
+| D. 开发期兜底 | 终端直接跑二进制，借 Terminal 已授予的屏幕录制 | 不能日常用，日志混在终端 | 仅用于取证 |
+
+## 3. ad-hoc 签名的坑（ADR-004 风险条 → 已升级为阻塞项）
 
 TCC 的屏幕录制记录按 **bundle 身份 + 签名** 判定。ad-hoc 签名每次重签都可能变身份 ⇒ 表现就是"每次重装都要重新授权"。
 

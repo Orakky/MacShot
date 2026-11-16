@@ -4,6 +4,19 @@ import MSCore
 import ScreenCaptureKit
 
 public enum MSCaptureError: Error, Equatable, Sendable {
+    /// SCStreamErrorDomain -3801 == 用户/系统拒绝了屏幕捕捉（TCC）。实测见 done.md E-033。
+    public static let sckUserRejected = -3801
+
+    public static func isPermissionDenied(_ error: Error) -> Bool {
+        let ns = error as NSError
+        if case MSCaptureError.permissionMissing = error { return true }
+        return ns.domain == "com.apple.ScreenCaptureKit.SCStreamErrorDomain" && ns.code == sckUserRejected
+    }
+
+    public static func describe(_ error: Error) -> String {
+        let ns = error as NSError
+        return "\(ns.domain) \(ns.code) \(ns.localizedDescription)"
+    }
     case displayNotFound(CGDirectDisplayID)
     case permissionMissing
     case emptyFrame(width: Int, height: Int)
@@ -35,7 +48,18 @@ public struct ScreenCaptureKitCapturer: ScreenCapturing {
         config.height = max(1, size.height)
         config.showsCursor = showsCursor
         let filter = SCContentFilter(display: scDisplay, excludingWindows: [])
-        let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+        let image: CGImage
+        do {
+            image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+        } catch {
+            // SCK 把 TCC 拒绝报成 SCStreamErrorDomain -3801，而不是我们自己的类型。
+            // 不归类的话，它会落到通用 catch 里 → 既不触发系统授权流程，还把 NSError 甩给用户看。
+            if MSCaptureError.isPermissionDenied(error) {
+                MSLog.error(.capture, "capture.perm-missing sck=\(MSCaptureError.describe(error))")
+                throw MSCaptureError.permissionMissing
+            }
+            throw MSCaptureError.backend(MSCaptureError.describe(error))
+        }
 
         let elapsed = started.duration(to: ContinuousClock.now)
         MSLog.info(.capture, "freeze display=\(display.id) \(image.width)x\(image.height) scale=\(display.scale) took=\(elapsed)")

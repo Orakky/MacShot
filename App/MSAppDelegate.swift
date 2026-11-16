@@ -57,6 +57,12 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var settingsWindow: NSWindow?
     private var toastController: MSToast?
     private var hotKeyEditor: MSHotKeyEditor?
+    private let autoSnip: Bool
+
+    init(autoSnip: Bool = false) {
+        self.autoSnip = autoSnip
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         MSLog.info(.app, "launched version=\(Bundle.main.shortVersion) scale=\(NSScreen.main?.backingScaleFactor ?? 0)")
@@ -71,7 +77,10 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         registerHotKeys()
         observeDisplays()
         observeResignActive()
-        if PermissionProbe.screenRecording() == .denied { presentPermissionGate() }
+        if autoSnip {
+            // 取证用：立刻走一遍真实截图路径（含系统授权弹窗）
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.coordinator.handle(.snip) }
+        }
         MSLog.info(.app, "ready hotkeys=\(self.settings.current.hotKeys.snip.display)/\(self.settings.current.hotKeys.pinClipboard.display)")
     }
 
@@ -225,13 +234,19 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         content.spacing = 10
         content.edgeInsets = NSEdgeInsets(top: 16, left: 18, bottom: 16, right: 18)
         content.addArrangedSubview(label("截图需要系统允许 MacShot 读取屏幕内容。", weight: .semibold))
-        content.addArrangedSubview(label("1. 打开 系统设置 → 隐私与安全性 → 屏幕录制与系统音频录制\n2. 勾选 MacShot\n3. 点「重启 MacShot」让授权生效"))
-        content.addArrangedSubview(label("目前截图会得到全黑画面，这不是 bug。", color: .secondaryLabelColor))
+        content.addArrangedSubview(label("1. 点「打开系统设置」→ 隐私与安全性 → 屏幕录制与系统音频录制\n2. 勾选 MacShot（列表里现在应该有它：我们已实际尝试过一次采集）\n3. 点「重启 MacShot」让授权生效"))
+        content.addArrangedSubview(label("若列表里没有 MacShot，或它显示为「已拒绝」且无法勾选：先前拒绝过一次，系统就不再弹框了——点「清除旧授权记录」后重启再试。",
+                                         color: .secondaryLabelColor))
         let buttons = NSStackView()
         buttons.orientation = .horizontal
         buttons.spacing = 8
         buttons.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -36).isActive = true
         buttons.addArrangedSubview(button("打开系统设置") { [weak self] in self?.openPermissionSettings() })
+        buttons.addArrangedSubview(button("清除旧授权记录") {
+            // 之前拒绝过一次 → 系统不再弹框，列表项也锁在"已拒绝"。tccutil reset 是唯一出路。
+            MSTcc.resetScreenCapture()
+            self.showToast("已清除授权记录，请点「打开系统设置」重新勾选")
+        })
         buttons.addArrangedSubview(button("重启 MacShot") {
             let url = Bundle.main.bundleURL
             let config = NSWorkspace.OpenConfiguration()

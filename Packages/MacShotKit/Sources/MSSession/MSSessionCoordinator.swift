@@ -118,7 +118,8 @@ public struct MSSessionReducer: Sendable {
         case (.frozen, .captureFailed(let reason)), (.selecting, .captureFailed(let reason)),
              (.editing, .captureFailed(let reason)):
             phase = .failed
-            return [.closeOverlay, .restoreFocus, .toast("截图失败：\(reason)")]
+            // reason 已是给用户看的人话（由 reportCaptureFailure 传入），这里不再加前缀。
+            return [.closeOverlay, .restoreFocus, .toast(reason)]
 
         case (.failed, .effectsFinished):
             phase = .idle
@@ -180,6 +181,21 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
         for effect in reducer.handle(event) { perform(effect) }
     }
 
+    /// 用户能看懂的失败说明，绝不把 NSError 原样甩到屏幕上（`UI-009`）。
+    private func reportCaptureFailure(_ detail: String) {
+        frozenFrame = nil
+        run(.captureFailed(detail))
+        finishEffects()
+        onNeedsPermission?()
+    }
+
+    /// 唯一面向用户的失败文案来源：说清"发生了什么 + 下一步做什么"。
+    private static func failureMessage(for error: Error) -> String {
+        MSCaptureError.isPermissionDenied(error)
+            ? "截不到屏幕内容：需要在 系统设置 → 隐私与安全性 → 屏幕录制与系统音频录制 勾选 MacShot，然后重启它"
+            : "截图失败：\((error as NSError).localizedDescription)"
+    }
+
     private func startSnip() {
         guard reducer.phase == .idle else {
             // 再按一次截图键 = 取消当前会话。遮罩是全屏模态，键收不到时这条是不用重启电脑的出路。
@@ -194,14 +210,13 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
         }
         activeDisplay = display
         frontAppBeforeSession = NSWorkspace.shared.frontmostApplication
-        switch PermissionProbe.screenRecording() {
-        case .denied, .unknown:
-            // 探测不确定时按"缺权限"处理：宁可让用户确认一次，也不要交出一张黑图。
-            run(.permissionState(.denied))
-            onNeedsPermission?()
-            return
-        case .granted:
-            break
+        // 关键：这里**不能**因为 preflight 说"未授权"就早退。macOS 是在应用真的尝试采集时，
+        // 才把它加进「屏幕录制」列表并弹系统授权框；早退会让列表里永远没有 MacShot，
+        // 用户无从勾选 → 死循环（2026-11-16 就是这个现象：一直要权限、永远截不了图）。
+        // preflight 只用于记日志与提示文案。
+        let preflight = PermissionProbe.screenRecording()
+        if preflight != .granted {
+            MSLog.info(.capture, "preflight=\(preflight.rawValue); 仍会尝试采集以触发系统授权流程")
         }
         let started = ContinuousClock.now
         run(.hotKeyPressed(.snip))
@@ -215,10 +230,21 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
                 self.overlay = window
                 window.present()
                 self.run(.overlayShown)
-            } catch {
+            } catch let error as MSCaptureError {
                 self.frozenFrame = nil
-                self.run(.captureFailed(String(describing: error)))
-                self.finishEffects()
+                switch error {
+                case .permissionMissing:
+                    // 采集被系统拒了：申请一次（弹系统框 / 写入列表项），再显示引导窗。
+                    let after = PermissionProbe.requestScreenRecording()
+                    MSLog.error(.capture, "capture.perm-missing after request=\(after.rawValue)")
+                    self.run(.captureFailed("permission"))
+                    self.finishEffects()
+                    self.onNeedsPermission?()
+                default:
+                    self.reportCaptureFailure(Self.failureMessage(for: error))
+                }
+            } catch {
+                self.reportCaptureFailure(Self.failureMessage(for: error))
             }
         }
     }
