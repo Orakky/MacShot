@@ -12,7 +12,7 @@ public enum OverlayChrome {
     public static let cancelHit: CGFloat = 44
     public static let margin: CGFloat = 14
 
-    /// 右上角取消按钮的**命中区**（视图坐标，y 向上 → 右上即 maxY 一侧）。
+    /// 左上角取消按钮的**命中区**（视图坐标，y 向上 → 左上即 maxY 一侧）。
     public static func cancelHitRect(in bounds: CGRect) -> CGRect {
         CGRect(x: bounds.minX + margin, y: bounds.maxY - cancelHit - margin,
                width: cancelHit, height: cancelHit)
@@ -23,6 +23,21 @@ public enum OverlayChrome {
         let inset = (cancelHit - cancelVisual) / 2
         return hit.insetBy(dx: inset, dy: inset)
     }
+
+    /// 绘制用的矩形：与命中区**同一个坐标空间**（`draw(_:)` 的 CTM 不做额外翻转，实测冻结帧在这种
+    /// 上下文里是正着画出来的）。视图里不许再自己算一次 y —— 11-16 实拍就是多翻了一次，
+    /// 结果"看得见的 ✕"在左下、"点得到的 ✕"在左上，鼠标那条退出路径等于没有。
+    public static func cancelPaintRect(in bounds: CGRect) -> CGRect { cancelVisualRect(in: bounds) }
+
+    /// 与 ✕ 同一处的文字提示条左上锚点（跟着 ✕ 走，不单独定位）。
+    public static func cancelHintOrigin(in bounds: CGRect) -> CGPoint {
+        let paint = cancelPaintRect(in: bounds)
+        return CGPoint(x: paint.maxX + 10, y: paint.midY - 9)
+    }
+
+    /// 遮罩暗化层 alpha —— 数值真源是 `design/design-system.md` §2.1 的 `overlay.scrim`
+    /// （浅色 45%、深色 55%），不随"有没有选区"变化。此前实现自造了 0.35/0.45 两个值，属规格外。
+    public static func scrimAlpha(isDark: Bool) -> CGFloat { isDark ? 0.55 : 0.45 }
 }
 
 /// Keyboard-selectable tools. Letters follow `design/keymap.md` §3; `Q-03`'s 9 P0 tools minus
@@ -251,10 +266,11 @@ public final class MSOverlayView: NSView {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.interpolationQuality = .none
         ctx.draw(frozenFrame, in: bounds)
+        let scrim = OverlayChrome.scrimAlpha(isDark: effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
 
         if let sel = selection {
             ctx.saveGState()
-            ctx.setFillColor(MSColorRGBA.rgba(0, 0, 0, 0.45).cgColor)
+            ctx.setFillColor(MSColorRGBA.rgba(0, 0, 0, scrim).cgColor)
             // Four bands instead of an even-odd hole: only the changed band repaints.
             [CGRect(x: 0, y: 0, width: bounds.width, height: sel.minY),
              CGRect(x: 0, y: sel.maxY, width: bounds.width, height: bounds.maxY - sel.maxY),
@@ -268,7 +284,7 @@ public final class MSOverlayView: NSView {
             drawReadout(sel, in: ctx)
             drawToolbar(sel, in: ctx)
         } else {
-            ctx.setFillColor(MSColorRGBA.rgba(0, 0, 0, 0.35).cgColor)
+            ctx.setFillColor(MSColorRGBA.rgba(0, 0, 0, scrim).cgColor)
             ctx.fill(bounds)
             drawHint(in: ctx)
         }
@@ -276,10 +292,9 @@ public final class MSOverlayView: NSView {
     }
 
     /// 常驻退出入口：左上角（不跟选区跑，任何时刻都在同一个位置，闭眼也能点到）。
+    /// 位置全部问 `OverlayChrome` 要，这里不做任何坐标换算——画的位置必须就是点的位置。
     private func drawCancelButton(in ctx: CGContext) {
-        let visual = OverlayChrome.cancelVisualRect(in: bounds)
-        let top = bounds.height - visual.maxY                 // 视图 y 向上 → 画到左上
-        let rect = CGRect(x: visual.minX, y: top, width: visual.width, height: visual.height)
+        let rect = OverlayChrome.cancelPaintRect(in: bounds)
         ctx.saveGState()
         ctx.setFillColor(MSColorRGBA.rgba(0, 0, 0, 0.55).cgColor)
         ctx.fillEllipse(in: rect)
@@ -294,7 +309,7 @@ public final class MSOverlayView: NSView {
         NSAttributedString(string: "  Esc 或点此 ✕ 退出截图（右键也退出） ", attributes: [
             .font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor.white,
             .backgroundColor: NSColor.black.withAlphaComponent(0.55),
-        ]).draw(at: NSPoint(x: rect.maxX + 10, y: rect.midY - 9))
+        ]).draw(at: OverlayChrome.cancelHintOrigin(in: bounds))
     }
 
     /// Inside the selection we show the composited (bitmap + annotations) crop at 1:1 device
