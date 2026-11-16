@@ -1,6 +1,6 @@
 # ADR-003 最低系统版本 macOS 14 Sonoma
 
-状态：**proposed**（= 章程 Q-01，待用户签字） 日期：2026-11-16 相关：ADR-007、ADR-017
+状态：**accepted**（用户 2026-11-16 签字，= 章程 Q-01） 日期：2026-11-16 相关：ADR-007、ADR-017
 
 ## 背景
 采集主路径 `SCScreenshotManager.captureImage` 需要 macOS 14.0+（官方 A2，`docs/reference/snipaste-gap.md` §7 已核实）。`SCStream` 从 12.3 起可用，但"起流取一帧"对冻结语义是更重、更慢的路。当前开发机是 macOS 15.7.4 / SDK 26.2。
