@@ -61,6 +61,15 @@ public final class MSFakePasteboard: MSPasteboardWriting, @unchecked Sendable {
 
     public init() {}
 
+    public private(set) var writtenText: String?
+
+    public func writeText(_ text: String) -> Bool {
+        guard acceptsWrites else { return false }
+        writtenText = text
+        writeCount += 1
+        return true
+    }
+
     public func writeImage(png: Data) -> Bool {
         guard acceptsWrites else { return false }
         writtenPNG = png

@@ -9,7 +9,7 @@ import MSOverlay
 /// 所以不碰 TCC、不弹权限、也不需要合成鼠标事件。
 @MainActor
 enum MSChromeDump {
-    static func run(to path: String) {
+    static func run(to path: String, loupe: Bool = false) {
         guard let display = MSDisplayInventory.current().first else {
             print("FAIL 没有可用显示器"); exit(2)
         }
@@ -35,6 +35,17 @@ enum MSChromeDump {
         let logical = display.logicalFrame
         view.setSelection(CGRect(x: logical.midX - 210, y: logical.midY - 130, width: 420, height: 260))
         view.tool = .rect
+        if loupe {
+            // 放大镜只能由真事件驱动：合成一次带 ⌥ 的 mouseMoved，让它按生产路径出现。
+            let src = CGEventSource(stateID: .combinedSessionState)
+            let realH = NSScreen.screens.first?.frame.height ?? 1080
+            let anchor = CGPoint(x: logical.midX + 60, y: logical.midY - 20)
+            let cg = CGEvent(mouseEventSource: src, mouseType: .mouseMoved,
+                             mouseCursorPosition: CGPoint(x: anchor.x, y: realH - anchor.y), mouseButton: .left)!
+            cg.flags = CGEventFlags.maskAlternate
+            view.mouseMoved(with: NSEvent(cgEvent: cg)!)
+        }
+        print("   loupe visible=\(view.isLoupeVisible) pixel=\(String(describing: view.loupePixel)) color=\(String(describing: view.loupeColor?.hex()))")
         view.needsDisplay = true
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
             print("FAIL 离屏渲染拿不到位图"); exit(4)

@@ -15,6 +15,14 @@ import MSSettings
 final class MSSystemPasteboard: MSPasteboardWriting, @unchecked Sendable {
     var changeCount: Int { NSPasteboard.general.changeCount }
 
+    func writeText(_ text: String) -> Bool {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        let written = pb.writeObjects([NSString(string: text)])
+        MSLog.info(.export, "pasteboard write text chars=\(text.count) ok=\(written)")
+        return written
+    }
+
     func writeImage(png: Data) -> Bool {
         let pb = NSPasteboard.general
         pb.clearContents()

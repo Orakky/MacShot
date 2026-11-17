@@ -36,7 +36,10 @@ struct TextEditingTests {
             case .ended(let count): elementCounts.append(count)
             }
         }
-        func overlay(_ overlay: MSOverlayWindow, elementCount: Int) { elementCounts.append(elementCount) }
+        var colorPicks: [String] = []
+    func overlay(_ overlay: MSOverlayWindow, didPickColor text: String) { colorPicks.append(text) }
+
+    func overlay(_ overlay: MSOverlayWindow, elementCount: Int) { elementCounts.append(elementCount) }
     }
 
     @MainActor

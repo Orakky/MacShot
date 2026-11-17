@@ -26,6 +26,8 @@ public struct FixedClock: MSClock {
 public protocol MSPasteboardWriting: Sendable {
     var changeCount: Int { get }
     @discardableResult func writeImage(png: Data) -> Bool
+    /// 纯文本写入（放大镜取色 `C`，`FR-CAP-016`）。同样一次 `clearContents` + 一次写。
+    @discardableResult func writeText(_ text: String) -> Bool
 }
 
 public protocol MSFileWriting: Sendable {

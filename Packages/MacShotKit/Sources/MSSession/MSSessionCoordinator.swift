@@ -20,6 +20,7 @@ public enum MSSessionEvent: Sendable, Equatable {
     case drawEnded
     /// 元素层数量变了（提交/删除/清空/撤销都会报）。`hasElements` 的唯一维护入口，
     /// 由 `MSOverlayView.document.didSet` 生产——不靠"某处记得调一次"。
+    case colorCopyRequested(String)
     case elementCountChanged(Int)
     case commitRequested(MSCommitIntent)
     case effectsFinished
@@ -38,6 +39,8 @@ public enum MSSessionEffect: Sendable, Equatable {
     case toast(String)
     /// 改选区尺寸把已有标注清空了，必须显式提示（`ST-001` 行 7、Q-11 推荐档 A）。
     /// 文案只有一个家：`MSSessionCopy.annotationCleared`。
+    /// 把取样色串写进剪贴板（`FR-CAP-016` 的 `C`）。
+    case copyColorText(String)
     case warnClearAnnotations
     case log(String)
 }
@@ -114,6 +117,9 @@ public struct MSSessionReducer: Sendable {
         case (.frozen, .commitRequested(.cancel)):
             phase = .idle
             return [.closeOverlay, .restoreFocus]
+
+        case (.selecting, .colorCopyRequested(let text)), (.editing, .colorCopyRequested(let text)):
+            return [.copyColorText(text)]
 
         case (.selecting, .commitRequested(let intent)), (.editing, .commitRequested(let intent)):
             guard hasSelection || intent == .cancel else { return [.toast("先框选区域")] }
@@ -444,6 +450,12 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
         if case .ended(let count) = phase { run(.elementCountChanged(count)) }
     }
 
+    public func overlay(_ overlay: MSOverlayWindow, didPickColor text: String) {
+        // 同 `selectionDidChange` 那条教训：**不要**在这里调 `finishEffects()`——它的语义是"会话结束"。
+        guard !text.isEmpty else { onToast?("没有可复制的颜色"); return }
+        run(.colorCopyRequested(text))
+    }
+
     public func overlay(_ overlay: MSOverlayWindow, elementCount: Int) {
         run(.elementCountChanged(elementCount))
     }
@@ -528,6 +540,10 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
         case .restoreFocus:       restoreFocus()
         case .showPermissionGate: onNeedsPermission?()
         case .toast(let text):    onToast?(text)
+        case .copyColorText(let text):
+            let ok = clipboard.writeText(text)
+            onToast?(ok ? "已复制 \(text)" : "剪贴板写入失败")
+
         case .warnClearAnnotations: onToast?(MSSessionCopy.annotationCleared)
         case .log(let message):   MSLog.info(.session, message)
         // 下面这些由 startSnip()/commit() 的执行流落地，显式声明归属而不是静默丢弃。

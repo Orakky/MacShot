@@ -29,7 +29,10 @@ struct ClearWarningTests {
         func overlay(_ overlay: MSOverlayWindow, didRequest intent: MSCommitIntent) {}
         func overlayDidCancel(_ overlay: MSOverlayWindow) {}
         func overlay(_ overlay: MSOverlayWindow, drawingPhaseDidChange phase: MSOverlayDrawingPhase) { phases.append(phase) }
-        func overlay(_ overlay: MSOverlayWindow, elementCount: Int) { elementCounts.append(elementCount) }
+        var colorPicks: [String] = []
+    func overlay(_ overlay: MSOverlayWindow, didPickColor text: String) { colorPicks.append(text) }
+
+    func overlay(_ overlay: MSOverlayWindow, elementCount: Int) { elementCounts.append(elementCount) }
         func overlay(_ overlay: MSOverlayWindow, cropOfViewRect rect: CGRect) -> CGImage? { nil }
         func overlayPreferences(_ overlay: MSOverlayWindow) -> MSAppPreferences { .init() }
     }

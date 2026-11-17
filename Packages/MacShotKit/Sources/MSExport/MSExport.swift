@@ -127,6 +127,22 @@ public struct MSClipboardWriter {
         MSLog.info(.export, "t.commit→clipboard-ready took \(started.duration(to: ContinuousClock.now)) bytes=\(png.count)")
         return true
     }
+
+    /// 放大镜取色 `C`：写一段纯文本（`FR-CAP-016`）。走同一条 seam，测试才有同一个入口。
+    @discardableResult
+    public func writeText(_ text: String) -> Bool {
+        guard !text.isEmpty else { return false }
+        let before = pasteboard.changeCount
+        guard pasteboard.writeText(text) else {
+            MSLog.error(.export, "clipboard text write refused")
+            return false
+        }
+        if pasteboard.changeCount == before {
+            MSLog.error(.export, "clipboard changeCount unchanged (text)")
+            return false
+        }
+        return true
+    }
 }
 
 public struct MSExportRequest: Sendable {

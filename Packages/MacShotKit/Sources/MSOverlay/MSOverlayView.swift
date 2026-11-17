@@ -57,6 +57,9 @@ public protocol MSOverlayDelegate: AnyObject {
     func overlay(_ overlay: MSOverlayWindow, drawingPhaseDidChange phase: MSOverlayDrawingPhase)
     /// 元素层数量变了（提交/删除/撤销/清空）。`didSet` 自动报，不靠调用点记得。
     func overlay(_ overlay: MSOverlayWindow, elementCount: Int)
+    /// 放大镜里按了 `C`：把取样色串交给会话写剪贴板（`FR-CAP-016`）。
+    /// 视图不自己碰 `NSPasteboard`——剪贴板是会话与导出层的事，测试才有单一入口。
+    func overlay(_ overlay: MSOverlayWindow, didPickColor text: String)
     /// Asks the session for the cropped pixels under a view-space rect (frozen frame, no re-capture).
     func overlay(_ overlay: MSOverlayWindow, cropOfViewRect rect: CGRect) -> CGImage?
     func overlayPreferences(_ overlay: MSOverlayWindow) -> MSAppPreferences
@@ -295,6 +298,7 @@ public final class MSOverlayView: NSView {
             ctx.fill(bounds)
             drawHint(in: ctx)
         }
+        drawLoupe(in: ctx)
         drawCancelButton(in: ctx)
     }
 
@@ -377,6 +381,99 @@ public final class MSOverlayView: NSView {
         ctx.setLineWidth(1.5)
         ctx.setLineDash(phase: 0, lengths: [4, 3])
         ctx.stroke(viewRect)
+        ctx.restoreGState()
+    }
+
+    // MARK: - 放大镜（`UI-008` / `FR-CAP-016`）
+
+    /// 指针位置（视图坐标）。`nil` ⇒ 还没动过鼠标，不画。
+    private var loupeAnchor: CGPoint?
+    /// `⌥` 强制显示；拖新选区时自动显示（规格："自动出现（拖拽时）、⌥ 强制"）。
+    public private(set) var loupeForced = false
+    public private(set) var loupeFormat: MSLoupeModel.Format = .hex
+    /// 拖拽中标记：由 `mouseDown/mouseUp` 维护，放大镜据此自动出现。
+    private var isDraggingSelection = false
+    /// 一次解码服务多次取样：放大镜每次 `mouseMoved` 都要取样，不能每帧重解整屏。
+    private lazy var loupeBitmap: MSBitmap? = MSBitmap(image: frozenFrame)
+
+    /// 当前指针下的像素坐标（换算显式写在 `MSLoupeModel.pixel`，`ADR-013`）。
+    public var loupePixel: MSIntPoint? {
+        guard let p = loupeAnchor else { return nil }
+        return MSLoupeModel.pixel(view: p, viewHeight: bounds.height,
+                                  imageSize: MSIntSize(width: frozenFrame.width, height: frozenFrame.height),
+                                  scale: display.scale)
+    }
+
+    public var loupeColor: MSColorRGBA? {
+        guard let px = loupePixel else { return nil }
+        return loupeBitmap?.sample(pixelAt: px)
+    }
+
+    /// 放大镜该不该出现。
+    public var isLoupeVisible: Bool {
+        loupeAnchor != nil && (isDraggingSelection || loupeForced)
+    }
+
+    /// `C` 复制的串（空串 ⇒ 没什么可复制）。
+    public func loupeCopyString() -> String {
+        MSLoupeModel.copyString(color: loupeColor, format: loupeFormat)
+    }
+
+    public func cycleLoupeFormat() { loupeFormat = loupeFormat.next }
+
+    /// 画放大镜。格子颜色**必须**等于取样色——这条是 `FR-CAP-016` 判据里"放大镜内像素与屏幕
+    /// 逐点一致"的落点，测试直接量中心格的颜色，不看状态变量。
+    func drawLoupe(in ctx: CGContext) {
+        guard isLoupeVisible, let anchor = loupeAnchor else { return }
+        let handles = selection.map { sel in handlePoints(of: sel).map { CGRect(x: $0.x - 5.5, y: $0.y - 5.5, width: 11, height: 11) } } ?? []
+        let box = MSLoupeModel.rect(anchor: anchor, bounds: bounds, handleRects: handles)
+        let grid = MSLoupeModel.gridRect(in: box)   // 单一来源：与 centerCell 同一块地
+
+        ctx.saveGState()
+        // 外框：float.surface + 描边（design-system §6 的浮层配方）
+        ctx.setFillColor(MSColorRGBA.rgba(28, 28, 30, 0.98).cgColor)
+        ctx.addPath(CGPath(roundedRect: box, cornerWidth: 6, cornerHeight: 6, transform: nil))
+        ctx.fillPath()
+        ctx.setStrokeColor(MSColorRGBA.rgb(120, 120, 124).cgColor)
+        ctx.setLineWidth(1)
+        ctx.strokePath()
+
+        // 近邻放大：不许插值，否则"像素"就不是像素了。
+        if let px = loupePixel,
+           let mag = MSImageSampler.magnified(frozenFrame, center: px, radius: MSLoupeModel.radius,
+                                              zoom: MSLoupeModel.zoom) {
+            ctx.interpolationQuality = .none
+            ctx.draw(mag, in: grid)
+        }
+        // 网格线（17×17）
+        ctx.setStrokeColor(MSColorRGBA.rgba(255, 255, 255, 0.10).cgColor)
+        ctx.setLineWidth(1)
+        let cell = grid.width / CGFloat(MSLoupeModel.pixelCount)
+        for i in 0...MSLoupeModel.pixelCount {
+            let x = grid.minX + CGFloat(i) * cell
+            ctx.move(to: CGPoint(x: x, y: grid.minY)); ctx.addLine(to: CGPoint(x: x, y: grid.maxY))
+            let y = grid.minY + CGFloat(i) * cell
+            ctx.move(to: CGPoint(x: grid.minX, y: y)); ctx.addLine(to: CGPoint(x: grid.maxX, y: y))
+            ctx.strokePath()
+        }
+        // 中心像素描 accent
+        let center = MSLoupeModel.centerCell(in: box)
+        ctx.setStrokeColor(NSColor.controlAccentColor.cgColor)
+        ctx.setLineWidth(2)
+        ctx.stroke(center)
+
+        // 读数条：色块 + 串（font.readout）
+        let readout = CGRect(x: box.minX + 1, y: box.minY + 1, width: box.width - 2,
+                             height: MSLoupeModel.readoutHeight - 2)
+        if let c = loupeColor {
+            ctx.setFillColor(c.cgColor)
+            ctx.fill(CGRect(x: readout.minX + 6, y: readout.midY - 6, width: 12, height: 12))
+        }
+        let text = MSLoupeModel.readout(color: loupeColor, pixel: loupePixel ?? .zero, format: loupeFormat)
+        NSAttributedString(string: text, attributes: [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium),
+            .foregroundColor: NSColor.white,
+        ]).draw(at: NSPoint(x: readout.minX + 24, y: readout.midY - 7))
         ctx.restoreGState()
     }
 
@@ -477,7 +574,14 @@ public final class MSOverlayView: NSView {
 
     // MARK: - mouse
 
+    public override func mouseMoved(with event: NSEvent) {
+        loupeAnchor = convert(event.locationInWindow, from: nil)
+        loupeForced = event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.option)
+        if isLoupeVisible || loupeForced { needsDisplay = true }
+    }
+
     public override func mouseDown(with event: NSEvent) {
+        isDraggingSelection = true
         let p = convert(event.locationInWindow, from: nil)
         if OverlayChrome.cancelHitRect(in: bounds).contains(p) {
             MSLog.info(.overlay, "cancel button pressed")
@@ -620,6 +724,7 @@ public final class MSOverlayView: NSView {
     }
 
     public override func mouseUp(with event: NSEvent) {
+        isDraggingSelection = false
         defer { dragMode = nil }
         if case .moveElement(let recorder, _) = dragMode {
             // 上百次 mouseDragged 只留一条记录；没真移动过就不留（`FR-ANN-005` 判据）
@@ -828,6 +933,12 @@ public final class MSOverlayView: NSView {
             delegate?.overlay(host, didRequest: flags.contains(.shift) ? .quickSave : .savePanel); return true
         case 49 where flags.contains(.option):                             // ⌥Space 预留
             return false
+        case 8 where !flags.contains(.command):                            // C / ⇧C（放大镜取色）
+            guard let host else { return false }
+            if flags.contains(.shift) { cycleLoupeFormat(); needsDisplay = true }
+            else { delegate?.overlay(host, didPickColor: loupeCopyString()) }
+            return true
+
         case 6 where flags.contains(.command):                             // ⌘Z / ⇧⌘Z
             if flags.contains(.shift) { redo() } else { undo() }; return true
         case 30 where flags.contains(.command):                            // ⌘] 上移一层
@@ -918,3 +1029,4 @@ extension NSColor {
         self.init(srgbRed: CGFloat(c.red) / 255, green: CGFloat(c.green) / 255, blue: CGFloat(c.blue) / 255, alpha: CGFloat(c.alpha))
     }
 }
+

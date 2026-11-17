@@ -31,7 +31,7 @@ make check             # 本地门禁：build + test + 风格/依赖方向/文�
 make clean             # 清 build 与 Derived
 make probe            # 采一帧并打印尺寸/耗时/权限（V-001/V-019 取证）
 make probe-menu       # 打印状态栏菜单行与"权限行是否真挂在菜单上"（常驻读数行的取证）
-make probe-chrome     # 遮罩界面离屏自绘成 build/chrome.png（不碰 TCC，用来看）
+make probe-chrome     # 遮罩界面离屏自绘成 build/chrome.png（不碰 TCC，用来看）；加 `loupe` 参数连放大镜一起出图
 make probe-clipboard  # 真写系统剪贴板再读回 types/DPI，分清"我们写的"与"系统派生的"（会覆盖剪贴板）
 make probe-memory     # 10 张贴图的内存读数（NFR-005/008）：夹具是噪声，读数用 ps/vmmap 外部复核；会短暂开 N 个窗
 make probe-hotkey     # 改绑→退出→再启动读回→还原：热键跨进程持久化取证（会临时改你的快捷键，最后还原成 F1）
