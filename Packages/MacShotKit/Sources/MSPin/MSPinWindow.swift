@@ -211,17 +211,20 @@ public final class MSPinView: NSView {
 
     private(set) var editToolbarLayout: EditToolbarLayout?
 
+    /// 贴图编辑态工具条：宽度不够就**折行**（`B-028` 11-17 裁决），高度也不够才退回字母兜底。
+    /// 极小贴图（比如 60×40）确实放不下 10 个工具格——那是几何事实，不硬塞、不静默少画。
     private func computeEditToolbar() -> EditToolbarLayout? {
         let tools = Self.pinToolbarTools
-        let needed = MSAnnotationToolbar.naturalWidth(itemCount: tools.count,
-                                                      colorCount: MSAnnotationPalette.toolbar.count,
-                                                      showsActions: false)
-        guard bounds.width >= needed + 8, bounds.height >= MSAnnotationToolbar.height + 12 else { return nil }
-        let rect = CGRect(x: (bounds.width - needed) / 2, y: bounds.minY + 4,
-                          width: needed, height: MSAnnotationToolbar.height)
-        let boxes = MSAnnotationToolbar.boxes(rect: rect, itemCount: tools.count,
-                                              colorCount: MSAnnotationPalette.toolbar.count)
-        return EditToolbarLayout(rect: rect, items: Array(zip(tools, boxes.items)), colors: boxes.colors)
+        guard let flow = MSAnnotationToolbar.flow(toolCount: tools.count,
+                                                  colorCount: MSAnnotationPalette.toolbar.count,
+                                                  maxWidth: bounds.width - 8,
+                                                  maxHeight: bounds.height * 0.6) else { return nil }
+        // flow 给的是"以 0 为原点"的局部格子，整体平移到视图下沿居中即可
+        let origin = CGPoint(x: (bounds.width - flow.rect.width) / 2, y: bounds.minY + 4)
+        let move: (CGRect) -> CGRect = { $0.offsetBy(dx: origin.x, dy: origin.y) }
+        return EditToolbarLayout(rect: move(flow.rect),
+                                 items: Array(zip(tools, flow.toolBoxes.map(move))),
+                                 colors: flow.colorBoxes.map(move))
     }
 
     /// `UI-004`：编辑态必须看得见"正在编辑"和"能选工具"。画不出这两样，再编辑就等于隐藏功能。

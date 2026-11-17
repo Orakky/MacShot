@@ -48,4 +48,41 @@ public enum MSAnnotationToolbar {
         }
         return (items, colors)
     }
+
+    /// 多行（流程）布局：贴图宽度放不下单行时按宽度折行（`B-028` 11-17 裁决）。
+    ///
+    /// 规则定死，免得每个表面各自发明：一行放 `perRow` 个工具格，工具排满若干行后
+    /// **色板独占最后一行**；行高与单行一致，所以两种形态的命中逻辑是同一份代码。
+    /// 返回 nil 表示"这个尺寸确实放不下"——调用方必须有兜底（贴图侧是字母选工具），
+    /// 不许硬塞到视图外，也不许静默少画几个工具。
+    public static func flow(toolCount: Int, colorCount: Int, maxWidth: CGFloat, maxHeight: CGFloat)
+        -> (rect: CGRect, toolBoxes: [CGRect], colorBoxes: [CGRect], rows: Int)? {
+        guard toolCount > 0, maxWidth >= item + edgePad * 2 else { return nil }
+        let perRow = max(1, Int(((maxWidth - edgePad * 2 + gap) / (item + gap)).rounded(.down)))
+        let toolRows = (toolCount + perRow - 1) / perRow
+        let rows = toolRows + (colorCount > 0 ? 1 : 0)
+        let rowHeight = item + 8                       // 与单行布局的 34pt 同源
+        let totalHeight = CGFloat(rows) * rowHeight + CGFloat(max(0, rows - 1)) * 2
+        guard totalHeight <= maxHeight else { return nil }
+        let usedWidth = min(maxWidth, CGFloat(perRow) * (item + gap) - gap + edgePad * 2)
+        let rect = CGRect(x: 0, y: 0, width: usedWidth, height: totalHeight)
+
+        var toolBoxes: [CGRect] = []
+        for index in 0..<toolCount {
+            let row = index / perRow, column = index % perRow
+            let x = edgePad + CGFloat(column) * (item + gap)
+            // 行从上往下排（视图 y 向上 ⇒ 第一行的 y 更大）
+            let y = rect.height - (CGFloat(row) + 1) * rowHeight - CGFloat(row) * 2 + 4
+            toolBoxes.append(CGRect(x: x, y: y, width: item, height: item))
+        }
+        var colorBoxes: [CGRect] = []
+        if colorCount > 0 {
+            let y = rect.height - CGFloat(rows) * rowHeight - CGFloat(rows - 1) * 2 + (rowHeight - colorDot) / 2
+            for index in 0..<colorCount {
+                colorBoxes.append(CGRect(x: edgePad + CGFloat(index) * colorStep, y: y, width: colorDot, height: colorDot))
+            }
+        }
+        return (rect, toolBoxes, colorBoxes, rows)
+    }
+
 }
