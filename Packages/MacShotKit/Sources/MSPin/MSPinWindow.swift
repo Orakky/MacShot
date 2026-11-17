@@ -133,8 +133,20 @@ public final class MSPinView: NSView {
 
     public var content: MSPinContent
     public var history = MSAnnotationHistory()
-    public var isEditing = false { didSet { needsDisplay = true } }
-    public var zoom: CGFloat = 1 { didSet { resizeWindow(); needsDisplay = true } }
+    /// 编辑态在图片**下方**多出来的一条工具带高度（0 = 非编辑态，或这张贴图小到放不下工具条）。
+    /// 关键约束：图片区域永远是 `imageRect`，工具带绝不进图片——导出走渲染器与窗口无关
+    /// （`FR-EXP-002`），所以这条带子不可能污染导出像素。
+    /// 11-17 走过折行方案，实测 200×140 的贴图要盖掉 75% 画面，于是改成撑高窗口（`B-028`）。
+    public private(set) var stripHeight: CGFloat = 0
+
+    /// 图片实际占据的矩形（视图坐标，y 向上：底部让给工具带）。
+    public var imageRect: CGRect {
+        CGRect(x: 0, y: stripHeight, width: bounds.width, height: max(1, bounds.height - stripHeight))
+    }
+
+    public var isEditing = false { didSet { if oldValue != isEditing { applyStrip() } } }
+    // 顺序有讲究：applyStrip 读的是 bounds.width，必须先让窗口按新 zoom 长缩，再重算工具带。
+    public var zoom: CGFloat = 1 { didSet { resizeWindow(); applyStrip(); needsDisplay = true } }
     public var opacityValue: CGFloat = 1 { didSet { window?.alphaValue = opacityValue; needsDisplay = true } }
     public var selectedElementID: UUID?
 
@@ -158,7 +170,9 @@ public final class MSPinView: NSView {
 
     private func resizeWindow() {
         guard let window else { return }
-        let size = CGSize(width: content.logicalSize.width * zoom, height: content.logicalSize.height * zoom)
+        // 图片尺寸 + 编辑态工具带；工具带长在下方，所以顶边不动（与 zoom 同一套锚定规则）
+        let size = CGSize(width: content.logicalSize.width * zoom,
+                          height: content.logicalSize.height * zoom + stripHeight)
         var f = window.frame
         let dy = size.height - f.height
         f.origin.y -= dy                                   // keep the top edge put while zooming
@@ -174,13 +188,14 @@ public final class MSPinView: NSView {
         // 1) bitmap: above 100% we want visible pixel squares, not smoothing (`FR-PIN-003`).
         ctx.saveGState()
         ctx.interpolationQuality = zoom > 1 ? .none : .medium
-        ctx.draw(content.source, in: bounds)
+        ctx.draw(content.source, in: imageRect)          // 图片只画在 imageRect，工具带不吃画面
         ctx.restoreGState()
 
         // 2) vector layer: one unit = one canvas pixel, scaled up to the view. AppKit's context is
         //    already in backing-store pixels, so strokes stay crisp at any zoom.
         ctx.saveGState()
-        ctx.scaleBy(x: bounds.width / docW, y: bounds.width / docW)
+        ctx.translateBy(x: 0, y: stripHeight)           // 矢量层与位图必须落在同一个矩形里
+        ctx.scaleBy(x: imageRect.width / docW, y: imageRect.width / docW)
         renderer.renderElements(of: content.document, into: ctx, source: content.source,
                                canvas: docSize, intent: .pin)
         if let draft { renderer.renderElements(of: draftDocument(draft), into: ctx, source: content.source,
@@ -211,15 +226,42 @@ public final class MSPinView: NSView {
 
     private(set) var editToolbarLayout: EditToolbarLayout?
 
-    /// 贴图编辑态工具条：宽度不够就**折行**（`B-028` 11-17 裁决），高度也不够才退回字母兜底。
+    /// 贴图编辑态工具条：长在图片**下方**的工具带里（`B-028` 定稿＝撑高窗，形态见 `UI-004`）；
+    /// 带内格子放不下时按宽度分多行，连预算都不够才退回字母兜底。
     /// 极小贴图（比如 60×40）确实放不下 10 个工具格——那是几何事实，不硬塞、不静默少画。
-    private func computeEditToolbar() -> EditToolbarLayout? {
+    /// 重算工具带高度并让窗口跟着长/缩。预算 = min(160pt, 图片高)：
+    /// 工具带本身不该比图片还高，超了就退回字母兜底（`60×40` 这类）。
+    private func applyStrip() {
+        guard isEditing else {
+            if stripHeight != 0 { stripHeight = 0; resizeWindow(); needsDisplay = true }
+            return
+        }
         let tools = Self.pinToolbarTools
+        let imageHeight = content.logicalSize.height * zoom
+        let budget = min(160, imageHeight)
         guard let flow = MSAnnotationToolbar.flow(toolCount: tools.count,
                                                   colorCount: MSAnnotationPalette.toolbar.count,
+                                                  maxWidth: bounds.width - 8, maxHeight: budget) else {
+            if stripHeight != 0 { stripHeight = 0; resizeWindow(); needsDisplay = true }
+            return
+        }
+        let needed = flow.rect.height + 8
+        if abs(needed - stripHeight) > 0.5 {
+            stripHeight = needed
+            resizeWindow()
+        }
+        needsDisplay = true
+    }
+
+    /// 工具带内的格子布局（flow 的局部坐标平移到视图底部）。
+    private func computeEditToolbar() -> EditToolbarLayout? {
+
+        let tools = Self.pinToolbarTools
+        guard stripHeight > 0, let flow = MSAnnotationToolbar.flow(toolCount: tools.count,
+                                                  colorCount: MSAnnotationPalette.toolbar.count,
                                                   maxWidth: bounds.width - 8,
-                                                  maxHeight: bounds.height * 0.6) else { return nil }
-        // flow 给的是"以 0 为原点"的局部格子，整体平移到视图下沿居中即可
+                                                  maxHeight: stripHeight) else { return nil }
+        // flow 给的是"以 0 为原点"的局部格子，整体平移到视图底部的工具带里
         let origin = CGPoint(x: (bounds.width - flow.rect.width) / 2, y: bounds.minY + 4)
         let move: (CGRect) -> CGRect = { $0.offsetBy(dx: origin.x, dy: origin.y) }
         return EditToolbarLayout(rect: move(flow.rect),
@@ -270,7 +312,7 @@ public final class MSPinView: NSView {
 
     private func drawEditModeChrome() {
         NSColor.controlAccentColor.withAlphaComponent(0.9).setStroke()
-        let p = NSBezierPath(rect: bounds.insetBy(dx: 0.5, dy: 0.5))
+        let p = NSBezierPath(rect: imageRect.insetBy(dx: 0.5, dy: 0.5))
         p.lineWidth = 1; p.stroke()
     }
 
@@ -288,7 +330,7 @@ public final class MSPinView: NSView {
         ]
         let s = NSAttributedString(string: " " + text + " ", attributes: attrs)
         let size = s.size()
-        s.draw(at: NSPoint(x: bounds.maxX - size.width - 6, y: bounds.maxY - size.height - 6))
+        s.draw(at: NSPoint(x: imageRect.maxX - size.width - 6, y: imageRect.maxY - size.height - 6))
     }
 
     private var hasExportedFlag: Bool { window is MSPinWindow ? (window as? MSPinWindow)?.hasExported ?? true : true }
@@ -397,11 +439,14 @@ public final class MSPinView: NSView {
         renderer.render(content.document, source: content.source, intent: .export)
     }
 
-    /// View point (y-up) → canvas pixel (y-down): the one conversion in this view.
-    private func docPoint(_ p: NSPoint) -> MSIntPoint {
+    /// 视图点（y 向上）→ 画布像素（y 向下）：这个视图里唯一一次换算。
+    /// 必须走 `imageRect` 而不是 `bounds`——工具带在下方，用 bounds 会把画面纵向拉长，
+    /// 于是"点在哪就画在哪"变成"越靠下越偏"（internal 是给测试直接喂坐标）。
+    func docPoint(_ p: NSPoint) -> MSIntPoint {
         let doc = content.document.canvasSize
-        let x = p.x / max(1, bounds.width) * CGFloat(doc.width)
-        let y = (bounds.height - p.y) / max(1, bounds.height) * CGFloat(doc.height)
+        let image = imageRect
+        let x = (p.x - image.minX) / max(1, image.width) * CGFloat(doc.width)
+        let y = (image.maxY - p.y) / max(1, image.height) * CGFloat(doc.height)
         return MSIntPoint(x: Int(x.rounded()), y: Int(y.rounded()))
     }
 

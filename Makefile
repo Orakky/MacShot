@@ -7,7 +7,7 @@ RELEASE   := $(DERIVED)/Build/Products/Release/MacShot.app
 ICNS      := build/macshot.icns
 VERSION   := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Config/Info.plist 2>/dev/null)
 
-.PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-freeze icon appicon
+.PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-pin probe-freeze icon appicon
 
 doctor:
 	@sh scripts/doctor.sh
@@ -54,6 +54,14 @@ probe-menu: appicon
 probe-chrome: appicon
 	@"$(PRODUCT)/Contents/MacOS/MacShot" --dump-chrome build/chrome.png
 	@echo "→ build/chrome.png（遮罩界面自绘，用来看，不是用来判绿）"
+
+# B-028 撑高形态的"眼睛"通道：真贴窗 + 编辑态，把视图离屏渲染成 build/probe-pin.png
+# 采集被 TCC 拒（cdhash 换了）时探针自动退回合成画面——这里裁的是工具带形态，不是屏幕内容
+probe-pin: appicon
+	@rm -f /tmp/macshot-probe-pin.txt /tmp/macshot-probe-pin.png
+	@open -n "$(PRODUCT)" --args --probe-pin 2500
+	@sleep 6; cp /tmp/macshot-probe-pin.png build/probe-pin.png 2>/dev/null; \
+	 echo "→ build/probe-pin.png + 读数："; cat /tmp/macshot-probe-pin.txt 2>/dev/null | sed 's/^/   /'
 
 # 冻结语义 + 剪贴板哨兵的运行时取证：会在你屏幕上开约 4 秒遮罩
 probe-freeze: appicon

@@ -191,6 +191,72 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// `--snip-then-cancel <ms>`：开遮罩 → 冻住 → 到点走**和 Esc 同一条**取消路径退出。
     /// 给 `scripts/probe-freeze.sh` 用：连拍两张遮罩图必须逐字节相同（背景真被冻住），
     /// 同时校验真剪贴板的哨兵没被动过（`FR-SESS-002` 判据④）。
+    /// `--probe-pin <ms>`：真采集 → 真贴窗 → 立刻进编辑态，把窗口留在屏上 ms 毫秒。
+    /// `B-028` 换了形态之后必须用眼睛看一次：工具带应当长在图片**下方**，画面不被盖。
+    /// 截图由 `make probe-pin` 用 `screencapture -l<windowNumber>` 完成，日志行把 strip/frame 一并打出来。
+    func probePin(thenExitAfter ms: Int) {
+        Task { @MainActor in
+                func report(_ line: String) {
+                    MSLog.info(.pin, "probe-pin \(line)")
+                    let url = URL(fileURLWithPath: "/tmp/macshot-probe-pin.txt")
+            // 追加而不是覆写：一次探针有多条读数（采集结果 / 几何 / PNG），只留最后一条等于没写。
+            if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(Data((line + "\n").utf8)); try? h.close() }
+            else { try? line.write(to: url, atomically: true, encoding: .utf8) }
+                }
+                // 采集不到（cdhash 换了 ⇒ TCC 重新要授权）时用合成画面：本探针要裁的是**工具带形态**，不是屏幕内容。
+                func synthetic(size: NSSize) -> CGImage {
+                    let ctx = CGContext(data: nil, width: Int(size.width), height: Int(size.height), bitsPerComponent: 8,
+                                        bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                    for y in stride(from: 0, to: Int(size.height), by: 8) {
+                        ctx.setFillColor(MSColorRGBA.rgb(UInt8(90 + y / 24), UInt8(120 + y / 40), 150).cgColor)
+                        ctx.fill(CGRect(x: 0, y: Double(y), width: size.width, height: 8))
+                    }
+                    ctx.setFillColor(MSColorRGBA.rgba(232, 51, 71, 1).cgColor)
+                    ctx.fill(CGRect(x: size.width / 4, y: size.height / 4, width: size.width / 2, height: size.height / 3))
+                    return ctx.makeImage()!
+                }
+                var source: CGImage
+                var scale = Int(NSScreen.main?.backingScaleFactor ?? 2)
+                if let display = MSDisplayInventory.current().first {
+                    let capturer = CaptureBackendSelector.makeCapturer(backend: CaptureBackendSelector.decide())
+                    do {
+                        let frame = try await capturer.freeze(display: display)
+                        source = frame.image; scale = Int(frame.scale)
+                        report("采集成功 \(frame.image.width)x\(frame.image.height) scale=\(frame.scale)")
+                    } catch {
+                        source = synthetic(size: NSSize(width: 1200, height: 800)); scale = 2
+                        report("FAIL 采集失败，改用合成画面：\((error as NSError).code)")
+                    }
+                } else {
+                    source = synthetic(size: NSSize(width: 1200, height: 800)); scale = 2
+                    report("FAIL 没有显示器，改用合成画面")
+                }
+                let px = CGRect(x: source.width / 4, y: source.height / 4,
+                                width: source.width / 2, height: source.height / 2)
+                guard let crop = source.cropping(to: px) else { report("FAIL 裁不下"); exit(4) }
+                let rect = MSIntRect(x: Int(px.origin.x), y: Int(px.origin.y), width: Int(px.width), height: Int(px.height))
+                let content = MSPinContent(document: MSAnnotationDocument(canvasSize: MSIntSize(width: rect.width, height: rect.height)),
+                                           source: crop, scale: scale, sourcePixelRect: rect)
+                let pin = pins.open(content, near: NSPoint(x: 160, y: 160), menu: nil, onClose: { _ in })
+                pin.center(on: NSScreen.screens.first, display: true)
+                pin.pinView.isEditing = true          // 立刻进编辑态：工具带应当在图片下方长出来
+                report("strip=\(pin.pinView.stripHeight) image=\(pin.pinView.imageRect) frame=\(pin.frame) 逻辑=\(content.logicalSize)")
+                // 离屏渲染一张编辑态视图，作为"眼睛"通道：不依赖窗口服务器，也不依赖 TCC。
+                if let rep = pin.pinView.bitmapImageRepForCachingDisplay(in: pin.pinView.bounds) {
+                    pin.pinView.cacheDisplay(in: pin.pinView.bounds, to: rep)
+                    let out = "/tmp/macshot-probe-pin.png"
+                    if rep.representation(using: .png, properties: [:]).map({ (try? Data($0).write(to: URL(fileURLWithPath: out))) != nil }) == true {
+                        report("PNG=\(out) \(rep.pixelsWide)x\(rep.pixelsHigh)")
+                    } else {
+                        report("FAIL PNG 写不出")
+                    }
+                }
+                try? await Task.sleep(for: .milliseconds(max(0, ms)))
+                exit(0)
+        }
+    }
+
     func probeSnipThenCancel(after ms: Int) {
         coordinator.handle(.snip)
         DispatchQueue.main.asyncAfter(deadline: .now() + Double(ms) / 1000) { [weak self] in

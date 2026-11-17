@@ -73,7 +73,7 @@
 | T-095 | **热键持久化实测**：改绑后重启软件/重启电脑仍在 | Q-02 | `App/`、`Sources/MSSettings/`、`V-037` | `V-037④` 填实：改绑 → 退出 → 再启动 → 旧键不响应、新键响应；写盘位置与格式在 `permissions-tcc.md`/`runbook` 有出处 | open |
 | T-096 | **焦点还原实测（T-101）**：遮罩关闭后原 app 的前台与输入焦点都回来 | Q-15=A | `spikes/probe-01/`、`overlay-and-selection.md` §2、`V-006` | 四列真值表（激活与否 × 键盘可达 × 前台变化 × **原输入框可否继续输入**）；最后一列不成立就回到 Q-15 重签 | open |
 | T-097 | **10 张贴图的内存读数** | Q-12 的安全阀、NFR-005 | `scripts/perf-snip.sh`、`done.md` | 读数进 `done.md`；破线即触发回 Q-12 复审，不许"记一笔继续做" | open |
-| T-098 | **贴图工具条折两行**：贴图宽度不足一行内容宽（404pt）时，工具条排两行——第一行工具、第二行色板与动作 | B-028（11-17 裁） | `Sources/MSPin/`、`Sources/MSAnnotate/`（度量）、`Tests/MSPinTests/` | ~~60×40 也能点到全部工具~~ **实测做不到**（需 394pt 高）；已实现并断言的是：算术边界表、≥288pt 宽时 10 格 6 色全在视图内且互不重叠、**逐格量墨确认真的画出来**、最后一行点得到、200×140 不画工具条但字母可用 | **部分完成（E-060）**：折行已实现，小贴图方案待用户再定（B-028） |
+| T-098 | **贴图编辑态撑高窗口**：图片下方长出一条工具带，工具与色板全在带里，画面与导出不被盖、不被缩（B-028 的最终形态，11-17 用户裁决） | B-028（11-17 再裁：撑高，否定折行） | `Sources/MSPin/MSPinWindow.swift`、`Sources/MSAnnotate/MSAnnotationToolbar.swift`、`Tests/MSPinTests/ToolbarFlowTests.swift`、`App/MSAppDelegate.swift`（`--probe-pin`）、`Makefile` | ① `200×140` 撑高后 `imageRect` 仍 140pt、窗口只长高、顶边不动 ② 编辑态导出的位图字节与非编辑态**逐字节相同** ③ 逐格量墨：每个格子与"同尺寸无工具带"渲染相比必须有墨 ④ 最后一行格子用合成鼠标事件点得到 ⑤ `60×40` 预算不够 ⇒ 不撑带、字母仍可用 ⑦ 编辑态 `zoom` 变化后带高 ≤ 图片高、窗口高＝图片×zoom＋带 ⑥ `make probe-pin` 出 `strip=78 image=(0,78,300,200) frame 高 278` + `build/probe-pin.png` 肉眼确认 | **done**（E-061；套件 121/121） |
 | T-099 | **会话加"不呈现窗"测试入口**，让端到端判据不弹全屏窗 | B-029（11-17 裁） | `Sources/MSSession/`、`Tests/MSSessionTests/` | ① 走通 `Effect → 分发器 → onToast` 的自动化断言 ② 测试期间屏幕上**不出现**遮罩（这条本身要用日志或窗口计数证明，不能只靠"我觉得没弹"）③ 生产路径行为不变：`make probe-freeze` 仍绿 | **已办**（E-058；顺带抓到 `selectionDidChange` 是空函数这条死线） |
 
 ## 已知"提前做也没用"的项（防顺手实现）

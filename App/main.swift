@@ -67,6 +67,19 @@ if let i = CommandLine.arguments.firstIndex(of: "--dump-chrome") {
     MainActor.assumeIsolated { MSChromeDump.run(to: out) }
 }
 
+// --probe-pin <ms>：真采集 → 真贴窗 → 编辑态常驻，给 make probe-pin 截那块窗口。
+if let i = CommandLine.arguments.firstIndex(of: "--probe-pin") {
+    let ms = CommandLine.arguments.count > i + 1 ? (Int(CommandLine.arguments[i + 1]) ?? 4_000) : 4_000
+    let app = NSApplication.shared
+    let delegate = MainActor.assumeIsolated { MSAppDelegate(autoSnip: false) }
+    app.delegate = delegate
+    app.setActivationPolicy(.regular)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+        MainActor.assumeIsolated { delegate.probePin(thenExitAfter: ms) }
+    }
+    app.run()
+}
+
 // --snip-then-cancel <ms>：开遮罩，到点走与 Esc 同一条取消路径退出（probe-freeze 用）。
 if let i = CommandLine.arguments.firstIndex(of: "--snip-then-cancel") {
     let ms = CommandLine.arguments.count > i + 1 ? (Int(CommandLine.arguments[i + 1]) ?? 2_500) : 2_500
