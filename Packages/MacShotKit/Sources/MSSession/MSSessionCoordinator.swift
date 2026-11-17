@@ -125,7 +125,7 @@ public struct MSSessionReducer: Sendable {
             pendingIntent = intent
             switch intent {
             case .copy: return [.closeOverlay, .bakeAndCopy, .restoreFocus]
-            case .pin: return [.closeOverlay, .openPin, .restoreFocus]
+            case .pin: return [.closeOverlay, .openPin, .restoreFocus]   // 剪贴板那一份在 commit(.pin) 里做（Q-05），effect 列表只描述路由
             case .savePanel: return [.closeOverlay, .saveToFile(panel: true), .restoreFocus]
             case .quickSave: return [.closeOverlay, .saveToFile(panel: false), .restoreFocus]
             case .cancel: return [.closeOverlay, .restoreFocus]
@@ -214,6 +214,7 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
 
     private func run(_ event: MSSessionEvent) {
         for effect in reducer.handle(event) { perform(effect) }
+        if reducer.phase == .idle { frozenFrame = nil }   // 会话结束才是冻结帧的释放点
     }
 
     /// 用户能看懂的失败说明，绝不把 NSError 原样甩到屏幕上（`UI-009`）。
@@ -372,6 +373,11 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
             let pin = pins.open(content, near: origin, menu: pinMenu(), onClose: { _ in })
             pin.pinDelegate = self
             pin.center(on: screen(containing: globalSel), display: true)
+            // `Q-05`：「置顶」本身就带复制。Snipaste 的用法就是钉住参考图、然后拿去粘贴别处，
+            // 少一次 ⌘C 是这条出口存在的理由；复制失败也不收回贴图——两件事各自成立。
+            let ok = clipboard.write(image, scale: Int(display.scale))
+            MSLog.info(.export, "commit pin clipboard=\(ok) pixels=\(image.width)x\(image.height)")
+            onToast?(ok ? "已贴出并复制 \(image.width)×\(image.height)" : "已贴出（剪贴板写入失败）")
             finishEffects()
         case .cancel:
             finishEffects()
@@ -477,7 +483,10 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
         overlay?.orderOut(nil)
         overlay?.contentView = nil
         overlay = nil
-        frozenFrame = nil
+        // 这里**不**清 frozenFrame：它属于会话，不属于遮罩窗。
+        // 以前关窗就清，而 `overlay(_:didRequest:)` 是先 `run(.commitRequested)`（ effects 里有关窗）
+        // 再 `commit()`，于是 Enter/⌘C 走到 commit 时帧已经没了——整条提交出口静默空转（`E-063`）。
+        // 释放点挪到会话真正回到 idle 的那一刻，见 `run(_:)`。
     }
 
     // MARK: - MSPinDelegate

@@ -69,13 +69,17 @@ struct MSSessionReducerTests {
         #expect(effects.contains(.restoreFocus))
     }
 
-    @Test("12 提交贴出：不写剪贴板")
-    func row12PinDoesNotCopy() {
+    @Test("12 提交贴出：路由到 openPin（复制顺带做，方向由端到端那条钉死）")
+    func row12PinRoutesToOpenPin() {
         let (_, effects) = reduce([.hotKeyPressed(.snip), .overlayShown,
                                    .selectionChanged(width: 200, height: 100),
                                    .commitRequested(.pin)])
         #expect(effects.contains(.openPin))
-        #expect(!effects.contains(.bakeAndCopy), "pin must never touch the pasteboard (FR-SESS-002 spirit)")
+        #expect(effects.contains(.closeOverlay))
+        // `Q-05`（11-17）之后「置顶」本身就带复制，所以这里**不许**再断言
+        // "pin 绝不碰剪贴板"——那是裁决前的旧语义，留着只会把人带偏。
+        // effect 列表只描述**路由**；真正的剪贴板写在 `commit(.pin)` 里，
+        // 它的方向性判据在 `PinCommitCopiesTests`（pin 写 1 次、copy 不贴图、cancel 两者皆 0）。
     }
 
     @Test("13 取消：回 idle，无写入副作用")

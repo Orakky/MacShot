@@ -43,13 +43,18 @@ stateDiagram-v2
 | 9 | `selecting` | `drawBegan` 且有选区 | `editing` | `beginElement(kind)` | FR-ANN-001 |
 | 10 | `editing` | `drawEnded` | `selecting` | `commitElement` → 历史合并 1 条 | FR-ANN-005 |
 | 11 | `editing` | `commit(.copy)` | `committing` | `closeOverlay` → `bake` → `writePasteboard`（顺序见 ST-005） | FR-EXP-001 |
-| 12 | `editing` | `commit(.pin)` | `committing` | `closeOverlay` → `openPin(.document)`（**不写剪贴板**） | `export-clipboard.md` §5 |
+| 12 | `editing` | `commit(.pin)` | `committing` | `closeOverlay` → `openPin(.document)` → **同一次提交再写一份剪贴板 PNG**（`Q-05` 11-17 裁决：贴出即可去粘贴，不用再按一次 `⌘C`） | `export-clipboard.md` §5、`FR-PIN-018` |
 | 13 | `selecting` | `cancel` | `idle` | `closeOverlay`；**无剪贴板 effect** | FR-SESS-002 |
 | 14 | `committing` | `effectsDone` | `idle` | 释放会话持有的冻结帧 | — |
 | 15 | 任意非 idle | `displayChanged` | 不变（用快照） | 记 `capture.display-snapshot-stale` | FR-SESS-004 |
 
-**非法迁移（必须被拒绝并有测试）**：`idle + selectionChanged`；`frozen + commit`（无选区）；`committing + drawBegan`；一个会话并发两个 `commit`；`gate` 之外的状态收到 `permissionGranted`（应忽略并提示重启）。
+**非法迁移（必须被拒绝并有测试）**：`idle + selectionChanged`；`frozen + commit`（无选区）；`committing + drawBegan`；一个会话并发两个 `commit`；一个 `gate` 之外的状态收到 `permissionGranted`（应忽略并提示重启）。
 
+> **行 14 的措辞是有牙齿的**（2026-11-17，`E-063`）：冻结帧属于**会话**，释放点是 `committing + effectsDone`。
+> 代码曾把它挂在 `closeOverlay()` 里，而 `overlay(_:didRequest:)` 的顺序是"先跑 effects（其中有关窗）再 `commit()`"——
+> 于是 `Enter`/`⌘C`/`⌘S` 走到 `commit()` 时帧已经是 nil，**四个提交出口全部静默空转**（不报错、不弹提示、什么都不做）。
+> 现在 `closeOverlay()` 只关窗，`run(_:)` 在会话回到 `idle` 时清帧；`PinCommitCopiesTests` 三条判据把方向钉死：
+> `pin` ⇒ 贴图 1 张 + 剪贴板 1 次，`copy` ⇒ 剪贴板 1 次 + 贴图 0 张，`cancel` ⇒ 两者皆 0。
 ## ST-002 遮罩内指针模式
 
 ```
