@@ -42,7 +42,8 @@
 
 | B-018 | **截图后 Esc 退不出、遮罩盖住整屏、只能 ssh 杀进程** | 需实测 → **已解** | 严重：等于把机器锁住 | 根因＝`perform(effect)` 里 `default: break` 把 `.closeOverlay` 静默吞掉（状态机确实产出了该 effect，`V-008` 行 13 一直是绿的，所以单测没拦住）。修：删掉 `default` 改为穷举（新增 effect 不处理就编译不过）＋ 三条逃生阀（再按 `F1` 取消、失焦自动收窗、`cancelSession()` 幂等且无视状态机拒绝）＋ 5 条回归测试 ＋ `check-style.sh` 拦 `default: break`。证据：`Test run with 57 tests passed`、`make check` 全绿 |
 | B-028 | 已闭合（2026-11-17 用户再裁：**撑高贴图窗**，折行方案被 `E-060` 的算术表否定） | 已裁决并实现 | 无残留：`200×140` 这类日常小贴图现在也有可点的工具带，画面不被盖 | 形态落进 `UI-004` 与 `E-061`；极小贴图（预算 `min(160pt, 图片高)` 都不够，如 `60×40`）仍退回字母选工具——这是**写进规格的边界**，不是待修的缺陷 |
-
+| B-027 | 工具条图标来源：**已落地**（`T-094` / `E-064`）——SF Symbols 按 §5 核对表加载，折线箭头自绘，取不到符号回落字母 | 已解 | 图标不再是悬着的事；`V-050` 三条判据 + 两张探针图 | 换 macOS 版本要重跑 §5 核对（符号名会漂移），①② 变红就是那次提醒 |
+| B-031 | 图标的 **AppKit 装载器在 `MSOverlay` 与 `MSPin` 各有一份**（约 40 行相同代码）：`charter.md` §4 与 `check-deps` 不许 `MSAnnotate` import AppKit，而 SF Symbols 只能经 `NSImage` 取；两个 UI 模块的交集里没有一个"可持有 AppKit 的共享模块" | 需用户签 ADR | 事实（哪个工具用哪个符号）仍然只有一份，重复的只是装载与着色；改符号名时两处会同时红，不会静默漂移 | 正解是开一条 `ADR-019 共享 UI-kit 模块`（新增模块＝一条 accepted ADR + 改 §4 + 改 modules.md，§4 明文规定），把两份装载器合成一份。**不自改设计**（§3.9），所以先登记再问 |
 | ID | 卡点 | 结论 |
 |---|---|---|
 | B-101 | 采集 API 的最低版本与弃用情况不确定 | 已核实（`docs/reference/snipaste-gap.md` §7）：`SCScreenshotManager` macOS 14.0+、`SCStream` 12.3+、`CGWindowListCreateImage` 14.0 弃用、`CGDisplayCreateImage` 弃用版本仍 unknown（→ B-005 附带） |

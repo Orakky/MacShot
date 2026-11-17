@@ -287,12 +287,14 @@ public final class MSPinView: NSView {
         NSColor.separatorColor.setStroke(); path.lineWidth = 1; path.stroke()
         for (tool, box) in layout.items {
             if tool == activeTool {
-                NSColor.controlAccentColor.withAlphaComponent(0.22).setFill()
+                NSColor.controlAccentColor.withAlphaComponent(0.16).setFill()
                 box.fill()
             }
-            NSAttributedString(string: tool.letter, attributes: [
-                .font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.labelColor,
-            ]).draw(at: NSPoint(x: box.midX - 4, y: box.midY - 8))
+            if !MSPinIcons.draw(tool, in: box, tint: tool == activeTool ? .controlAccentColor : .labelColor) {
+                NSAttributedString(string: tool.letter, attributes: [
+                    .font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.labelColor,
+                ]).draw(at: NSPoint(x: box.midX - 4, y: box.midY - 8))
+            }
         }
         for (index, box) in layout.colors.enumerated() {
             let swatch = MSColorRGBA(hex: MSAnnotationPalette.toolbar[index]) ?? .rgb(255, 0, 0)

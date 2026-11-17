@@ -94,6 +94,14 @@
 
 | 工具/动作 | 候选 symbol | 备注 |
 |---|---|---|
+> **11-17 已落地（`T-094` / `E-064`）**：实现只在 `MSAnnotationIcons` 一处（`Sources/MSAnnotate/`），遮罩与贴图共用。
+> 尺寸与着色按 `UI-002`：图标 `16pt`、当前工具 `accent` + 底色 `accent @ 16%`、其余 `label`。
+> 着色走 `CGContext.clip(to:mask:)` + 一次填充——不给每个格子每帧合成一张 `NSImage`。
+> 三条实测补充：① `character.cursor.ibeam` 在本机渲染成「文 + 光标」，中文界面（`ADR-016`）正好；
+> ② 折线箭头按本表规定自绘（两段折线 + 箭头帽，按 12 格比例缩放）；
+> ③ **符号取不到时必须回落字母，绝不画空白**——`draw()` 返回 `false` 就是这个信号，两个表面都接了。
+> 判据：`IconResolutionTests` 三条（每个工具取得到蒙版 / 未知符号名 = `nil` 而不是空图 / 16pt 格子里非透明像素 ≥ 14），
+> 外加 `make probe-chrome`、`make probe-pin` 各出图目视一次。**换 macOS 版本要重跑核对，符号名会漂移。**
 | 矩形 | `rectangle` | |
 | 椭圆 | `oval` | |
 | 箭头 | `arrow.up.right` | |

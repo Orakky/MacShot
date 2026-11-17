@@ -31,7 +31,7 @@ appicon: build icon
 	@sh scripts/inject-brand.sh "$(PRODUCT)"
 
 test:
-	@cd Packages/MacShotKit && swift test 2>&1 | tail -3
+	@cd Packages/MacShotKit && swift test > $(CURDIR)/build/test.log 2>&1; rc=$$?; 	  tail -4 $(CURDIR)/build/test.log; 	  grep -q "Test run with" $(CURDIR)/build/test.log 	    || { echo "✗ 没跑到测试（编译失败或空套件），不算绿"; exit 1; }; 	  exit $$rc
 
 run: appicon
 	@pkill -x MacShot 2>/dev/null || true

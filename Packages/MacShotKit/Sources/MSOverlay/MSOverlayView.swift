@@ -441,12 +441,15 @@ public final class MSOverlayView: NSView {
 
         for (t, box) in layout.toolBoxes {
             if t == tool {
-                ctx.setFillColor(NSColor.controlAccentColor.withAlphaComponent(0.22).cgColor)
+                ctx.setFillColor(NSColor.controlAccentColor.withAlphaComponent(0.16).cgColor)
                 ctx.fill(box)
             }
-            NSAttributedString(string: t.letter, attributes: [
-                .font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.labelColor,
-            ]).draw(at: NSPoint(x: box.midX - 4, y: box.midY - 8))
+            // 图标优先，画不出来才回落字母——绝不许出现"格子在、里面空"（design-system §5）。
+            if !MSOverlayIcons.draw(t, in: box, tint: t == tool ? .controlAccentColor : .labelColor) {
+                NSAttributedString(string: t.letter, attributes: [
+                    .font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.labelColor,
+                ]).draw(at: NSPoint(x: box.midX - 4, y: box.midY - 8))
+            }
         }
         for (hex, box) in layout.colorBoxes {
             ctx.setFillColor(NSColor(hex: hex)?.cgColor ?? NSColor.red.cgColor)

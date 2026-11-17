@@ -58,7 +58,7 @@
 | V-047 | P | FR-PIN-005 / M-4③ / D-04 | 贴图内再编辑闭环 | ① 合成事件走真实 `keyDown(E)→mouseDown/Dragged/Up→keyDown(Enter)`：`elements.count` +1、`kind` 对、**是同一份 document**（不是重画一张）② 点工具格只选工具，不误落元素 ③ 编辑态 `E`＝橡皮擦、`Enter`/`Esc` 才退出（`keymap.md` §4 的上下文优先级）④ 未选工具时按下拖动是移窗 ⑤ `⌘Z` 撤的是贴图自己的栈 ⑥ 窄贴图（<412pt）工具条缺席时字母必须仍可选工具（形态缺口见 `B-028`）⑦ **`MSPin` 不许再出现零测试的公开属性**：`activeTool` 没人赋值这件事，正是因为没有 target 覆盖而长期无人发现 |
 | V-048 | P | Q-11 / FR-ANN-012 / M-4④ | 改选区尺寸：清空 + 显式提示 | ① 有元素时改尺寸 ⇒ Effect 含 `.warnClearAnnotations` 且 `hasElements` 落回 false ② 没元素时改尺寸 ⇒ 不提示（不许空清也弹）③ 首次定选区不提示 ④ **通知排在清空之前**：断言"会话收到 selectionDidChange 那一刻元素还在"，顺序写反即红 ⑤ 元素数由 `document.didSet` 上报，任何改动元素层的路径（提交/删除/撤销/清空）都必须让它保持真值 ⑥ 文案单源 `MSSessionCopy.annotationCleared`，措辞必须老实写"无法撤销" |
 | V-049 | P | FR-PIN-005 / B-028 / UI-004 | 贴图编辑态撑高工具带（图片不被盖、导出不变） | ① `200×140` 进编辑态：`stripHeight>0`、`imageRect.height` 仍 140、窗口只长高且**顶边不动**、退出后尺寸复原 ② 编辑态导出位图与非编辑态**逐字节相同** ③ 逐格量墨：每个格子相对"同尺寸无带"渲染必须有墨（V-044 纪律） ④ 最后一行格子用合成鼠标事件点得到 ⑤ `60×40` 预算不够 ⇒ 不撑带、字母仍可用 ⑥ 编辑态里 `zoom` 变化 ⇒ 工具带重算，带高不得超过图片高 ⑦ `make probe-pin` 出图肉眼确认（判据 `E-061`） | 7 条 `ToolbarFlowTests` + `make probe-pin` 读数 | `resizeWindow` 顶边锚定已有断言；zoom 交互由 ⑥ 自动拦，**人手的观感**（带是否好看）仍未复核 |
-
+| V-050 | P | FR-ANN-001 / design-system §5 / UI-002 | 工具条图标＝SF Symbols，失败回落字母 | ① 11 个工具全部取得到蒙版（`maskImage(for:side:) != nil`）② 未知符号名返回 `nil` 而**不是**空图——回落路径的前提 ③ 16pt 格子里非透明像素 ≥ 14，逐个工具量，防止"格子在、里面空" ④ 当前工具用 `accent` 着色、底色 `accent @ 16%`（与 `UI-002` 一致，快照对照）⑤ `make probe-chrome` + `make probe-pin` 各目视一次：遮罩 11 格、贴图 10 格（文字工具不进贴图工具带）⑥ 折线箭头那格是自绘的，仍要有墨 | 3 条 `IconResolutionTests`（`MSOverlayTests`）+ 两张探针图（`E-064`） | 换 macOS 版本后符号名会漂移 ⇒ ①② 会变红，那是**预期的提醒**，不是回归 |
 ## 2. 剪贴板兼容矩阵（V-003 的实体，ADR-014 的决策门）
 
 | 目标应用 | 仅 PNG | 仅 TIFF | PNG+TIFF | 备注（尺寸/颜色/DPI 表现） |
