@@ -180,8 +180,10 @@ public struct MSAnnotationRenderer: MSAnnotationRendering {
         for (i, raw) in lines.enumerated() where !raw.isEmpty {
             guard let rendered = line(raw, font: f, color: color) else { continue }
             ctx.saveGState()
-            // Baseline sits fontSize below the line-box top; un-flip around that point.
-            ctx.translateBy(x: CGFloat(origin.x), y: -(CGFloat(origin.y) + CGFloat(i) * lh + CGFloat(s.fontSize)))
+            // 元素层已经是 y-down 文档空间，这里只翻回 y-up 让字形正着画。
+            // 基线 = 行框顶 + fontSize，所以平移量必须是**正的**文档 y——带负号会把整段字推到画布外
+            // （2026-11-16 基线快照第一次跑就抓到：文字与序号里的数字一个像素都没有）。
+            ctx.translateBy(x: CGFloat(origin.x), y: CGFloat(origin.y) + CGFloat(i) * lh + CGFloat(s.fontSize))
             ctx.scaleBy(x: 1, y: -1)
             ctx.textPosition = .zero
             CTLineDraw(rendered, ctx)
@@ -193,9 +195,10 @@ public struct MSAnnotationRenderer: MSAnnotationRendering {
         guard let rendered = line(text, font: font(Int(radius * 1.15), bold: true), color: .rgb(255, 255, 255)) else { return }
         let b = CTLineGetBoundsWithOptions(rendered, .useOpticalBounds)
         ctx.saveGState()
-        ctx.translateBy(x: center.x - CGFloat(b.midX), y: -center.y)
+        // 同上：平移到文档 (center.x, center.y) 后再翻回 y-up，用光学包围盒把字对准圆心。
+        ctx.translateBy(x: center.x, y: center.y)
         ctx.scaleBy(x: 1, y: -1)
-        ctx.textPosition = .zero
+        ctx.textPosition = CGPoint(x: -CGFloat(b.midX), y: -CGFloat(b.minY + b.maxY) / 2)
         CTLineDraw(rendered, ctx)
         ctx.restoreGState()
     }

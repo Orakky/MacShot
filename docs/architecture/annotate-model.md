@@ -90,6 +90,10 @@ JSON 形态（`.macshot` 未来即此 JSON + 位图，见 ADR-009）：
 
 ## 5. 渲染器契约
 
+> 判据纪律（11-16 起）：渲染器的任何改动必须留下**像素级证据**——基线比对、墨迹包围盒或离屏渲染占比。
+> 只断言文档内容（`element.text` 可读、`points` 正确）不算，因为它看不见「画面上到底有没有东西」（`V-044`、`E-052`）。
+y-down 文档空间里的局部反翻只允许出现在文字与位图两处，且必须带注释说明符号。
+
 ```swift
 public protocol AnnotationRendering: Sendable {
     func render(_ doc: AnnotationDocument,
