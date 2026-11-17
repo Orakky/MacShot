@@ -187,7 +187,7 @@ public final class MSPinView: NSView {
                                               canvas: docSize, intent: .preview) }
         ctx.restoreGState()
 
-        if isEditing { drawEditModeChrome() }
+        if isEditing { drawEditModeChrome(); drawEditToolbar() }
         drawBadge()
     }
 
@@ -195,6 +195,74 @@ public final class MSPinView: NSView {
         var doc = content.document
         doc.elements = [element]
         return doc
+    }
+
+    /// 编辑态工具条的实测布局：钉在贴图**下沿内侧**。窄到放不下工具格时返回 nil，
+    /// 此时只能用字母选工具（小贴图上的形态规格未定，已开卡点）。
+    struct EditToolbarLayout {   // internal：测试要能读到格子位置，绘制与命中才不会被各自发明
+        let rect: CGRect
+        let items: [(MSTool, CGRect)]
+        let colors: [CGRect]
+    }
+
+    /// 贴图编辑态可用的工具：先排除 `text`——这里没有 field editor，接进工具条只会
+    /// 落下一个空文本元素（半个实现比不接更坏）。文字在贴图里的再编辑另批做。
+    static let pinToolbarTools: [MSTool] = MSTool.allCases.filter { $0 != .text }
+
+    private(set) var editToolbarLayout: EditToolbarLayout?
+
+    private func computeEditToolbar() -> EditToolbarLayout? {
+        let tools = Self.pinToolbarTools
+        let needed = MSAnnotationToolbar.naturalWidth(itemCount: tools.count,
+                                                      colorCount: MSAnnotationPalette.toolbar.count,
+                                                      showsActions: false)
+        guard bounds.width >= needed + 8, bounds.height >= MSAnnotationToolbar.height + 12 else { return nil }
+        let rect = CGRect(x: (bounds.width - needed) / 2, y: bounds.minY + 4,
+                          width: needed, height: MSAnnotationToolbar.height)
+        let boxes = MSAnnotationToolbar.boxes(rect: rect, itemCount: tools.count,
+                                              colorCount: MSAnnotationPalette.toolbar.count)
+        return EditToolbarLayout(rect: rect, items: Array(zip(tools, boxes.items)), colors: boxes.colors)
+    }
+
+    /// `UI-004`：编辑态必须看得见"正在编辑"和"能选工具"。画不出这两样，再编辑就等于隐藏功能。
+    private func drawEditToolbar() {
+        guard let layout = computeEditToolbar() else {
+            NSAttributedString(string: " ✎ 编辑中 · 按字母选工具（M/O/A/L/P/H/T/N/B）· Enter/Esc 退出 ", attributes: [
+                .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.white,
+                .backgroundColor: NSColor.black.withAlphaComponent(0.7),
+            ]).draw(at: NSPoint(x: 6, y: bounds.maxY - 22))
+            return
+        }
+        editToolbarLayout = layout
+        let ctx = NSGraphicsContext.current?.cgContext
+        ctx?.saveGState()
+        NSColor.windowBackgroundColor.withAlphaComponent(0.96).setFill()
+        let path = NSBezierPath(roundedRect: layout.rect, xRadius: 8, yRadius: 8)
+        path.fill()
+        NSColor.separatorColor.setStroke(); path.lineWidth = 1; path.stroke()
+        for (tool, box) in layout.items {
+            if tool == activeTool {
+                NSColor.controlAccentColor.withAlphaComponent(0.22).setFill()
+                box.fill()
+            }
+            NSAttributedString(string: tool.letter, attributes: [
+                .font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.labelColor,
+            ]).draw(at: NSPoint(x: box.midX - 4, y: box.midY - 8))
+        }
+        for (index, box) in layout.colors.enumerated() {
+            let swatch = MSColorRGBA(hex: MSAnnotationPalette.toolbar[index]) ?? .rgb(255, 0, 0)
+            if let ns = NSColor(cgColor: swatch.cgColor) { ns.setFill() } else { NSColor.red.setFill() }
+            NSBezierPath(ovalIn: box).fill()
+            if MSColorRGBA(hex: MSAnnotationPalette.toolbar[index]) == content.document.currentStyle.stroke {
+                NSColor.controlAccentColor.setStroke()
+                let ring = NSBezierPath(ovalIn: box.insetBy(dx: -2, dy: -2)); ring.lineWidth = 2; ring.stroke()
+            }
+        }
+        ctx?.restoreGState()
+        NSAttributedString(string: " ✎ 编辑中 ", attributes: [
+            .font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.white,
+            .backgroundColor: NSColor.controlAccentColor.withAlphaComponent(0.9),
+        ]).draw(at: NSPoint(x: 6, y: bounds.maxY - 22))
     }
 
     private func drawEditModeChrome() {
@@ -224,16 +292,61 @@ public final class MSPinView: NSView {
 
     // MARK: - editing (same document object, not a copy)
 
-    /// Tool chosen in the shared toolbar; nil means "selection tool" (drag moves the window).
-    public var activeTool: MSAnnotationKind?
+    /// 编辑态当前工具，与遮罩共用同一张 `MSTool` 表（`UI-004` 要求"UI-002 同款工具条"）。
+    /// nil = 选择工具：此时按下拖动是移窗，不是画标注。
+    public var activeTool: MSTool?
 
     public override func mouseDown(with event: NSEvent) {
-        guard isEditing, let tool = activeTool, tool != .eraser else { super.mouseDown(with: event); return }
-        let p = docPoint(convert(event.locationInWindow, from: nil))
-        if tool == .eraser { eraseAt(viewPoint: event.locationInWindow); return }
-        draft = MSAnnotationElement(kind: tool, points: [p, p], style: content.document.currentStyle,
-                                   text: tool == .badge ? content.document.nextBadgeText : "",
-                                   variant: tool == .freehand ? "pen" : nil)
+        guard isEditing else { super.mouseDown(with: event); return }
+        let viewP = convert(event.locationInWindow, from: nil)
+        // 工具条优先：点格子是选工具，不该被当成"在画布上落笔"
+        if let layout = editToolbarLayout {
+            if let (tool, _) = layout.items.first(where: { $0.1.contains(viewP) }) {
+                activeTool = tool
+                MSLog.info(.pin, "edit tool=\(tool.rawValue)")
+                return
+            }
+            if let (index, box) = layout.colors.enumerated().first(where: { $0.element.insetBy(dx: -3, dy: -3).contains(viewP) }) {
+                var style = content.document.currentStyle
+                style.stroke = MSColorRGBA(hex: MSAnnotationPalette.toolbar[index]) ?? style.stroke
+                content.document.currentStyle = style
+                MSLog.info(.pin, "edit color=\(index)")
+                return
+            }
+        }
+        guard let tool = activeTool, let kind = tool.annotationKind else { super.mouseDown(with: event); return }
+        let p = docPoint(viewP)
+        // 旧代码这里写着 `tool != .eraser` 当守卫，于是 eraser 分支永远走不到——
+        // 橡皮擦在贴图里点了只会拖窗。点击动作统一交给 performClickAction。
+        if tool.isClickAction { performClickAction(tool: tool, at: p); return }
+        draft = MSAnnotationElement(kind: kind, points: [p, p], style: content.document.currentStyle,
+                                   text: kind == .badge ? content.document.nextBadgeText : "",
+                                   variant: kind == .freehand && tool.isFreehandPen ? "pen" : nil)
+    }
+
+    /// `N` 序号 / `E` 橡皮擦：一次动作一条撤销记录，与遮罩里同一套语义（`annotate-model.md` §4）。
+    func performClickAction(tool: MSTool, at p: MSIntPoint) {
+        var doc = content.document
+        switch tool {
+        case .badge:
+            let before = doc.badgeCounter
+            let element = MSAnnotationElement(kind: .badge, points: [p], style: doc.currentStyle, text: String(before))
+            history.apply(.composite([.insert(element), .badgeCounter(before: before, after: before + 1)]), to: &doc)
+        case .eraser:
+            let target = CGPoint(x: p.x, y: p.y)
+            guard let hit = doc.sortedElements.reversed().first(where: {
+                MSAnnotationGeometry.hitTest(target, element: $0, extraTolerance: 4)
+            }) else {
+                MSLog.debug(.pin, "eraser 没命中任何元素")
+                return
+            }
+            history.apply(.remove(hit), to: &doc)
+        default:
+            return
+        }
+        content.document = doc
+        (window as? MSPinWindow)?.markDirty()
+        needsDisplay = true
     }
 
     public override func mouseDragged(with event: NSEvent) {
@@ -306,6 +419,20 @@ public final class MSPinView: NSView {
 
     public override func keyDown(with event: NSEvent) {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if isEditing, !flags.contains(.command) {
+            // `UI-004`：退出编辑 = Enter / Esc（`E` 在编辑态归橡皮擦，见 keymap §4 的上下文优先级）
+            // 写成成员判断而不是 switch：门禁禁 `default: break`（规范 §4b，B-018 就是被它吞掉的）
+            if [53, 36, 76].contains(Int(event.keyCode)) {
+                onAction?(.toggleEdit)
+                return
+            }
+            if let ch = event.charactersIgnoringModifiers?.lowercased(),
+               let tool = Self.pinToolbarTools.first(where: { $0.letter.lowercased() == ch }) {
+                activeTool = tool
+                MSLog.info(.pin, "edit tool=\(tool.rawValue) via key")
+                return
+            }
+        }
         switch event.charactersIgnoringModifiers?.lowercased() {
         case "c" where flags.contains(.command): onAction?(.copy)
         case "s" where flags.contains(.command): onAction?(.quickSave)

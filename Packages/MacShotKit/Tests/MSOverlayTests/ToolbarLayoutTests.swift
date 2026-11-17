@@ -1,4 +1,5 @@
 import CoreGraphics
+import MSAnnotate
 import Testing
 @testable import MSOverlay
 

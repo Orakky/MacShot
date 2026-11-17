@@ -48,6 +48,7 @@ let package = Package(
         .testTarget(name: "MSSessionTests", dependencies: ["MSSession", "MSSettings", "MSExport", "MSPin", "MSTestSupport"], path: "Tests/MSSessionTests"),
         .testTarget(name: "MSCaptureTests", dependencies: ["MSCapture", "MSTestSupport"], path: "Tests/MSCaptureTests"),
         .testTarget(name: "MSOverlayTests", dependencies: ["MSOverlay", "MSCore", "MSAnnotate", "MSTestSupport"], path: "Tests/MSOverlayTests"),
+        .testTarget(name: "MSPinTests", dependencies: ["MSPin", "MSCore", "MSAnnotate", "MSTestSupport"], path: "Tests/MSPinTests"),
         .testTarget(name: "MSSettingsTests", dependencies: ["MSSettings", "MSExport", "MSTestSupport"], path: "Tests/MSSettingsTests"),
     ],
     swiftLanguageModes: [.v5]

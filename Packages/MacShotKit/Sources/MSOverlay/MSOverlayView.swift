@@ -40,42 +40,6 @@ public enum OverlayChrome {
     public static func scrimAlpha(isDark: Bool) -> CGFloat { isDark ? 0.55 : 0.45 }
 }
 
-/// Keyboard- and toolbar-selectable tools. Letters come from `design/keymap.md` §3 (真源)，
-/// 之前 `rect` 占的是 `R` —— 那是 §2 里"重复上次区域"（P1）的键，属于自己造冲突，已按表改回 `M`。
-/// 仍缺 `T`＝文字：它要 field editor，随文字批一起落地，这里不占空位。
-public enum MSTool: String, CaseIterable, Sendable {
-    case select, rect, ellipse, arrow, polyline, highlighter, pen, blur, badge, eraser, text
-
-    public var letter: String {
-        switch self {
-        case .select: "V"; case .rect: "M"; case .ellipse: "O"; case .arrow: "A"
-        case .polyline: "L"; case .highlighter: "H"; case .pen: "P"; case .blur: "B"
-        case .badge: "N"; case .eraser: "E"; case .text: "T"
-        }
-    }
-
-    public var annotationKind: MSAnnotationKind? {
-        switch self {
-        case .select: nil
-        case .rect: .rect
-        case .ellipse: .ellipse
-        case .arrow: .arrow
-        case .polyline: .polyline
-        case .highlighter: .freehand
-        case .pen: .freehand
-        case .blur: .blur
-        case .badge: .badge
-        case .eraser: .eraser
-        case .text: .text
-        }
-    }
-
-    /// 单击就完成语义的工具：不进入拖拽草稿（`annotate-model.md` §4）。
-    /// 橡皮擦不是"画一个 eraser 元素"——渲染器对 `.eraser` 明确不画任何东西，它是删元素的动作。
-    public var isClickAction: Bool { self == .badge || self == .eraser }
-
-    var isFreehandPen: Bool { self == .pen }
-}
 
 public protocol MSOverlayDelegate: AnyObject {
     func overlay(_ overlay: MSOverlayWindow, selectionDidChange rect: CGRect?)
@@ -217,7 +181,7 @@ public final class MSOverlayView: NSView {
     /// internal 是给 `@testable` 直接喂状态，不靠合成鼠标事件。
     var selectedID: UUID?
 
-    private let palette = ["#E83347", "#FF9500", "#FFCC00", "#34C759", "#0A84FF", "#AF52DE", "#000000", "#FFFFFF"]
+    private let palette = MSAnnotationPalette.swatches
 
     public init(display: MSDisplay, frozenFrame: CGImage) {
         self.display = display

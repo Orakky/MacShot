@@ -74,6 +74,10 @@ JSON 形态（`.macshot` 未来即此 JSON + 位图，见 ADR-009）：
 
 `Kind` 用枚举而非字符串：JSON 编码为稳定 rawValue。新增 kind 属于 schema 演进（加 rawValue，不改旧值）。
 
+> 公共件的归属（11-17）：工具表 `MSTool`、工具条度量 `MSAnnotationToolbar`、色板 `MSAnnotationPalette`
+> 都在本模块——遮罩与贴图再编辑态共用同一条工具条，而依赖方向不许 `MSPin → MSOverlay`（`charter.md` §4）。
+> **度量与格子只有一个家，摆放各表面自己定并各自测**（遮罩贴选区、贴图钉下沿）。
+
 ## 6b. 文字输入子态（ST-003 的实现契约）
 
 | 项 | 定稿 | 判据 |

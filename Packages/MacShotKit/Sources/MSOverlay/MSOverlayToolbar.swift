@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import MSAnnotate
 
 /// 工具条布局（规格见 `design/screens.md#UI-002`）。
 ///
@@ -9,16 +10,18 @@ import Foundation
 /// 宽度不够时的取舍顺序是定死的：先收掉键位提示文字（它和屏底提示条重复），
 /// 再考虑工具；位置永远钳制在屏内，所以贴边的选区不会把工具推出屏幕。
 public enum MSOverlayToolbar {
-    public static let item: CGFloat = 26
-    public static let gap: CGFloat = 2
-    public static let height: CGFloat = 34
-    public static let edgePad: CGFloat = 4
-    public static let colorGroupGap: CGFloat = 8
-    public static let colorDot: CGFloat = 14
-    public static let colorStep: CGFloat = 18
-    public static let actionWidth: CGFloat = 250
-    public static let screenMargin: CGFloat = 6
-    public static let selectionGap: CGFloat = 6
+    /// 度量只有一个家：`MSAnnotationToolbar`（贴图再编辑态用同一条工具条，而 `MSPin`
+    /// 不许 import `MSOverlay`）。这里只保留**遮罩特有的摆放**：贴着选区、钳在屏内。
+    public static var item: CGFloat { MSAnnotationToolbar.item }
+    public static var gap: CGFloat { MSAnnotationToolbar.gap }
+    public static var height: CGFloat { MSAnnotationToolbar.height }
+    public static var edgePad: CGFloat { MSAnnotationToolbar.edgePad }
+    public static var colorGroupGap: CGFloat { MSAnnotationToolbar.colorGroupGap }
+    public static var colorDot: CGFloat { MSAnnotationToolbar.colorDot }
+    public static var colorStep: CGFloat { MSAnnotationToolbar.colorStep }
+    public static var actionWidth: CGFloat { MSAnnotationToolbar.actionWidth }
+    public static var screenMargin: CGFloat { MSAnnotationToolbar.screenMargin }
+    public static var selectionGap: CGFloat { MSAnnotationToolbar.selectionGap }
 
     public struct Layout {
         public let rect: CGRect
@@ -28,17 +31,14 @@ public enum MSOverlayToolbar {
     }
 
     public static func naturalWidth(toolCount: Int, colorCount: Int, showsActions: Bool) -> CGFloat {
-        let tools = CGFloat(toolCount) * (item + gap)
-        let colors = CGFloat(colorCount) * colorStep
-        return edgePad * 2 + tools + colorGroupGap + colors + (showsActions ? actionWidth : 0)
+        MSAnnotationToolbar.naturalWidth(itemCount: toolCount, colorCount: colorCount, showsActions: showsActions)
     }
 
     public static func layout(selection: CGRect, bounds: CGRect, tools: [MSTool], colors: [String]) -> Layout {
-        let fitsEverything = naturalWidth(toolCount: tools.count, colorCount: colors.count, showsActions: true)
-        let usable = max(0, bounds.width - screenMargin * 2)
-        let showActions = fitsEverything <= usable
+        let showActions = MSAnnotationToolbar.showsActions(widthAvailable: bounds.width,
+                                                          itemCount: tools.count, colorCount: colors.count)
         let contentWidth = naturalWidth(toolCount: tools.count, colorCount: colors.count, showsActions: showActions)
-        let barWidth = min(contentWidth, usable)
+        let barWidth = min(contentWidth, max(0, bounds.width - screenMargin * 2))
         // x：贴着选区左上，但整条必须留在屏内
         let x = min(max(selection.minX, bounds.minX + screenMargin),
                     max(bounds.minX + screenMargin, bounds.maxX - screenMargin - barWidth))
@@ -47,21 +47,11 @@ public enum MSOverlayToolbar {
         let y = above >= bounds.minY + screenMargin ? above : min(selection.maxY + selectionGap,
                                                                   bounds.maxY - screenMargin - height)
         let rect = CGRect(x: x, y: y, width: barWidth, height: height)
-
-        var toolBoxes: [(MSTool, CGRect)] = []
-        var cx = rect.minX + edgePad
-        for t in tools {
-            let box = CGRect(x: cx, y: rect.minY + 4, width: item, height: item)
-            toolBoxes.append((t, box))
-            cx += item + gap
-        }
-        var colorBoxes: [(String, CGRect)] = []
-        cx += colorGroupGap - gap
-        for hex in colors {
-            colorBoxes.append((hex, CGRect(x: cx, y: rect.midY - colorDot / 2, width: colorDot, height: colorDot)))
-            cx += colorStep
-        }
-        return Layout(rect: rect, toolBoxes: toolBoxes, colorBoxes: colorBoxes, showsActions: showActions)
+        let boxes = MSAnnotationToolbar.boxes(rect: rect, itemCount: tools.count, colorCount: colors.count)
+        return Layout(rect: rect,
+                      toolBoxes: Array(zip(tools, boxes.items)),
+                      colorBoxes: Array(zip(colors, boxes.colors)),
+                      showsActions: showActions)
     }
 
     /// 尺寸读数药丸的落位（`screens.md#UI-001` 第 5 行）：优先选区**右下外侧** 8pt；
