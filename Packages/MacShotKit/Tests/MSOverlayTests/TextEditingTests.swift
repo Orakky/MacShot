@@ -23,11 +23,20 @@ struct TextEditingTests {
     private final class Spy: MSOverlayDelegate {
         var cancelled = 0
         var intents: [MSCommitIntent] = []
+        var elementCounts: [Int] = []
+        var sawDrawBegan = 0
         func overlay(_ overlay: MSOverlayWindow, selectionDidChange rect: CGRect?) {}
         func overlay(_ overlay: MSOverlayWindow, didRequest intent: MSCommitIntent) { intents.append(intent) }
         func overlayDidCancel(_ overlay: MSOverlayWindow) { cancelled += 1 }
         func overlay(_ overlay: MSOverlayWindow, cropOfViewRect rect: CGRect) -> CGImage? { nil }
         func overlayPreferences(_ overlay: MSOverlayWindow) -> MSAppPreferences { .init() }
+        func overlay(_ overlay: MSOverlayWindow, drawingPhaseDidChange phase: MSOverlayDrawingPhase) {
+            switch phase {
+            case .began: sawDrawBegan += 1
+            case .ended(let count): elementCounts.append(count)
+            }
+        }
+        func overlay(_ overlay: MSOverlayWindow, elementCount: Int) { elementCounts.append(elementCount) }
     }
 
     @MainActor

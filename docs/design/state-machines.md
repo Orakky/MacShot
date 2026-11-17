@@ -34,6 +34,11 @@ stateDiagram-v2
 | 5 | `idle` | `hotkey(.pinClipboard)` + 无图 | `idle` | `toast("剪贴板里没有图像")` | `pin-window.md` §9 |
 | 6 | `frozen` | `overlayShown` | `selecting` | — | — |
 | 7 | `selecting` | `selectionChanged(rect)` | `selecting` | `updateReadout`；若 `elements` 非空 → `warnClearAnnotations` | FR-CAP-002、Q-11 |
+
+> 行 7 的实现前提（11-17）：`hasElements` 由 `MSSessionEvent.elementCountChanged(Int)` 维护，生产者是
+> `MSOverlayView.document.didSet`；且视图**必须先通知选区变化、再清空文档**，顺序反了提示永远不响。
+> 判据 `V-048`，事故记录 `E-056`。
+
 | 8 | `selecting` | `toolSelected(k)` 且无选区 | `selecting` | `toast("先框选区域")`，**不进 editing** | ST-001 非法项 |
 | 9 | `selecting` | `drawBegan` 且有选区 | `editing` | `beginElement(kind)` | FR-ANN-001 |
 | 10 | `editing` | `drawEnded` | `selecting` | `commitElement` → 历史合并 1 条 | FR-ANN-005 |

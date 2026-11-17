@@ -18,6 +18,9 @@ public enum MSSessionEvent: Sendable, Equatable {
     case selectionChanged(width: Int, height: Int)
     case drawBegan
     case drawEnded
+    /// 元素层数量变了（提交/删除/清空/撤销都会报）。`hasElements` 的唯一维护入口，
+    /// 由 `MSOverlayView.document.didSet` 生产——不靠"某处记得调一次"。
+    case elementCountChanged(Int)
     case commitRequested(MSCommitIntent)
     case effectsFinished
     case captureFailed(String)
@@ -33,7 +36,16 @@ public enum MSSessionEffect: Sendable, Equatable {
     case saveToFile(panel: Bool)
     case showPermissionGate
     case toast(String)
+    /// 改选区尺寸把已有标注清空了，必须显式提示（`ST-001` 行 7、Q-11 推荐档 A）。
+    /// 文案只有一个家：`MSSessionCopy.annotationCleared`。
+    case warnClearAnnotations
     case log(String)
+}
+
+/// 会话侧给用户看的文案。**唯一一处**落这条字符串的地方，等 ADR-016（`MSStrings`）签字后整族迁过去。
+public enum MSSessionCopy {
+    /// 改选区尺寸清空标注的提示。不许暗示可撤销——清空同时重置了历史（`Q-11`）。
+    public static let annotationCleared = "选区尺寸已改变，原有标注已清空（无法撤销）"
 }
 
 /// Pure state machine, head-testable without a window (`ST-001`, `V-008`).
@@ -76,7 +88,18 @@ public struct MSSessionReducer: Sendable {
 
         case (.selecting, .selectionChanged(let w, let h)):
             hasSelection = w > 3 && h > 3
-            return hasSelection ? [.log("selection \(w)x\(h)")] : [.log("selection too small")]
+            // 行 7：清空是遮罩那边做的，这里只负责"有元素就要提示"。
+            // 视图刻意把本通知排在清空之前，所以 `hasElements` 这里还是清空前的真值。
+            var effects: [MSSessionEffect] = [.log("selection \(w)x\(h)")]
+            if hasElements {
+                hasElements = false
+                effects.append(.warnClearAnnotations)
+            }
+            return effects
+
+        case (.selecting, .elementCountChanged(let count)), (.editing, .elementCountChanged(let count)):
+            hasElements = count > 0
+            return [.log("elements=\(count)")]
 
         case (.selecting, .drawBegan):
             guard hasSelection else { return [.toast("先框选区域")] }
@@ -395,6 +418,19 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
                document: overlay.overlayView.annotationDocument)
     }
 
+    /// `ST-001` 行 9/10 的入口：绘制起止走事件，元素数单独一条，
+    /// 这样删除/撤销/清空都能让 `hasElements` 保持真值。
+    public func overlay(_ overlay: MSOverlayWindow, drawingPhaseDidChange phase: MSOverlayDrawingPhase) {
+        if case .began = phase { run(.drawBegan) }
+        if case .ended(let count) = phase { run(.elementCountChanged(count)) }
+        finishEffects()
+    }
+
+    public func overlay(_ overlay: MSOverlayWindow, elementCount: Int) {
+        run(.elementCountChanged(elementCount))
+        finishEffects()
+    }
+
     public func overlayDidCancel(_ overlay: MSOverlayWindow) {
         run(.commitRequested(.cancel))
     }
@@ -472,6 +508,7 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
         case .restoreFocus:       restoreFocus()
         case .showPermissionGate: onNeedsPermission?()
         case .toast(let text):    onToast?(text)
+        case .warnClearAnnotations: onToast?(MSSessionCopy.annotationCleared)
         case .log(let message):   MSLog.info(.session, message)
         // 下面这些由 startSnip()/commit() 的执行流落地，显式声明归属而不是静默丢弃。
         case .freeze, .showOverlay:

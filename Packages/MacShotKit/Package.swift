@@ -45,7 +45,7 @@ let package = Package(
 
         .testTarget(name: "MSCoreTests", dependencies: ["MSCore", "MSTestSupport"], path: "Tests/MSCoreTests"),
         .testTarget(name: "MSAnnotateTests", dependencies: ["MSAnnotate", "MSTestSupport"], path: "Tests/MSAnnotateTests"),
-        .testTarget(name: "MSSessionTests", dependencies: ["MSSession", "MSSettings", "MSExport", "MSPin", "MSTestSupport"], path: "Tests/MSSessionTests"),
+        .testTarget(name: "MSSessionTests", dependencies: ["MSSession", "MSSettings", "MSExport", "MSPin", "MSOverlay", "MSTestSupport"], path: "Tests/MSSessionTests"),
         .testTarget(name: "MSCaptureTests", dependencies: ["MSCapture", "MSTestSupport"], path: "Tests/MSCaptureTests"),
         .testTarget(name: "MSOverlayTests", dependencies: ["MSOverlay", "MSCore", "MSAnnotate", "MSTestSupport"], path: "Tests/MSOverlayTests"),
         .testTarget(name: "MSPinTests", dependencies: ["MSPin", "MSCore", "MSAnnotate", "MSTestSupport"], path: "Tests/MSPinTests"),

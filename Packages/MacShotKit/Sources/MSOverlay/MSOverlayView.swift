@@ -41,10 +41,22 @@ public enum OverlayChrome {
 }
 
 
+/// 标注绘制的阶段。穷举，不许用 `default` 吞掉（规范 §4b）。
+public enum MSOverlayDrawingPhase: Sendable, Equatable {
+    case began(MSAnnotationKind)
+    case ended(elementCount: Int)
+}
+
 public protocol MSOverlayDelegate: AnyObject {
     func overlay(_ overlay: MSOverlayWindow, selectionDidChange rect: CGRect?)
     func overlay(_ overlay: MSOverlayWindow, didRequest intent: MSCommitIntent)
     func overlayDidCancel(_ overlay: MSOverlayWindow)
+    /// 标注绘制的起止（`ST-001` 行 9/10）。会话靠它把 `selecting ⇄ editing` 走起来，
+    /// 并在 `drawEnded` 后知道文档里已经有元素——行 7 的"改选区清空要提示"依赖这个事实。
+    /// 此前 `drawBegan/drawEnded` 两个事件**没有任何生产者**，所以 `hasElements` 永远是 false。
+    func overlay(_ overlay: MSOverlayWindow, drawingPhaseDidChange phase: MSOverlayDrawingPhase)
+    /// 元素层数量变了（提交/删除/撤销/清空）。`didSet` 自动报，不靠调用点记得。
+    func overlay(_ overlay: MSOverlayWindow, elementCount: Int)
     /// Asks the session for the cropped pixels under a view-space rect (frozen frame, no re-capture).
     func overlay(_ overlay: MSOverlayWindow, cropOfViewRect rect: CGRect) -> CGImage?
     func overlayPreferences(_ overlay: MSOverlayWindow) -> MSAppPreferences
@@ -162,7 +174,15 @@ public final class MSOverlayView: NSView {
     public var blurRadius: Int = 14
 
     /// internal 而非 private：`@testable` 要直接喂文档、点一次动作、再看撤销栈（`AnnotationToolTests`）。
-    var document: MSAnnotationDocument?
+    /// internal：`@testable` 用它直接喂文档，测试因此不必靠合成鼠标事件构造状态。
+    /// `didSet` 负责把元素数报给会话——9 个赋值点各自记得调一次迟早会漏，
+    /// 而 `hasElements` 说一次谎，行 7 的清空提示就一次都不响。
+    var document: MSAnnotationDocument? {
+        didSet {
+            guard document?.elements.count != oldValue?.elements.count else { return }
+            reportElementCount()
+        }
+    }
     var history = MSAnnotationHistory()
     private var dragMode: DragMode?
     private var draft: MSAnnotationElement?
@@ -211,6 +231,11 @@ public final class MSOverlayView: NSView {
     public func setSelection(_ rect: CGRect?) {
         let previousSize = selection?.size
         selection = rect
+        // 顺序有讲究：先让会话知道"选区变了"（此时 `hasElements` 还是清空前的真值，
+        // 行 7 才能提示），再真的换掉文档。反过来就永远不提示。
+        if let size = rect?.size, let previousSize, size != previousSize, document?.isEmpty == false {
+            host.map { delegate?.overlay($0, selectionDidChange: rect) }
+        }
         if let size = rect?.size, let previousSize, size != previousSize, document?.isEmpty == false {
             // Q-11 (temporary default): resizing the selection clears the annotations, with the
             // clear stated on screen rather than silently.
@@ -487,6 +512,7 @@ public final class MSOverlayView: NSView {
             dragMode = .draw(start: p)
             draft = MSAnnotationElement(kind: tool, points: [docPoint(p, in: sel), docPoint(p, in: sel)],
                                         style: currentStyle(), variant: tool == .freehand && self.tool.isFreehandPen ? "pen" : nil)
+            host.map { delegate?.overlay($0, drawingPhaseDidChange: .began(tool)) }   // tool 这里已是 MSAnnotationKind
             return
         }
         if let sel = selection {
@@ -617,6 +643,13 @@ public final class MSOverlayView: NSView {
             }
         }
         needsDisplay = true
+    }
+
+    /// 把"文档里现在有几个元素"报给会话（`ST-001` 行 9/10 的生产者）。
+    /// 任何改动元素层的路径都必须调它，否则 `hasElements` 会说谎——而行 7 的清空提示正依赖这个事实。
+    func reportElementCount() {
+        guard let host else { return }
+        delegate?.overlay(host, elementCount: document?.elements.count ?? 0)
     }
 
     /// 右键＝退出截图。给"键盘完全失灵"的人留一条鼠标出路。
