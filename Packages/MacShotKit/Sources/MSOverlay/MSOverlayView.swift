@@ -291,8 +291,9 @@ public final class MSOverlayView: NSView {
             ctx.restoreGState()
             drawSelectionContents(sel, in: ctx)
             drawHandles(sel, in: ctx)
-            drawReadout(sel, in: ctx)
+            // 先算工具条再画读数：读数的落位要看工具条占没占外侧（同帧真值，不用上一帧的 layout）
             drawToolbar(sel, in: ctx)
+            drawReadout(sel, in: ctx)
         } else {
             ctx.setFillColor(MSColorRGBA.rgba(0, 0, 0, scrim).cgColor)
             ctx.fill(bounds)
@@ -394,9 +395,8 @@ public final class MSOverlayView: NSView {
         ]
         let s = NSAttributedString(string: " " + text + " ", attributes: attrs)
         let size = s.size()
-        let below = sel.minY - size.height - 8 >= 0
-        let p = NSPoint(x: min(max(0, sel.maxX - size.width), bounds.maxX - size.width),
-                        y: below ? sel.minY - size.height - 8 : sel.maxY + 8)
+        let p = MSOverlayToolbar.readoutOrigin(selection: sel, bounds: bounds,
+                                              readoutSize: size, toolbar: toolbarLayout?.rect)
         s.draw(at: p)
     }
 
@@ -411,28 +411,20 @@ public final class MSOverlayView: NSView {
 
     // MARK: - toolbar (compact; tool letters are the primary path)
 
-    private var toolbarRect: CGRect?
+    private var toolbarLayout: MSOverlayToolbar.Layout?
 
     private func drawToolbar(_ sel: CGRect, in ctx: CGContext) {
-        let item: CGFloat = 26, gap: CGFloat = 2
-        let tools = MSTool.allCases
-        let width = CGFloat(tools.count) * (item + gap) + 6 * 18 + 250
-        let height: CGFloat = 34
-        var rect = CGRect(x: sel.minX, y: sel.minY - height - 6, width: min(width, bounds.width - 12), height: height)
-        if rect.minY < 4 { rect.origin.y = sel.maxY + 6 }
-        toolbarRect = rect
-
+        let layout = MSOverlayToolbar.layout(selection: sel, bounds: bounds,
+                                            tools: MSTool.allCases, colors: Array(palette.prefix(6)))
+        toolbarLayout = layout
+        let rect = layout.rect
         ctx.saveGState()
         ctx.setFillColor(NSColor.windowBackgroundColor.withAlphaComponent(0.96).cgColor)
         ctx.addPath(CGPath(roundedRect: rect, cornerWidth: 8, cornerHeight: 8, transform: nil))
         ctx.fillPath()
         ctx.setStrokeColor(NSColor.separatorColor.cgColor); ctx.strokePath()
 
-        var x = rect.minX + 4
-        for t in tools {
-            let box = CGRect(x: x, y: rect.minY + 4, width: item, height: item)
-            x += item + gap
-            if box.maxX > rect.maxX - 250 { break }
+        for (t, box) in layout.toolBoxes {
             if t == tool {
                 ctx.setFillColor(NSColor.controlAccentColor.withAlphaComponent(0.22).cgColor)
                 ctx.fill(box)
@@ -441,11 +433,7 @@ public final class MSOverlayView: NSView {
                 .font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.labelColor,
             ]).draw(at: NSPoint(x: box.midX - 4, y: box.midY - 8))
         }
-        var cx = x + 8
-        for hex in palette.prefix(6) {
-            let box = CGRect(x: cx, y: rect.midY - 7, width: 14, height: 14)
-            cx += 18
-            guard box.maxX < rect.maxX - 250 else { break }
+        for (hex, box) in layout.colorBoxes {
             ctx.setFillColor(NSColor(hex: hex)?.cgColor ?? NSColor.red.cgColor)
             ctx.fillEllipse(in: box)
             if hex == colorHex {
@@ -453,27 +441,19 @@ public final class MSOverlayView: NSView {
                 ctx.strokeEllipse(in: box.insetBy(dx: -2, dy: -2))
             }
         }
-        NSAttributedString(string: "Enter 贴出  ⌘C 复制  ⌘S 保存  Esc 取消", attributes: [
-            .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor,
-        ]).draw(at: NSPoint(x: rect.maxX - 240, y: rect.midY - 7))
+        if layout.showsActions {
+            NSAttributedString(string: "Enter 贴出  ⌘C 复制  ⌘S 保存  Esc 取消", attributes: [
+                .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor,
+            ]).draw(at: NSPoint(x: rect.maxX - 240, y: rect.midY - 7))
+        }
         ctx.restoreGState()
     }
 
+    /// 命中区直接取绘制用的同一份 layout：两处各算一遍就是 ✕ 那个 bug 的成因。
     private func hitToolbar(_ p: NSPoint) -> Bool {
-        guard let r = toolbarRect, r.contains(p) else { return false }
-        let item: CGFloat = 26, gap: CGFloat = 2
-        var x = r.minX + 4
-        for t in MSTool.allCases {
-            let box = CGRect(x: x, y: r.minY + 4, width: item, height: item)
-            x += item + gap
-            if box.contains(p) { tool = t; return true }
-        }
-        var cx = r.minX + CGFloat(MSTool.allCases.count) * (item + gap) + 12
-        for hex in palette.prefix(6) {
-            let box = CGRect(x: cx, y: r.midY - 7, width: 14, height: 14)
-            cx += 18
-            if box.insetBy(dx: -3, dy: -3).contains(p) { colorHex = hex; return true }
-        }
+        guard let layout = toolbarLayout, layout.rect.contains(p) else { return false }
+        for (t, box) in layout.toolBoxes where box.contains(p) { tool = t; return true }
+        for (hex, box) in layout.colorBoxes where box.insetBy(dx: -3, dy: -3).contains(p) { colorHex = hex; return true }
         return true
     }
 

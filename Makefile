@@ -7,7 +7,7 @@ RELEASE   := $(DERIVED)/Build/Products/Release/MacShot.app
 ICNS      := build/macshot.icns
 VERSION   := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Config/Info.plist 2>/dev/null)
 
-.PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission probe-menu icon appicon
+.PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome icon appicon
 
 doctor:
 	@sh scripts/doctor.sh
@@ -51,6 +51,9 @@ probe-permission: appicon
 	@"$(PRODUCT)/Contents/MacOS/MacShot" --probe-permission
 probe-menu: appicon
 	@"$(PRODUCT)/Contents/MacOS/MacShot" --probe-menu
+probe-chrome: appicon
+	@"$(PRODUCT)/Contents/MacOS/MacShot" --dump-chrome build/chrome.png
+	@echo "→ build/chrome.png（遮罩界面自绘，用来看，不是用来判绿）"
 
 sign: build
 	codesign --force --sign - --timestamp=none "$(PRODUCT)"

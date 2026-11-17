@@ -61,6 +61,12 @@ if CommandLine.arguments.contains("--probe-capture") {
     dispatchMain()
 }
 
+// --dump-chrome <png>：把遮罩界面离屏自绘成 PNG（不采集、不碰 TCC），给"眼睛"补一次账。
+if let i = CommandLine.arguments.firstIndex(of: "--dump-chrome") {
+    let out = CommandLine.arguments.count > i + 1 ? CommandLine.arguments[i + 1] : "build/chrome.png"
+    MainActor.assumeIsolated { MSChromeDump.run(to: out) }
+}
+
 if CommandLine.arguments.contains("--probe-menu") {
     let app = NSApplication.shared
     let delegate = MainActor.assumeIsolated { MSAppDelegate(autoSnip: false) }
