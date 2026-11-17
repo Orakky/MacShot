@@ -8,6 +8,22 @@ public struct MSIntPoint: Hashable, Sendable, Codable {
     public var y: Int
     public init(x: Int, y: Int) { self.x = x; self.y = y }
     public static let zero = MSIntPoint(x: 0, y: 0)
+
+    /// 画布像素（选区本地，原点左上、y 向下）→ 视图点（y 向上），即 `MSIntRect(flippedLogical:scale:)`
+    /// 的反向。文字 field editor 要按画布锚点摆到屏幕上，必须有显式函数而不是就地再写一遍乘除
+    /// （`ADR-013` §6：新换算先写单测）。
+    public func viewPoint(in selection: CGRect, scale: CGFloat) -> CGPoint {
+        CGPoint(x: selection.minX + CGFloat(x) / scale,
+                y: selection.maxY - CGFloat(y) / scale)
+    }
+
+    /// 正向：视图点（y 向上）→ 画布像素（选区本地，y 向下）。
+    /// 两个方向必须放在一起、互为逆运算，否则就会出现"某处又翻了一遍 y"的坐标 bug
+    /// （2026-11-16 实拍抓到的 ✕ 画在左下就是这种形状）。
+    public static func canvasPoint(of view: CGPoint, in selection: CGRect, scale: CGFloat) -> MSIntPoint {
+        MSIntPoint(x: Int(((view.x - selection.minX) * scale).rounded()),
+                   y: Int(((selection.maxY - view.y) * scale).rounded()))
+    }
 }
 
 public struct MSIntSize: Hashable, Sendable, Codable {

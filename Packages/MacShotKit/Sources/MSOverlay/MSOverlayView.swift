@@ -44,13 +44,13 @@ public enum OverlayChrome {
 /// 之前 `rect` 占的是 `R` —— 那是 §2 里"重复上次区域"（P1）的键，属于自己造冲突，已按表改回 `M`。
 /// 仍缺 `T`＝文字：它要 field editor，随文字批一起落地，这里不占空位。
 public enum MSTool: String, CaseIterable, Sendable {
-    case select, rect, ellipse, arrow, polyline, highlighter, pen, blur, badge, eraser
+    case select, rect, ellipse, arrow, polyline, highlighter, pen, blur, badge, eraser, text
 
     public var letter: String {
         switch self {
         case .select: "V"; case .rect: "M"; case .ellipse: "O"; case .arrow: "A"
         case .polyline: "L"; case .highlighter: "H"; case .pen: "P"; case .blur: "B"
-        case .badge: "N"; case .eraser: "E"
+        case .badge: "N"; case .eraser: "E"; case .text: "T"
         }
     }
 
@@ -66,6 +66,7 @@ public enum MSTool: String, CaseIterable, Sendable {
         case .blur: .blur
         case .badge: .badge
         case .eraser: .eraser
+        case .text: .text
         }
     }
 
@@ -486,6 +487,15 @@ public final class MSOverlayView: NSView {
             return
         }
         guard !hitToolbar(p) else { needsDisplay = true; return }
+        if let editing = textEditing {
+            // 点到编辑框外＝先把这段文字了结（提交），再走正常路由；框内交给 field editor 自己
+            if !editing.textView.frame.contains(p) { commitTextEditing() }
+            else { return }
+        }
+        if tool == .text, let sel = selection, sel.contains(p) {
+            beginTextEditing(at: docPoint(p, in: sel))
+            return
+        }
         if tool.isClickAction, let sel = selection, sel.contains(p) {
             performClickAction(at: docPoint(p, in: sel))
             return
@@ -601,12 +611,116 @@ public final class MSOverlayView: NSView {
     private func cancel() { if let host { delegate?.overlayDidCancel(host) } }
     public func cancelViaEscape() { MSLog.info(.overlay, "cancel via Esc path"); cancel() }
 
-    /// View point (y-up) → canvas pixel of the current selection (y-down).
+    // MARK: - 文字输入子态（ST-003）
+
+    /// field editor 的状态。`elementID == nil` 是新建，否则是在改既有元素的文本。
+    private struct TextEditing {
+        let elementID: UUID?
+        let anchor: MSIntPoint
+        let before: MSAnnotationElement?
+        let textView: NSTextView
+    }
+
+    private var textEditing: TextEditing?
+
+    /// 现在是不是在"文字输入"子态里（状态机查询点，测试也用它）。
+    public var isEditingText: Bool { textEditing != nil }
+
+    /// 测试缝：当前 field editor（不在编辑态时为 nil）。写它的 `string` 等价于用户敲完这段字。
+    var editorTextView: NSTextView? { textEditing?.textView }
+
+    /// 画布锚点 → field editor 的视图矩形。锚点是**文字左上角**，而视图 y 向上，所以框向下长。
+    /// 字号从画布像素换算回点（`/scale`），与渲染器在导出/显示两路上用的是同一个字号语义。
+    static func editorFrame(anchor: MSIntPoint, selection: CGRect, scale: CGFloat,
+                            fontSize: Int, lines: Int = 1, width: CGFloat = 260) -> CGRect {
+        let top = anchor.viewPoint(in: selection, scale: scale)
+        let lineHeight = max(10, CGFloat(fontSize) / scale * 1.32)
+        let height = lineHeight * CGFloat(max(1, lines)) + 4
+        return CGRect(x: top.x, y: top.y - height, width: width, height: height)
+    }
+
+    func beginTextEditing(at dp: MSIntPoint, existing: MSAnnotationElement? = nil) {
+        guard selection != nil else { return }
+        if textEditing != nil { finishTextEditing() }
+        let style = currentStyle()
+        let tv = NSTextView()
+        tv.string = existing?.text ?? ""
+        tv.drawsBackground = false
+        tv.backgroundColor = .clear
+        tv.isRichText = false
+        tv.allowsUndo = true
+        tv.font = NSFont.systemFont(ofSize: max(9, CGFloat(style.fontSize) / display.scale))
+        tv.textColor = NSColor(cgColor: style.stroke.cgColor) ?? .white
+        tv.insertionPointColor = NSColor(cgColor: style.stroke.cgColor) ?? .white
+        tv.textContainerInset = NSSize(width: 2, height: 2)
+        tv.frame = Self.editorFrame(anchor: dp, selection: selection ?? bounds,
+                                    scale: display.scale, fontSize: style.fontSize)
+        addSubview(tv)
+        window?.makeFirstResponder(tv)
+        textEditing = TextEditing(elementID: existing?.id, anchor: dp, before: existing, textView: tv)
+        needsDisplay = true
+        MSLog.info(.annotate, "text editing begin at \(dp.x),\(dp.y) font=\(style.fontSize)px existing=\(existing != nil)")
+    }
+
+    /// `⌘Enter` / `Enter` 提交。空文本**不入撤销记录**（否则用户要为一件没发生的事按 `⌘Z`）。
+    @discardableResult
+    func commitTextEditing() -> Bool {
+        guard let editing = textEditing else { return false }
+        let text = editing.textView.string
+        finishTextEditing()
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            MSLog.info(.annotate, "text commit skipped（空文本）")
+            return false
+        }
+        guard var doc = document else { return false }
+        if let before = editing.before {
+            var after = before
+            after.text = text
+            history.apply(.replace(before: before, after: after), to: &doc)
+        } else {
+            history.apply(.insert(MSAnnotationElement(kind: .text, points: [editing.anchor],
+                                                     style: currentStyle(), text: text)), to: &doc)
+        }
+        document = doc
+        cachedComposite = nil
+        needsDisplay = true
+        MSLog.info(.annotate, "text committed chars=\(text.count) lines=\(text.components(separatedBy: "\n").count)")
+        return true
+    }
+
+    /// `Esc` 放弃输入：只退子态，**不退整个遮罩**（ST-003 的注意栏，也是 `FR-SESS-002` 不被削弱的前提）。
+    func abortTextEditing() {
+        guard textEditing != nil else { return }
+        finishTextEditing()
+        MSLog.info(.annotate, "text editing aborted（无记录）")
+    }
+
+    private func finishTextEditing() {
+        textEditing?.textView.removeFromSuperview()
+        textEditing = nil
+        needsDisplay = true
+    }
+
+    /// 子态内的按键：`Esc` 放弃 / `Enter`·`⌘Enter` 提交 / `⇧Enter` 换行；
+    /// 其余（含 `⌘C/⌘V/⌘Z` 和删除键）返回 false 交回 field editor，**不许**落到会话分支上去抢。
+    private func handleTextKey(_ event: NSEvent) -> Bool {
+        guard textEditing != nil else { return false }
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        switch event.keyCode {
+        case 53:
+            abortTextEditing(); return true
+        case 36, 76:
+            if flags.contains(.shift) { return false }   // 换行交给 field editor：它本来就吃 ⇧Enter
+            commitTextEditing(); return true
+        default:
+            return false
+        }
+    }
+
+    /// View point (y-up) → canvas pixel of the current selection (y-down)。
+    /// 换算本体在 `MSCore`，和逆运算 `viewPoint(in:scale:)` 放在一起成对测（ADR-013）。
     private func docPoint(_ p: NSPoint, in sel: CGRect) -> MSIntPoint {
-        let s = display.scale
-        let x = (p.x - sel.minX) * s
-        let y = (sel.maxY - p.y) * s
-        return MSIntPoint(x: Int(x.rounded()), y: Int(y.rounded()))
+        MSIntPoint.canvasPoint(of: p, in: sel, scale: display.scale)
     }
 
     private func translation(for handle: MSSelectionGeometry.Handle, from original: CGRect, to p: NSPoint) -> CGSize {
@@ -640,6 +754,7 @@ public final class MSOverlayView: NSView {
     /// 因为键到底走 responder 还是 monitor 取决于 app 激活时序，两条都要通。
     @discardableResult
     public func handleKey(_ event: NSEvent) -> Bool {
+        if textEditing != nil { return handleTextKey(event) }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         switch event.keyCode {
         case 53:
@@ -667,7 +782,12 @@ public final class MSOverlayView: NSView {
         default:
             guard selection != nil || MSTool.allCases.contains(where: { $0.letter.lowercased() == event.charactersIgnoringModifiers?.lowercased() }) else { return false }
             if let t = MSTool.allCases.first(where: { $0.letter.lowercased() == event.charactersIgnoringModifiers?.lowercased() }),
-               !flags.contains(.command) { tool = t; return true }
+               !flags.contains(.command) {
+                // ST-003 工具待落笔：再按同一个键＝收回工具，回到选择态
+                tool = (t == self.tool && t != .select) ? .select : t
+                needsDisplay = true
+                return true
+            }
             switch event.charactersIgnoringModifiers?.lowercased() {
             case "]": lineWidth = min(12, lineWidth + 1); needsDisplay = true; return true
             case "[": lineWidth = max(1, lineWidth - 1); needsDisplay = true; return true

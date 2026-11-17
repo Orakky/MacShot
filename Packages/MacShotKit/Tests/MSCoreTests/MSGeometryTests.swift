@@ -159,3 +159,35 @@ struct MSKeyBindabilityTests {
         #expect(MSKeyCombo(keyCode: 122).display != "A")
     }
 }
+
+/// 画布像素 ⇄ 视图点 是一对逆运算（`ADR-013`）。放在 MSCore 里成对出现，
+/// 是为了让"某处又翻了一遍 y"这类 bug 变成可断言的性质，而不是靠人眼盯。
+struct CanvasViewRoundTripTests {
+    @Test("往返：视图点 → 画布 → 视图点 落在半像素内")
+    func roundTripStaysWithinHalfPixel() {
+        let selection = CGRect(x: 120, y: 40, width: 640, height: 480)
+        for scale in [1.0, 2.0, 1.799, 1.6] {
+            for gx in stride(from: 0.0, through: 640.0, by: 37.5) {
+                for gy in stride(from: 0.0, through: 480.0, by: 29.25) {
+                    let p = CGPoint(x: selection.minX + gx, y: selection.minY + gy)
+                    let back = MSIntPoint.canvasPoint(of: p, in: selection, scale: scale)
+                        .viewPoint(in: selection, scale: scale)
+                    #expect(abs(back.x - p.x) <= 0.5, "scale=\(scale) x 漂了 \(back.x - p.x)")   // 舍入往返的数学下界就是半个像素
+                    // y 是翻转轴：漂移同样必须小于半像素，且方向不能反
+                    #expect(abs(back.y - p.y) <= 0.5, "scale=\(scale) y 漂了 \(back.y - p.y)")
+                }
+            }
+        }
+    }
+
+    @Test("方向：画布 y 向下、视图 y 向上，选区内同一处的两个读数")
+    func axisDirectionsArePinned() {
+        let selection = CGRect(x: 100, y: 200, width: 400, height: 300)   // 视图 y 向上：200…500
+        // 选区左上角＝画布 (0,0)，在视图里是 maxY=500
+        #expect(MSIntPoint(x: 0, y: 0).viewPoint(in: selection, scale: 1) == CGPoint(x: 100, y: 500))
+        // 画布 (400,300)＝选区右下角，在视图里是 (minX+w, minY)
+        #expect(MSIntPoint(x: 400, y: 300).viewPoint(in: selection, scale: 1) == CGPoint(x: 500, y: 200))
+        #expect(MSIntPoint.canvasPoint(of: CGPoint(x: 100, y: 500), in: selection, scale: 2) == MSIntPoint(x: 0, y: 0))
+        #expect(MSIntPoint.canvasPoint(of: CGPoint(x: 300, y: 350), in: selection, scale: 2) == MSIntPoint(x: 400, y: 300))
+    }
+}

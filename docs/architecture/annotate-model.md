@@ -68,11 +68,25 @@ JSON 形态（`.macshot` 未来即此 JSON + 位图，见 ADR-009）：
 | `blur` | 马赛克 / 模糊 | [起点, 对角点] | 否 | 是 | 需要源位图（§5.4） |
 | `eraser` | 橡皮擦 | **不产生元素** | — | — | 删除命中的**最上层**元素（z 最大）；一次点击＝一条撤销记录；没命中任何元素时**不入栈**（否则用户要按一次 `⌘Z` 才撤销"没发生的事"） |
 
-接线状态（2026-11-16）：`rect ellipse arrow polyline freehand(画笔/荧光笔两变体) blur badge eraser` 已在遮罩内可用（`MSTool`，键位按 `design/keymap.md` §3 真源；`rect` 此前占的是 `R`，与 §2 的"重复上次区域"撞车，已改回 `M`）。**`text`(T) 仍未接**——它要 field editor，属 M-4 收尾批（`FR-ANN-007`）。
+接线状态（2026-11-16）：`rect ellipse arrow polyline freehand(画笔/荧光笔两变体) blur badge eraser` 已在遮罩内可用（`MSTool`，键位按 `design/keymap.md` §3 真源；`rect` 此前占的是 `R`，与 §2 的"重复上次区域"撞车，已改回 `M`）。`text`(T) 已于同日接入（field editor 子态，判据见 §6b）。
 `badge`/`eraser` 的行为判据在 `Tests/MSOverlayTests/AnnotationToolTests.swift`（含"撤销把序号计数器一起退回"与"未填充形状只有轮廓可命中"两条实测出来的语义）。
 | `line` `spotlight` `crop` | 直线 / 聚光灯 / 二次裁剪 | 同上 | — | — | P1，Q-03 选项 B 才进 P0 |
 
 `Kind` 用枚举而非字符串：JSON 编码为稳定 rawValue。新增 kind 属于 schema 演进（加 rawValue，不改旧值）。
+
+## 6b. 文字输入子态（ST-003 的实现契约）
+
+| 项 | 定稿 | 判据 |
+|---|---|---|
+| 进入 | 工具 `T` + 在选区内按下 → 以落点为**文字左上角**开 field editor | `editorFrame` 单测：锚点画布 (0,0) 贴选区上沿、行数越多框越向下长 |
+| 提交 | `Enter` 或 `⌘Enter` | `TextEditingTests`：提交后 `element.text` 逐字可读、`kind == .text`（不是位图，`FR-ANN-007`） |
+| 换行 | `⇧Enter` **不**提交，交回 field editor 自己插换行 | 同一测试断言 `handleKey` 不消费该键且仍在子态 |
+| 放弃 | `Esc` 只退子态，**不退会话**，且不入撤销栈 | 测试用 `Spy` 数 `overlayDidCancel` 次数：子态内 0 次，对照非子态 1 次 |
+| 空文本 | 提交空串不入记录 | `undo` 返回 false |
+| 再编辑 | 走 `.replace(before:after:)`，元素 id 不变 | 三行文本后 `elements.count` 仍 1 且 `id` 相同；bounds 高度增大 |
+| 坐标 | 画布像素 ⇄ 视图点用 `MSIntPoint.canvasPoint/viewPoint` 成对函数（MSCore） | 往返单测 ×4 种 scale，漂移 ≤ 半像素 |
+
+`⌘C/⌘V/⌘Z/删除/方向键` 在子态内一律返回"未消费"，交回 field editor —— 会话级快捷键不许在打字时抢键。
 
 ## 5. 渲染器契约
 
