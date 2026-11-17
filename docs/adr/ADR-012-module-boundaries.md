@@ -1,6 +1,6 @@
 # ADR-012 模块切分与依赖方向
 
-状态：**proposed** 日期：2026-11-16 相关：ADR-001、`docs/charter.md` §4、`docs/architecture/modules.md`
+状态：**accepted**（11-17 签） 日期：2026-11-16 相关：ADR-001、`docs/charter.md` §4、`docs/architecture/modules.md`
 
 ## 决策（建议）
 10 个包内模块 + `App/` 组合根，依赖方向单向（`modules.md` §11 的图）。`MSCapture` 不依赖任何 UI；`MSAnnotate` 不 import `NSWindow`；逻辑代码一律可在 `swift test` 下跑。

@@ -5,7 +5,7 @@
 
 ## 1. 四条原则（评审时用来否决）
 
-1. **内容优先**：UI 永远压在图片之上但不吃掉图片——工具条悬浮、可自动隐藏、绝不做模态遮罩。
+1. **内容优先**：UI 永远压在图片之上但不吃掉图片——工具条悬浮、**常驻不自动隐藏**（11-17 Q-14 裁 C，原"可自动隐藏"作废；理由：找不到条子比条子挡一下更烦人）、绝不做模态遮罩。
 2. **即时可逆**：任何动作 1 步内可撤销；破坏性动作（销毁贴图、清空标注）必须可见提示。
 3. **系统一致优先于自定义**：能用系统控件（明暗、控件高度、SF 字体、SF Symbols）就不自绘；自绘只在画布/遮罩/贴图这三处。
 4. **键盘是主路径**：四大件全链路可纯键盘完成（`keymap.md`），鼠标只是加速器。
@@ -89,7 +89,8 @@
 
 ## 5. 图标
 
-来源：**SF Symbols**（不引第三方图标库，ADR-015）。名称是候选，实现前必须在 Xcode 的 SF Symbols app 里核对可用性（**待核对**，`T-0xx`）。
+来源：**SF Symbols**（不引第三方图标库，ADR-015）。
+> **11-17 已在本机核对**（`NSImage(systemSymbolName:)` 实测 21 个候选）：`rectangle` `oval` `arrow.up.right` `pencil.line` `highlighter` `character.cursor.ibeam` `number` `circle.grid.2x2` `eraser` `cursorarrow` `arrow.uturn.backward/forward` `pin` `square.and.arrow.down` `doc.on.doc` `xmark` `plus` **全部存在**；只有折线箭头的 `path.forward` 与 `curve` **两个都不存在** ⇒ 按本表既定规则自绘 12×12。换 macOS 版本后要重跑一次核对，符号名会漂移。
 
 | 工具/动作 | 候选 symbol | 备注 |
 |---|---|---|

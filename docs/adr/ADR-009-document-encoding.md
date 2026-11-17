@@ -1,6 +1,6 @@
 # ADR-009 标注文档编码：带 schemaVersion 的 JSON，M-1 出口冻结
 
-状态：**proposed** 日期：2026-11-16 相关：ADR-005、FR-SET-003、Q-06
+状态：**accepted**（11-17 签，v1 冻结清单见 annotate-model §3b） 日期：2026-11-16 相关：ADR-005、FR-SET-003、Q-06
 
 ## 背景
 D-04 让 `AnnotationDocument` 成为正式产物。P0 不落盘（Q-06 推荐 A），但**结构必须在 M-1 冻结**，因为贴图、导出、设置默认样式三处都引用它；P1 的 `.macshot` 只是"同一 JSON + 位图"的容器化。

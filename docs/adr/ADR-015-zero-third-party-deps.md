@@ -1,6 +1,6 @@
 # ADR-015 零第三方依赖 + 本机门禁脚本（无 brew 环境）
 
-状态：**proposed** 日期：2026-11-16 相关：ADR-001、ADR-010、`docs/protocol/coding-conventions.md`
+状态：**accepted**（11-17 签） 日期：2026-11-16 相关：ADR-001、ADR-010、`docs/protocol/coding-conventions.md`
 
 ## 背景
 本机没有 homebrew、没有签名证书（ADR-004）。引入任何第三方工具链（xcodegen/tuist/swiftlint/swiftformat/MASShortcut）都意味着"要么装工具、要么手写构建脚本"，而工具来源与更新无人可审。

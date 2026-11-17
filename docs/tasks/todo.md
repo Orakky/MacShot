@@ -59,6 +59,21 @@
 | T-070… | 设置窗 / 重绑 / 免面板直存 / 本地化 / 对比度脚本 | M-5 | FR-SET-001…003、NFR-024 |
 | T-080… | DMG / 兼容矩阵填满 / usage-report / 已知限制清单 | M-6 | NFR §5、vision §4 |
 
+## 第 2.5 档：11-17 裁决直接产生的工作（顺序即建议顺序）
+
+> 这一档不是我想加的活，是**签字换来的改动**。每条都写着"哪条裁决要它"，所以做完必须回写 `charter.md` §6b。
+
+| ID | 条目 | 出处 | 文件域 | 判据 | 状态 |
+|---|---|---|---|---|---|
+| T-090 | **自签证书验证**：登录钥匙串建 `MacShot Dev`，在**副本**上签一次，量是否解除 `-3801` 预拒绝与重复弹框；不通过就撤销 | Q-18=A | `scripts/`、`Makefile`、`permissions-tcc.md` | 同一份源码重编两次，第二次采集**不再**返回 `-3801` 且不再弹框 ⇒ 通过；否则撤销证书并如实记 | open |
+| T-091 | **剪贴板只写 PNG**：`MSClipboardWriter` 去掉 TIFF 表示 | Q-04 | `Sources/MSExport/`、`Tests/MSAnnotateTests` | 表示集合断言只剩 `public.png`；DPI 往返测试仍绿；`export-clipboard.md` §2 与代码一致 | open |
+| T-092 | **「置顶」＝贴出并写剪贴板**：`pin` 语义改造，`copyAndPin` 合并进 `pin` | Q-05 | `Sources/MSSession/`、`Sources/MSExport/`、`Tests/MSSessionTests` | ① `Enter` 后同时出现贴图与剪贴板 PNG ② `Esc` 仍**不写**剪贴板（哨兵判据方向相反，两条都要在）③ `⌘C` 只复制不贴 ④ `ST-001` 行 11/12 与 `V-036` 随之更新 | open |
+| T-093 | **放大镜 + 取色进 P0**（`FR-CAP-016`）：跟随光标的取样窗、像素放大、`C` 复制 Hex、`⇧C` 切格式、`⌥` 强制呼出 | Q-07 | `Sources/MSOverlay/`、`Sources/MSCore`(已有 sampler)、`Tests/MSOverlayTests` | 放大镜内像素与屏幕逐点一致；`C` 复制串与取样色一致；贴边自动翻位不出屏；`W/A/S/D` **不做**（仍 P1） | open |
+| T-094 | **工具条图标改 SF Symbols**：按 `design-system.md` §5 的核对表加载；折线箭头自绘 12×12 | B-027 | `Sources/MSOverlay/`、`Sources/MSPin/`、`Tests/MSOverlayTests` | `make probe-chrome` 出图目视一次；符号加载失败时**回落字母**而不是空白（与菜单栏图形同一条兜底纪律） | open |
+| T-095 | **热键持久化实测**：改绑后重启软件/重启电脑仍在 | Q-02 | `App/`、`Sources/MSSettings/`、`V-037` | `V-037④` 填实：改绑 → 退出 → 再启动 → 旧键不响应、新键响应；写盘位置与格式在 `permissions-tcc.md`/`runbook` 有出处 | open |
+| T-096 | **焦点还原实测（T-101）**：遮罩关闭后原 app 的前台与输入焦点都回来 | Q-15=A | `spikes/probe-01/`、`overlay-and-selection.md` §2、`V-006` | 四列真值表（激活与否 × 键盘可达 × 前台变化 × **原输入框可否继续输入**）；最后一列不成立就回到 Q-15 重签 | open |
+| T-097 | **10 张贴图的内存读数** | Q-12 的安全阀、NFR-005 | `scripts/perf-snip.sh`、`done.md` | 读数进 `done.md`；破线即触发回 Q-12 复审，不许"记一笔继续做" | open |
+
 ## 已知"提前做也没用"的项（防顺手实现）
 
 - 窗口/元素自动识别（要动权限策略，P1，ADR-017）。

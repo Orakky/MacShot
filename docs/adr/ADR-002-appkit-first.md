@@ -1,6 +1,6 @@
 # ADR-002 UI 技术栈：AppKit 优先，SwiftUI 只进设置面板
 
-状态：**proposed** 日期：2026-11-16 相关：ADR-001、FR-PIN-004、FR-SESS-003
+状态：**accepted**（11-17 签） 日期：2026-11-16 相关：ADR-001、FR-PIN-004、FR-SESS-003
 
 ## 背景
 遮罩、贴图、标注画布三类 UI 都有硬性系统要求：borderless 全屏窗、nonactivating panel、窗口 level 精确控制、`NSView` 级脏区重绘、裸事件路由（`mouseDragged` 期间要拦截并改语义）、`NSTextView` 输入容器。SwiftUI 对这些的覆盖程度决定实现能不能做。

@@ -54,6 +54,39 @@ JSON 形态（`.macshot` 未来即此 JSON + 位图，见 ADR-009）：
 
 字号换算规则：`style.fontSize` 存像素值；从 UI 上的"pt 档位"（12/14/18/24/32）换算成像素时用 `round(pt × scale)`，换算发生在创建元素那一刻（之后不再依赖 scale）。
 
+## 3b. schema v1 冻结清单（ADR-009，11-17 签）
+
+> 形态**取自实跑输出**（`JSONEncoder` + `.sortedKeys`，见 E-057），不是照着手写文档。
+> 冻结的含义：以下键名、rawValue 拼写、数值语义从此**只能加不能改**；改名/换语义＝v2，必须走迁移。
+
+顶层：
+
+| 键 | 类型 | 语义 | 冻结点 |
+|---|---|---|---|
+| `schemaVersion` | Int | 当前 = `1` | 读到时 **> 本地版本 ⇒ 拒绝并提示**，不许猜解（`NFR-018`） |
+| `canvasSize` | `{width, height}` Int | **画布像素**，不是逻辑点 | 单位写死在字段名里，禁止改成点 |
+| `badgeCounter` | Int | 序号自增值，从 1 起 | 撤销 `.badgeCounter(before:after:)` 依赖它 |
+| `currentStyle` | Style | 新建元素用的样式 | 与元素内 style 同结构 |
+| `elements` | [Element] | 元素表，顺序不承载语义（层级看 `z`） | 不许改成字典 |
+
+Element：`id`(UUID，大写带连字符的 `String(uuid)`) / `kind`(见下) / `points`([{x,y}] 画布像素) / `style`(**每个元素自带一份完整 style**) / `z`(Int) / `text`(String，可空) / `variant`(String?，**可选字段**，缺键视为 nil) / `boundsOverride`(MSIntRect?，可选)。
+
+Style：`stroke`{red,green,blue:UInt8 0…255; alpha:Double 0…1} / `fill`(同结构，可 null) / `lineWidth` / `cornerRadius` / `dash` / `arrowHead` / `fontSize` / `bold` / `blurKind` / `blurRadius`。
+
+rawValue 冻结（拼写即契约）：
+
+- `kind`：`rect` `ellipse` `arrow` `polyline` `freehand` `text` `badge` `blur` `eraser` `line` `spotlight` `crop`（后三个 P1，**先占位**，避免以后加值时被当成未知 kind）
+- `dash`：`solid` `dash` `dot` · `arrowHead`：`single` `double` `triangle` · `blurKind`：`pixelate` `gaussian`
+- `variant`：目前只有 `"pen"`；`null` = 荧光笔。加新值只能追加。
+
+三条**已知不优雅但已冻结**的取舍，写清楚免得以后被当成 bug 顺手"优化"：
+
+1. **每个元素复制一份完整 style**（13 个字段）。代价是文件冗余、改默认样式不会回写既有元素；收益是解码零依赖、元素自洽。要改成共享样式表属于 v2。
+2. **`points` 是画布像素**而不是逻辑点，所以同一文档在不同 scale 显示器上尺寸含义不变（`ADR-013` 的代价与收益都在这里）。
+3. **未知 `kind` ⇒ 拒绝整份文档**，不是跳过该元素。理由：静默丢元素比打不开更危险（`MSAnnotateTests` 有对应用例）。
+
+迁移策略（同时冻结）：v1 无外部引用、无历史文件（Q-06 不落盘），所以**首版不需要迁移器**；出现 v2 时必须提供 `v1 → v2` 的显式转换函数并保留 v1 读取能力至少一个大版本。
+
 ## 4. 工具集合（Q-03，推荐 9 件，含橡皮擦）与 `points` 语义
 
 | kind | 中文 | points 语义 | 可多段 | 参与烘焙 | 备注 |

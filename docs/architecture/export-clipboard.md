@@ -1,6 +1,6 @@
 # 导出与剪贴板
 
-> 机制真源：从 `AnnotationDocument` 到"用户能粘贴/打开的东西"。剪贴板表示的选择是 ADR-014（`proposed`）；命名模板字段是本文真源。
+> 机制真源：从 `AnnotationDocument` 到"用户能粘贴/打开的东西"。剪贴板表示 **ADR-014 已于 11-17 签＝仅 PNG**；命名模板字段是本文真源。
 
 ## 1. 唯一出口路径
 
@@ -20,7 +20,7 @@ ClipboardWriter  FileExporter      PinWindow（不烘焙，走文档）
 
 | 项 | 决策（待 ADR-014 accepted） | 依据 |
 |---|---|---|
-| 表示集合 | `public.png` + `public.tiff` 双表示 | PNG 给只认 PNG 的目标（浏览器/部分聊天软件），TIFF 给走 `NSImage` 的原生目标（Pages/Word/Finder 拖动）。**注意：Snipaste 是否双写未找到官方出处**，所以这条只能由实测目标应用粘贴结果决定，决策门见 `docs/protocol/verification.md`（Q-04 的验证表） |
+| 表示集合 | **仅 `public.png`**（11-17 Q-04 裁决） | 双写 TIFF 是当初的猜测档，Snipaste 是否双写始终没找到官方出处。用户裁定只写 PNG，粘贴兼容性由用户自行实测（`V-003` 矩阵降级为自测记录，不再是 ADR 的决策门）。**代价要写明白**：走 `NSImage` 的原生目标（Pages/Word/Finder 拖动）历史上偏好 TIFF，若实测失败，恢复 TIFF 只是加回一个表示，不动数据结构 |
 | 位图表示 | **不写** `NSBitmapImageRep` 类型化数据之外的东西 | 避免多份表示不一致 |
 | 文件表示 | P0 不写 `fileURL`（写了会让"粘贴到聊天框"变成贴附件，行为不可控） | P1 与"拖出"一起定（`FR-EXP-011`） |
 | 清空策略 | `clearContents()` 一次 → 同一次 `writeObjects` 写完 | 分两次写会出现"粘贴到半成品" |
@@ -70,9 +70,9 @@ public struct NamingTemplate {
 
 ```swift
 public enum CommitIntent: Sendable {
-    case pin                         // 默认出口（Q-05 A）：只贴出，不写剪贴板 —— 也是 ⌘P
+    case pin                         // 默认出口（11-17 裁决）：贴出 **并同时写入剪贴板**，之后可直接去粘贴 —— 也是 ⌘P
     case copy                        // ⌘C / ⌥Enter
-    case copyAndPin                  // ⌘⇧P（P1）
+    // copyAndPin 已删除：11-17 起「贴出」本身就带复制，它不再是另一个动作
     case savePanel                   // ⌘S
     case quickSave                   // ⌘⇧S
     case cancel                      // Esc：什么都不做（FR-SESS-002 判据：剪贴板哨兵不动）
@@ -82,7 +82,8 @@ public enum CommitIntent: Sendable {
 默认出口由 `AppPreferences.commitBehavior` 决定（`pin` / `copy` / `save`），**枚举本身不含默认值**：
 "按 Enter 发生什么"是会话层查表的结果，而不是 `CommitIntent` 的语义，这样改默认档不动任何状态机代码。
 
-`cancel` 与 `pin` 都不写剪贴板 —— 这条要专门测，因为"顺手复制"是实现里最容易犯的错。
+`cancel` 不写剪贴板 —— 这条要专门测（`CancelSentinelTests`），因为"顺手复制"是实现里最容易犯的错。
+`pin` **反过来必须写**：11-17 的裁决就是"置顶时同时复制"，所以它的判据是"剪贴板里有 PNG 且能粘"，两条测试方向相反，不能互相顶替。
 
 ## 6. 与贴图的关系（D-04 的体现）
 

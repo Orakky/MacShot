@@ -1,6 +1,6 @@
 # ADR-013 坐标系契约
 
-状态：**proposed** 日期：2026-11-16 相关：`docs/charter.md` §3、`capture-pipeline.md` §4、FR-CAP-004
+状态：**accepted**（11-17 签） 日期：2026-11-16 相关：`docs/charter.md` §3、`capture-pipeline.md` §4、FR-CAP-004
 
 ## 决策（建议）
 全项目只有两套坐标，且**换算只允许一个入口**：
