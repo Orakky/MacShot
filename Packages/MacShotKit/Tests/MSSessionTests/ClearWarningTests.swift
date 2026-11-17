@@ -139,6 +139,39 @@ struct ClearWarningTests {
         #expect(spy.selectionNotifications.count == 1, "第一次定选区只通知一次")
     }
 
+    /// 端到端那一环（`Effect → 分发器 → onToast`）现在能测了：会话带一个"创建但不呈现"
+    /// 的测试入口（`B-029` 11-17 裁决），所以判据跑完屏幕上**不会**出现遮罩。
+    @MainActor
+    @Test("改选区清空后 onToast 真收到那句文案，且全程没有呈现遮罩")
+    func coordinatorToastsWithoutPresenting() async throws {
+        let coord = MSSessionCoordinator(capturer: MSFakeCapturer(),
+                                         preferences: MSFakePreferences(),
+                                         pins: MSPinRegistry(),
+                                         clipboard: MSClipboardWriter(pasteboard: MSFakePasteboard()))
+        coord.presentsOverlay = false
+        var toasts: [String] = []
+        coord.onToast = { toasts.append($0) }
+        coord.handle(.snip)
+        for _ in 0..<40 where !coord.overlayVisible { try await Task.sleep(for: .milliseconds(25)) }
+        let window = try #require(coord.overlay, "遮罩窗应已创建")
+        #expect(!window.isVisible, "测试不许劫持屏幕：窗必须没呈现")
+
+        coord.overlay(window, elementCount: 2)
+        coord.overlay(window, selectionDidChange: CGRect(x: 0, y: 0, width: 120, height: 90))
+        #expect(toasts == [MSSessionCopy.annotationCleared], "got=\(toasts)")
+        // 回归护栏：会话中途的选区变化**不许**把遮罩关掉（11-17 我就写错过一次，
+        // 症状是 probe-freeze 里 visible=false + 日志刷 illegal migration effectsFinished）
+        #expect(coord.overlayVisible, "选区变化之后遮罩必须还在（finishEffects 误用的回归护栏）")
+
+        toasts.removeAll()
+        coord.overlay(window, elementCount: 0)
+        coord.overlay(window, selectionDidChange: CGRect(x: 0, y: 0, width: 90, height: 60))
+        #expect(toasts.isEmpty, "空清空不该弹提示，got=\(toasts)")
+        #expect(!window.isVisible, "跑完仍然没呈现过")
+    }
+
+    @MainActor
+
     // 端到端那一环（Effect → 分发器 → `onToast` → 屏上真出条）**没有**在这里测：
     // 要走通它必须让会话真的开遮罩，那会在开发者屏幕上弹一个全屏窗并留到进程退出——
     // 测试不该劫持人的屏幕。这条留作未验项（`B-029`），当前只由"分发器必须穷举"的门禁结构性兜住。

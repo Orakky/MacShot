@@ -172,11 +172,17 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
     private let fileExporter = MSFileExporter()
     private var reducer = MSSessionReducer()
 
-    private var overlay: MSOverlayWindow?
+    /// internal 只读（测试缝）：测试用它断言"窗创建了但没呈现"，生产代码不读。
+    private(set) var overlay: MSOverlayWindow?
     private var frozenFrame: MSCaptureFrame?
     private var displaySnapshot: [MSDisplay] = []
     private var activeDisplay: MSDisplay?
     private var frontAppBeforeSession: NSRunningApplication?
+
+    /// 测试入口（`B-029` 11-17 裁决）：生产路径恒为 true；false 时遮罩窗**创建但不呈现**，
+    /// 于是"Effect → 分发器 → onToast"这条端到端判据可以在不劫持开发者屏幕的前提下跑。
+    /// 判据本身要断言 `isVisible == false`，不是靠"我觉得没弹"。
+    var presentsOverlay = true
 
     public var onToast: ((String) -> Void)?
     public var onNeedsPermission: (() -> Void)?
@@ -270,7 +276,7 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
                 let window = MSOverlayWindow(display: display, frame: frame.image)
                 window.overlayDelegate = self
                 self.overlay = window
-                window.present()
+                if self.presentsOverlay { window.present() }
                 self.run(.overlayShown)
             } catch let error as MSCaptureError {
                 self.frozenFrame = nil
@@ -410,7 +416,15 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
 
     // MARK: - MSOverlayDelegate
 
-    public nonisolated func overlay(_ overlay: MSOverlayWindow, selectionDidChange rect: CGRect?) {}
+    /// `ST-001` 行 7 的入口。此前这条是 `nonisolated` 的**空函数**——
+    /// 意味着行 7 在生产里从来没人喂过事件，清空提示再怎么修也响不了（`E-058`）。
+    /// 注意：**不能**在这里调 `finishEffects()`——它的语义是"会话结束（关窗 + effectsFinished）"。
+    /// 11-17 我就这么写错过一次，症状是选区一变遮罩就消失、日志刷 `illegal migration effectsFinished`。
+    /// `run()` 本身已经就地执行效果。
+    public func overlay(_ overlay: MSOverlayWindow, selectionDidChange rect: CGRect?) {
+        let w = Int((rect?.width ?? 0).rounded()), h = Int((rect?.height ?? 0).rounded())
+        run(.selectionChanged(width: w, height: h))
+    }
 
     public func overlay(_ overlay: MSOverlayWindow, didRequest intent: MSCommitIntent) {
         run(.commitRequested(intent))
@@ -423,12 +437,10 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
     public func overlay(_ overlay: MSOverlayWindow, drawingPhaseDidChange phase: MSOverlayDrawingPhase) {
         if case .began = phase { run(.drawBegan) }
         if case .ended(let count) = phase { run(.elementCountChanged(count)) }
-        finishEffects()
     }
 
     public func overlay(_ overlay: MSOverlayWindow, elementCount: Int) {
         run(.elementCountChanged(elementCount))
-        finishEffects()
     }
 
     public func overlayDidCancel(_ overlay: MSOverlayWindow) {
