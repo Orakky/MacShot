@@ -209,7 +209,13 @@ public final class MSOverlayView: NSView {
         case move(grab: NSPoint, original: CGRect)
         case resize(handle: MSSelectionGeometry.Handle, original: CGRect)
         case draw(start: NSPoint)
+        /// 拖动已选中的元素：`recorder` 把上百次 mouseDragged 收成一条撤销记录（`ADR-011`）
+        case moveElement(recorder: MSDragRecorder, grab: MSIntPoint)
     }
+
+    /// 选中的元素 id。`FR-ANN-004`：点元素选中、点空白取消、把手只在选中时出现。
+    /// internal 是给 `@testable` 直接喂状态，不靠合成鼠标事件。
+    var selectedID: UUID?
 
     private let palette = ["#E83347", "#FF9500", "#FFCC00", "#34C759", "#0A84FF", "#AF52DE", "#000000", "#FFFFFF"]
 
@@ -290,6 +296,7 @@ public final class MSOverlayView: NSView {
              }
             ctx.restoreGState()
             drawSelectionContents(sel, in: ctx)
+            drawElementSelection(sel, in: ctx)
             drawHandles(sel, in: ctx)
             // 先算工具条再画读数：读数的落位要看工具条占没占外侧（同帧真值，不用上一帧的 layout）
             drawToolbar(sel, in: ctx)
@@ -362,6 +369,25 @@ public final class MSOverlayView: NSView {
         ctx.setLineWidth(1); ctx.stroke(sel.insetBy(dx: 0.5, dy: 0.5))
         ctx.setStrokeColor(MSColorRGBA.rgba(0, 0, 0, 0.55).cgColor)
         ctx.stroke(sel.insetBy(dx: 1.5, dy: 1.5))
+        ctx.restoreGState()
+    }
+
+    /// 选中元素的高亮框：`FR-ANN-004` 要求"点元素选中"要有可见反馈。
+    /// 画在文档坐标里再随选区落位，尺寸取元素的几何 bounds（含线宽外溢）。
+    private func drawElementSelection(_ sel: CGRect, in ctx: CGContext) {
+        guard let id = selectedID, let element = document?.elements.first(where: { $0.id == id }),
+              let box = MSAnnotationGeometry.bounds(of: element) else { return }
+        let pad = 2
+        let viewRect = CGRect(x: sel.minX + CGFloat(box.minX) / display.scale,
+                              y: sel.maxY - CGFloat(box.maxY) / display.scale,
+                              width: CGFloat(box.width) / display.scale,
+                              height: CGFloat(box.height) / display.scale)
+            .insetBy(dx: -CGFloat(pad), dy: -CGFloat(pad))
+        ctx.saveGState()
+        ctx.setStrokeColor(MSColorRGBA.rgb(10, 132, 255).cgColor)
+        ctx.setLineWidth(1.5)
+        ctx.setLineDash(phase: 0, lengths: [4, 3])
+        ctx.stroke(viewRect)
         ctx.restoreGState()
     }
 
@@ -480,6 +506,19 @@ public final class MSOverlayView: NSView {
             performClickAction(at: docPoint(p, in: sel))
             return
         }
+        if tool == .select, let sel = selection, sel.contains(p) {
+            let dp = MSIntPoint.canvasPoint(of: p, in: sel, scale: display.scale)
+            if let hit = elementAt(dp) {
+                selectedID = hit.id
+                if let before = document?.elements.first(where: { $0.id == hit.id }) {
+                    dragMode = .moveElement(recorder: MSDragRecorder(element: before), grab: dp)
+                }
+                needsDisplay = true
+                return
+            }
+            selectedID = nil          // 点空白＝取消选择
+            needsDisplay = true
+        }
         if let tool = tool.annotationKind, let sel = selection, sel.contains(p) {
             dragMode = .draw(start: p)
             draft = MSAnnotationElement(kind: tool, points: [docPoint(p, in: sel), docPoint(p, in: sel)],
@@ -502,6 +541,16 @@ public final class MSOverlayView: NSView {
     /// `N` 序号＝放一个自增徽章；`E` 橡皮擦＝删掉点到的最上层元素。
     /// 两者都是"一次动作 = 一条撤销记录"（`ADR-011`）；徽章的计数自增和插入打包成一条，
     /// 所以撤销徽章会把号码也退回去，不会留下空号。
+    /// 命中的最上层元素（z 最大）。命中区由 `MSAnnotationGeometry.hitTest` 定：
+    /// 未填充形状只有轮廓可命中，填充形状内部也算。
+    func elementAt(_ dp: MSIntPoint) -> MSAnnotationElement? {
+        guard let doc = document else { return nil }
+        let p = CGPoint(x: dp.x, y: dp.y)
+        return doc.elements
+            .filter { MSAnnotationGeometry.hitTest(p, element: $0, extraTolerance: 4) }
+            .max { $0.z < $1.z }
+    }
+
     func performClickAction(at dp: MSIntPoint) {
         guard var doc = document else { return }
         switch tool {
@@ -549,6 +598,19 @@ public final class MSOverlayView: NSView {
                                                    from: original, clampTo: bounds)
             _ = t
             setSelection(next)
+        case .moveElement(var recorder, let grab):
+            guard let sel = selection, let id = selectedID else { return }
+            let dp = MSIntPoint.canvasPoint(of: p, in: sel, scale: display.scale)
+            let dx = dp.x - grab.x, dy = dp.y - grab.y
+            guard var doc = document, let idx = doc.elements.firstIndex(where: { $0.id == id }) else { return }
+            var moved = doc.elements[idx]
+            moved.points = moved.points.map { MSIntPoint(x: $0.x + dx, y: $0.y + dy) }
+            recorder.update(moved)
+            doc.elements[idx] = moved
+            document = doc
+            cachedComposite = nil
+            dragMode = .moveElement(recorder: recorder, grab: grab)
+            needsDisplay = true
         case .draw(let start):
             guard var d = draft, let sel = selection else { return }
             let dp = docPoint(p, in: sel)
@@ -566,6 +628,17 @@ public final class MSOverlayView: NSView {
 
     public override func mouseUp(with event: NSEvent) {
         defer { dragMode = nil }
+        if case .moveElement(let recorder, _) = dragMode {
+            // 上百次 mouseDragged 只留一条记录；没真移动过就不留（`FR-ANN-005` 判据）
+            if let command = recorder.command, var doc = document {
+                history.apply(command, to: &doc)
+                document = doc
+                cachedComposite = nil
+                MSLog.info(.history, "元素拖动收尾：一条记录")
+            }
+            needsDisplay = true
+            return
+        }
         guard let d = draft else {
             if let sel = selection, sel.width < 4 || sel.height < 4 { setSelection(nil) }
             return
@@ -699,7 +772,8 @@ public final class MSOverlayView: NSView {
 
     /// View point (y-up) → canvas pixel of the current selection (y-down)。
     /// 换算本体在 `MSCore`，和逆运算 `viewPoint(in:scale:)` 放在一起成对测（ADR-013）。
-    private func docPoint(_ p: NSPoint, in sel: CGRect) -> MSIntPoint {
+    /// internal：`@testable` 用它把视图点换成画布点，测试因此不必自己再算一遍坐标（算错就是第二个 ✕）。
+    func docPoint(_ p: NSPoint, in sel: CGRect) -> MSIntPoint {
         MSIntPoint.canvasPoint(of: p, in: sel, scale: display.scale)
     }
 
@@ -756,6 +830,10 @@ public final class MSOverlayView: NSView {
             return false
         case 6 where flags.contains(.command):                             // ⌘Z / ⇧⌘Z
             if flags.contains(.shift) { redo() } else { undo() }; return true
+        case 30 where flags.contains(.command):                            // ⌘] 上移一层
+            changeLayer(up: true); return true
+        case 38 where flags.contains(.command):                            // ⌘[ 下移一层
+            changeLayer(up: false); return true
         case 51, 117:                                                       // Delete / Backspace
             if selection == nil { return false }
             deleteSelectedOrLast(); return true
@@ -800,10 +878,29 @@ public final class MSOverlayView: NSView {
         document = doc; cachedComposite = nil; needsDisplay = true
     }
 
-    private func deleteSelectedOrLast() {
-        guard var doc = document, let last = doc.elements.max(by: { $0.z < $1.z }) else { return }
-        history.apply(.remove(last), to: &doc)
+    /// `FR-ANN-004`：Delete 删**选中**的元素；没选中才退回"删最上层"（旧行为，别让人按了没反应）。
+    func deleteSelectedOrLast() {
+        guard var doc = document else { return }
+        let target = selectedID.flatMap { id in doc.elements.first { $0.id == id } }
+            ?? doc.elements.max(by: { $0.z < $1.z })
+        guard let victim = target else { return }
+        history.apply(.remove(victim), to: &doc)
+        if selectedID == victim.id { selectedID = nil }
         document = doc; cachedComposite = nil; needsDisplay = true
+    }
+
+    /// z 序上移/下移（`⌘]` / `⌘[`）。没选中就什么都不做——层级是元素属性，不是全局动作。
+    func changeLayer(up: Bool) {
+        guard var doc = document, let id = selectedID, doc.elements.contains(where: { $0.id == id }) else {
+            MSLog.debug(.annotate, up ? "raise 无选中，忽略" : "lower 无选中，忽略")
+            return
+        }
+        if up { doc.raise(id: id) } else { doc.lower(id: id) }
+        document = doc
+        cachedComposite = nil
+        needsDisplay = true
+        let z = doc.elements.first { $0.id == id }?.z ?? -1
+        MSLog.info(.annotate, "layer \(up ? "up" : "down") z=\(z)")
     }
 
     /// The document the session exports. Empty document when nothing was drawn (still a valid
