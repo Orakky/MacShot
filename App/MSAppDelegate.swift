@@ -188,6 +188,19 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// 这一行就会永远停在第一次的值上（实测过的失效形状）。
     private var permissionMenuItem: NSMenuItem?
 
+    /// `--snip-then-cancel <ms>`：开遮罩 → 冻住 → 到点走**和 Esc 同一条**取消路径退出。
+    /// 给 `scripts/probe-freeze.sh` 用：连拍两张遮罩图必须逐字节相同（背景真被冻住），
+    /// 同时校验真剪贴板的哨兵没被动过（`FR-SESS-002` 判据④）。
+    func probeSnipThenCancel(after ms: Int) {
+        coordinator.handle(.snip)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double(ms) / 1000) { [weak self] in
+            guard let self else { return }
+            MSLog.info(.session, "probe cancel visible=\(self.coordinator.overlayVisible)")
+            self.coordinator.cancelSession()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { exit(0) }
+        }
+    }
+
     /// `--probe-menu`：把"权限行这次真的换过话"做成可打印的证据。
     /// `attached` 是关键——握住的对象必须就是菜单里那一行，否则写了也白写。
     func probeStatusMenu(refreshes: Int = 3) {

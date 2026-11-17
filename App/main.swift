@@ -67,6 +67,19 @@ if let i = CommandLine.arguments.firstIndex(of: "--dump-chrome") {
     MainActor.assumeIsolated { MSChromeDump.run(to: out) }
 }
 
+// --snip-then-cancel <ms>：开遮罩，到点走与 Esc 同一条取消路径退出（probe-freeze 用）。
+if let i = CommandLine.arguments.firstIndex(of: "--snip-then-cancel") {
+    let ms = CommandLine.arguments.count > i + 1 ? (Int(CommandLine.arguments[i + 1]) ?? 2_500) : 2_500
+    let app = NSApplication.shared
+    let delegate = MainActor.assumeIsolated { MSAppDelegate(autoSnip: false) }
+    app.delegate = delegate
+    app.setActivationPolicy(.accessory)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        MainActor.assumeIsolated { delegate.probeSnipThenCancel(after: ms) }
+    }
+    app.run()
+}
+
 if CommandLine.arguments.contains("--probe-menu") {
     let app = NSApplication.shared
     let delegate = MainActor.assumeIsolated { MSAppDelegate(autoSnip: false) }

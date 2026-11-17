@@ -7,7 +7,7 @@ RELEASE   := $(DERIVED)/Build/Products/Release/MacShot.app
 ICNS      := build/macshot.icns
 VERSION   := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Config/Info.plist 2>/dev/null)
 
-.PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome icon appicon
+.PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-freeze icon appicon
 
 doctor:
 	@sh scripts/doctor.sh
@@ -54,6 +54,10 @@ probe-menu: appicon
 probe-chrome: appicon
 	@"$(PRODUCT)/Contents/MacOS/MacShot" --dump-chrome build/chrome.png
 	@echo "→ build/chrome.png（遮罩界面自绘，用来看，不是用来判绿）"
+
+# 冻结语义 + 剪贴板哨兵的运行时取证：会在你屏幕上开约 4 秒遮罩
+probe-freeze: appicon
+	@sh scripts/probe-freeze.sh
 
 sign: build
 	codesign --force --sign - --timestamp=none "$(PRODUCT)"
