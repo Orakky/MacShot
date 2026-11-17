@@ -43,7 +43,7 @@ for base in sys.argv[1].split():
 print(total)
 PYEOF
 )
-echo "⚠ 含中文的 .swift 文件 $zh 个（ADR-016 落地后应只剩 MSStrings.swift 与测试夹具）"
+# 11-17 ADR-016 已裁：中文是唯一界面语言，不做本地化基建 ⇒ 这条统计作废（它把已定过的事当待办，是噪音）
 
 over=$(find $SRC -name '*.swift' -print0 2>/dev/null | xargs -0 awk 'FNR==401 { print FILENAME }' 2>/dev/null)
 if [ -n "$over" ]; then

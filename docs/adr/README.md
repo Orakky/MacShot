@@ -3,7 +3,7 @@
 > 规则：一条决策一个文件，文件名 `ADR-<序号>-<kebab-slug>.md`，模板见 `docs/templates/adr.md`。
 > **状态 `proposed` 的决策不得落地为代码**（章程 §7）。用户签字后改为 `accepted`。
 > 待裁决的架构问题就登记在本表（不另开清单）：凡状态列为 `proposed` 的行，都需要用户点头。
-> 当前计数（2026-11-17）：**accepted 15**（001…015）· **proposed 1**（016 本地化，待单独裁决）。
+> 当前计数（2026-11-17）：**accepted 16 / proposed 0**——16 条全部签完，`proposed 不得落地` 这条纪律从今起有牙齿了。
 > 说明：11-16 放行开发时这些决策已按推荐档落地成代码，"proposed 不得落地"的纪律当时是被事实突破的；11-17 逐条签完，纪律恢复正常。
 
 | ID | 标题 | 状态 | 决定什么 | 被谁引用 |
@@ -23,7 +23,7 @@
 | ADR-013 | 坐标系规约：逻辑=AppKit 全局 y 向上；像素=显示器本地 y 向下 | **accepted**（11-17 签） | 全部几何函数签名；违反即 bug | `docs/architecture/capture-pipeline.md` |
 | ADR-014 | 剪贴板表示：PNG + TIFF 双表示 + DPI 元数据（= 章程 Q-04） | **accepted**（11-17 签＝仅 PNG，不写 TIFF） | 跨应用粘贴兼容性、体积 | `docs/architecture/export-clipboard.md` |
 | ADR-015 | 零第三方依赖 + 无 brew 环境下的本地门禁脚本 | **accepted**（11-17 签） | 能否引入 swiftlint/xcodegen；`scripts/check.sh` 内容 | `docs/protocol/coding-conventions.md` |
-| ADR-016 | 本地化：英文常量表 + 中文文案，暂不引入 String Catalog | proposed | 文案改动流程 | `docs/protocol/coding-conventions.md` |
+| ADR-016 界面语言：中文为唯一语言，不做本地化基建 | 本地化：英文常量表 + 中文文案，暂不引入 String Catalog | **accepted**（11-17 签） | 文案改动流程 | `docs/protocol/coding-conventions.md` |
 
 ## 待补（已知的未知，写清楚比留空好）
 

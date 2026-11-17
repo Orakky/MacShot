@@ -73,6 +73,8 @@
 | T-095 | **热键持久化实测**：改绑后重启软件/重启电脑仍在 | Q-02 | `App/`、`Sources/MSSettings/`、`V-037` | `V-037④` 填实：改绑 → 退出 → 再启动 → 旧键不响应、新键响应；写盘位置与格式在 `permissions-tcc.md`/`runbook` 有出处 | open |
 | T-096 | **焦点还原实测（T-101）**：遮罩关闭后原 app 的前台与输入焦点都回来 | Q-15=A | `spikes/probe-01/`、`overlay-and-selection.md` §2、`V-006` | 四列真值表（激活与否 × 键盘可达 × 前台变化 × **原输入框可否继续输入**）；最后一列不成立就回到 Q-15 重签 | open |
 | T-097 | **10 张贴图的内存读数** | Q-12 的安全阀、NFR-005 | `scripts/perf-snip.sh`、`done.md` | 读数进 `done.md`；破线即触发回 Q-12 复审，不许"记一笔继续做" | open |
+| T-098 | **贴图工具条折两行**：贴图宽度不足一行内容宽（404pt）时，工具条排两行——第一行工具、第二行色板与动作 | B-028（11-17 裁） | `Sources/MSPin/`、`Sources/MSAnnotate/`（度量）、`Tests/MSPinTests/` | 60×40 的极窄贴图也能点到全部 10 个工具与 6 个色；两行的命中区与绘制区同源（不许再出现"画在 A 点在 B"）；`make probe-chrome` 出图目视 | open |
+| T-099 | **会话加"不呈现窗"测试入口**，让端到端判据不弹全屏窗 | B-029（11-17 裁） | `Sources/MSSession/`、`Tests/MSSessionTests/` | ① 走通 `Effect → 分发器 → onToast` 的自动化断言 ② 测试期间屏幕上**不出现**遮罩（这条本身要用日志或窗口计数证明，不能只靠"我觉得没弹"）③ 生产路径行为不变：`make probe-freeze` 仍绿 | open |
 
 ## 已知"提前做也没用"的项（防顺手实现）
 
