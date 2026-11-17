@@ -14,13 +14,11 @@ import MSSettings
 final class MSSystemPasteboard: MSPasteboardWriting, @unchecked Sendable {
     var changeCount: Int { NSPasteboard.general.changeCount }
 
-    func writeImage(png: Data, tiff: Data) -> Bool {
+    func writeImage(png: Data) -> Bool {
         let pb = NSPasteboard.general
         pb.clearContents()
-        var writers: [NSPasteboardWriting] = [MSPNGItem(data: png)]
-        if !tiff.isEmpty, let image = NSImage(data: tiff) { writers.append(image) }
-        let written = pb.writeObjects(writers)
-        MSLog.info(.export, "pasteboard write representations=\(writers.count) ok=\(written)")
+        let written = pb.writeObjects([MSPNGItem(data: png)])
+        MSLog.info(.export, "pasteboard write representations=1 ok=\(written)")
         return written
     }
 }
@@ -31,15 +29,15 @@ final class MSPNGItem: NSObject, NSPasteboardWriting {
     let data: Data
     init(data: Data) { self.data = data }
 
+    // 只声明 public.png（`Q-04`）。以前这里还挂一条 `.tiff`，内容是拿 NSImage 现算的
+    // TIFF——两份表示一旦不一致，粘贴结果就取决于目标应用先问哪一个。
     func writableTypes(for pasteboard: NSPasteboard) -> [NSPasteboard.PasteboardType] {
-        [NSPasteboard.PasteboardType("public.png"), .tiff]
+        [NSPasteboard.PasteboardType("public.png")]
     }
 
     func pasteboardPropertyList(forType type: NSPasteboard.PasteboardType) -> Any? {
         switch type.rawValue {
         case "public.png": return data
-        case NSPasteboard.PasteboardType.tiff.rawValue:
-            return (NSImage(data: data)?.tiffRepresentation) ?? data
         default: return nil
         }
     }
@@ -194,6 +192,66 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// `--probe-pin <ms>`：真采集 → 真贴窗 → 立刻进编辑态，把窗口留在屏上 ms 毫秒。
     /// `B-028` 换了形态之后必须用眼睛看一次：工具带应当长在图片**下方**，画面不被盖。
     /// 截图由 `make probe-pin` 用 `screencapture -l<windowNumber>` 完成，日志行把 strip/frame 一并打出来。
+    /// `--probe-clipboard`：把合成图真写进系统剪贴板，再**读回来**报类型集合、DPI 与 TIFF 是否还在。
+    /// `Q-04` 的"只写 PNG"必须由 NSPasteboard 自己回答，不能只看我对代码的印象（判据 `E-062`）。
+    func probeClipboard() {
+        Task { @MainActor in
+                    // 真壳判据：写进系统剪贴板，再**读回来**看声明了哪些类型——"只写 PNG"必须是 NSPasteboard
+                    // 自己的回答，不是我对自己代码的印象。合成画面即可，这里裁的是表示集合不是屏幕内容。
+                    func report(_ line: String) {
+                        MSLog.info(.export, "probe-clipboard \(line)")
+                        let url = URL(fileURLWithPath: "/tmp/macshot-probe-clipboard.txt")
+                        if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(Data((line + "\n").utf8)); try? h.close() }
+                        else { try? (line + "\n").write(to: url, atomically: true, encoding: .utf8) }
+                    }
+                    let w = 120, h = 80, scale = 2
+                    let ctx = CGContext(data: nil, width: w * scale, height: h * scale, bitsPerComponent: 8, bytesPerRow: 0,
+                                        space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                    ctx.setFillColor(MSColorRGBA.rgba(30, 90, 200, 1).cgColor)
+                    ctx.fill(CGRect(x: 0, y: 0, width: w * scale, height: h * scale))
+                    ctx.setFillColor(MSColorRGBA.rgba(232, 51, 71, 1).cgColor)
+                    ctx.fill(CGRect(x: 20, y: 20, width: 100, height: 60))
+                    guard let image = ctx.makeImage() else { report("FAIL 合成不出图"); exit(5) }
+                    let sentinel = "MACSHOT-CLIPBOARD-SENTINEL-\(Int(Date().timeIntervalSince1970))"
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(sentinel, forType: .string)
+                    let started = ContinuousClock.now
+                    let ok = MSClipboardWriter(pasteboard: MSSystemPasteboard()).write(image, scale: scale)
+                    let took = started.duration(to: ContinuousClock.now)
+                    let pb = NSPasteboard.general
+                    let types = (pb.types ?? []).map(\.rawValue).sorted()
+                    let pngData = pb.data(forType: NSPasteboard.PasteboardType("public.png")) ?? pb.data(forType: .png)
+                    var dpi = "?"
+                    if let d = pngData, let src = CGImageSourceCreateWithData(d as CFData, nil),
+                       let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+                       let tiff = props[kCGImagePropertyTIFFDictionary] as? [CFString: Any],
+                       let x = tiff[kCGImagePropertyTIFFXResolution] as? Double { dpi = "\(x)" }
+                    report("write ok=\(ok) 像素=\(image.width)x\(image.height) 耗时=\(took)")
+                    report("types=\(types)")
+                    report("pngBytes=\(pngData?.count ?? -1) dpi=\(dpi)（期望 \(72 * scale)）")
+                    // 关键一问：TIFF 还在不在？在的话是**谁**写的——我只交了一个 PNG item，
+                    // 系统可能自己派生一份 TIFF 兼容类型，那就不该记在我头上。
+                    if let tiff = pb.data(forType: .tiff) {
+                        let magic = tiff.prefix(4).map { String(format: "%02x", $0) }.joined()
+                        report("tiffBytes=\(tiff.count) magic=\(magic)（49492a00=II*／6d4d002a=MM* ⇒ 是真 TIFF 数据）")
+                    } else { report("tiffBytes=nil ⇒ 剪贴板里确实没有 TIFF 表示") }
+                    let left = pb.string(forType: .string)
+                    report("sentinel 写前=\(sentinel.prefix(23)) 写后=\(left.map { String($0.prefix(23)) } ?? "nil（被 clearContents 吃掉）")")
+                    // 对照组：换成系统自带的 NSPasteboardItem、只塞 public.png。
+                    // 若 TIFF 仍出现在 types 里 ⇒ 那是 AppKit 自己派生的兼容类型，不是我们的代码写的。
+                    if let png = pngData {
+                        pb.clearContents()
+                        let item = NSPasteboardItem()
+                        item.setData(png, forType: NSPasteboard.PasteboardType("public.png"))
+                        pb.writeObjects([item])
+                        report("对照（NSPasteboardItem 只塞 PNG）types=\((pb.types ?? []).map(\.rawValue).sorted()) "
+                               + "tiff=\(pb.data(forType: .tiff) != nil)")
+                    }
+                    exit(0)
+        }
+    }
+
     func probePin(thenExitAfter ms: Int) {
         Task { @MainActor in
                 func report(_ line: String) {

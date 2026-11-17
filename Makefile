@@ -7,7 +7,7 @@ RELEASE   := $(DERIVED)/Build/Products/Release/MacShot.app
 ICNS      := build/macshot.icns
 VERSION   := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Config/Info.plist 2>/dev/null)
 
-.PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-pin probe-freeze icon appicon
+.PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-clipboard probe-pin probe-freeze icon appicon
 
 doctor:
 	@sh scripts/doctor.sh
@@ -54,6 +54,14 @@ probe-menu: appicon
 probe-chrome: appicon
 	@"$(PRODUCT)/Contents/MacOS/MacShot" --dump-chrome build/chrome.png
 	@echo "→ build/chrome.png（遮罩界面自绘，用来看，不是用来判绿）"
+
+# Q-04"只写 PNG"的真壳判据：合成图写进系统剪贴板，再读回 types + DPI + TIFF 来源对照
+# 注意：这条路会覆盖你剪贴板里的东西（探针本来就要测"写"这个动作）
+probe-clipboard: appicon
+	@rm -f /tmp/macshot-probe-clipboard.txt
+	@pkill -x MacShot 2>/dev/null; sleep 1; \
+	open -n "$(PRODUCT)" --args --probe-clipboard; sleep 5; \
+	echo "→ 剪贴板读数："; cat /tmp/macshot-probe-clipboard.txt 2>/dev/null | sed 's/^/   /'
 
 # B-028 撑高形态的"眼睛"通道：真贴窗 + 编辑态，把视图离屏渲染成 build/probe-pin.png
 # 采集被 TCC 拒（cdhash 换了）时探针自动退回合成画面——这里裁的是工具带形态，不是屏幕内容

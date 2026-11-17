@@ -10,7 +10,7 @@
 |---|---|---|---|---|
 | V-001 | H | FR-CAP-001 / ADR-007 | 启动日志 | 出现 `capture.backend=sck`，重启后一致 |
 | V-002 | H+E | FR-CAP-004 / NFR-010 | 坐标换算表 + 实拍 1px 边缘 | 用例表（scale 1/2/1.799/1.6 × 5 类选区）全绿；实拍导出图边缘列颜色与屏幕像素一致 |
-| V-003 | E | FR-EXP-001 / ADR-014 / NFR-013 | 剪贴板表示矩阵（§2 表） | 5 个目标 app 粘贴成功且尺寸正确；矩阵填完才可把 ADR-014 转 accepted |
+| V-003 | E | FR-EXP-001 / ADR-014 / NFR-013 | 剪贴板表示矩阵（§2 表） | 5 个目标 app 粘贴成功且尺寸正确。**ADR-014 已于 11-17 签署（仅 PNG），本矩阵随之降级为用户自测回填**，不再是决策门；表示集合的机器判据是 `make probe-clipboard`（`E-062`：我们只交一个 PNG 载荷 + `dpi=72×scale`，系统派生的 `public.tiff` 不计入） |
 | V-004 | E | NFR-015 | 饱和红图在三处目视 | 预览/Pages/浏览器 无明显偏色；若偏色，按 `export-clipboard.md` §3 做两版对照再决定 |
 | V-005 | H | FR-EXP-004 / NFR-014 | 导出图属性 | `kCGImagePropertyDPIWidth == 72×scale`（PNG 与 TIFF 各一次） |
 | V-006 | P | FR-SESS-003 / ADR-002 / B-002 | 未激活遮罩窗的键盘可达 | 前台是 Safari，`F1` 后不点鼠标：方向键（P1 到位后）或 `Esc`/`Enter` 能生效；`NSWorkspace.frontmostApplication` 前后同一 app |

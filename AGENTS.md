@@ -32,6 +32,7 @@ make clean             # 清 build 与 Derived
 make probe             # 采一帧并打印尺寸/耗时/权限（V-001/V-019 取证）
 make probe-menu        # 打印状态栏菜单行与"权限行是否真挂在菜单上"（常驻读数行的取证）
 make probe-chrome      # 遮罩界面离屏自绘成 build/chrome.png（不碰 TCC，用来看）
+make probe-clipboard # 真写系统剪贴板再读回 types/DPI，分清"我们写的"与"系统派生的"（会覆盖剪贴板）
 make probe-pin       # 真贴窗 + 编辑态离屏自绘成 build/probe-pin.png，并打印 strip/imageRect 读数（B-028 形态用来看）
 make probe-freeze      # 三连拍验冻结语义 + 真剪贴板哨兵（会在你屏幕上开约 3 秒遮罩）
 make icon              # assets/branding 的 SVG → build/macshot.icns（只用系统工具）

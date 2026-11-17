@@ -4,7 +4,10 @@ import MSCore
 /// All persisted preferences in one value type with a schema version. Fields are append-only:
 /// renaming or re-purposing one is a schema break, not a refactor (`FR-SET-003`, `ADR-009` style).
 public struct MSAppPreferences: Codable, Sendable, Equatable {
-    public static let currentSchemaVersion = 1
+    /// 2 = 剪贴板不再双写 TIFF（`Q-04`），删掉 `Export.writesPngAndTiffToPasteboard`。
+    /// 读侧允许 `schemaVersion <= current`（§114），旧文件里多出来的那个键会被忽略，
+    /// 所以这是一次**向前兼容**的收窄，不是迁移。
+    public static let currentSchemaVersion = 2
 
     public var schemaVersion: Int
 
@@ -22,11 +25,9 @@ public struct MSAppPreferences: Codable, Sendable, Equatable {
         public var namingTemplate: String
         public var format: MSImageFormat
         public var jpegQuality: Double
-        public var writesPngAndTiffToPasteboard: Bool
         public static let standard = Export(directory: "~/Pictures/MacShot",
                                             namingTemplate: "MacShot {yyyy}-{MM}-{dd} {HH}.{mm}.{ss}",
-                                            format: .png, jpegQuality: 0.9,
-                                            writesPngAndTiffToPasteboard: true)
+                                            format: .png, jpegQuality: 0.9)
     }
 
     /// Which action the commit key performs (`Q-05` / `FR-PIN-018`). Default is pin: capture is

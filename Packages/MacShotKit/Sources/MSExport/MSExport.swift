@@ -102,8 +102,7 @@ public enum MSImageDecoder {
 /// Result of a clipboard write, so tests can assert on representations rather than side effects.
 public struct MSClipboardPayload: Sendable, Equatable {
     public var png: Data?
-    public var tiff: Data?
-    public init(png: Data?, tiff: Data?) { self.png = png; self.tiff = tiff }
+    public init(png: Data?) { self.png = png }
 }
 
 public struct MSClipboardWriter {
@@ -111,13 +110,13 @@ public struct MSClipboardWriter {
     public init(pasteboard: any MSPasteboardWriting) { self.pasteboard = pasteboard }
 
     /// Encodes off the main thread, then performs exactly one pasteboard write (`ADR-014`).
+    /// 只编 PNG：`Q-04` 裁定剪贴板不写 TIFF，省掉一次大图编码也在延迟预算里。
     @discardableResult
-    public func write(_ image: CGImage, scale: Int, pngAndTiff: Bool = true) -> Bool {
+    public func write(_ image: CGImage, scale: Int) -> Bool {
         let started = ContinuousClock.now
         let before = pasteboard.changeCount
         let png = MSImageEncoder.png(image, scale: scale)
-        let tiff = pngAndTiff ? MSImageEncoder.tiff(image, scale: scale) : nil
-        guard let png, pasteboard.writeImage(png: png, tiff: tiff ?? Data()) else {
+        guard let png, pasteboard.writeImage(png: png) else {
             MSLog.error(.export, "clipboard write refused")
             return false
         }

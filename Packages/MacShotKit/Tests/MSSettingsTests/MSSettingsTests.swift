@@ -11,7 +11,7 @@ struct MSDefaultPreferencesTests {
     @Test("默认值与文档表格逐字段相等（FR-SET-003）")
     func defaultsMatchDocumentation() {
         let p = MSAppPreferences()
-        #expect(p.schemaVersion == 1)
+        #expect(p.schemaVersion == 2, "v2＝剪贴板收窄为只写 PNG（Q-04）")
         #expect(p.hotKeys.snip == .f1, "F1 — keymap.md §1")
         #expect(p.hotKeys.pinClipboard == .f3, "F3")
         #expect(p.hotKeys.fullScreen == MSKeyCombo(keyCode: 0, command: true), "⌘A")
@@ -21,7 +21,7 @@ struct MSDefaultPreferencesTests {
         #expect(p.export.directory == "~/Pictures/MacShot")
         #expect(p.export.namingTemplate == "MacShot {yyyy}-{MM}-{dd} {HH}.{mm}.{ss}")
         #expect(p.export.format == .png)
-        #expect(p.export.writesPngAndTiffToPasteboard == true, "ADR-014")
+        // 这个字段在 v2 被删：剪贴板只写 PNG 是决定，不是可配置项（Q-04 / ADR-014）
         #expect(p.annotationDefaults.strokeHex == "#E83347", "design-system.md §2.2 slot 1")
         #expect(p.annotationDefaults.lineWidth == 3)
     }
@@ -36,6 +36,33 @@ struct MSDefaultPreferencesTests {
         #expect(reopened.current.commitBehavior == .copy)
         reopened.resetToDefaults()
         #expect(MSSettingsStore(directory: dir).current.commitBehavior == .pin)
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    @Test("v1 落盘文件（含已删除的 writesPngAndTiffToPasteboard）仍读得回来")
+    func loadsOldSchemaWithRemovedKey() throws {
+        // schemaVersion 2 删掉了那个字段（Q-04：剪贴板只写 PNG 不是可配置项）。
+        // 用户机器上已经有一份 v1，读不回来就等于热键与目录全回默认——这条拦的就是这个。
+        // 夹具由编码器自己造：手写 JSON 一旦与真形状漂移，测试会绿得毫无意义（今天已经栽过）。
+        var p = MSAppPreferences()
+        p.export.directory = "~/Shots"
+        p.commitBehavior = .copy
+        let obj0 = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(p)) as? [String: Any])
+        var obj = obj0
+        obj["schemaVersion"] = 1
+        var export = try #require(obj0["export"] as? [String: Any])
+        export["writesPngAndTiffToPasteboard"] = true
+        obj["export"] = export
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("macshot-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: obj)
+            .write(to: dir.appendingPathComponent("preferences.json"))
+        #expect(String(decoding: try Data(contentsOf: dir.appendingPathComponent("preferences.json")), as: UTF8.self)
+                .contains("writesPngAndTiffToPasteboard"), "夹具里必须真带着那个旧键，否则这条测试是空的")
+
+        let store = MSSettingsStore(directory: dir)
+        #expect(store.current.export.directory == "~/Shots", "v1 的自定义目录要还在")
+        #expect(store.current.commitBehavior == .copy, "v1 的提交语义要还在")
         try? FileManager.default.removeItem(at: dir)
     }
 }
@@ -66,14 +93,15 @@ struct MSNamingTemplateTests {
 struct MSClipboardWriterTests {
     private var image: CGImage { MSTestCard.image(width: 120, height: 80)! }
 
-    @Test("写一次、含 PNG 与 TIFF 两种表示（ADR-014）")
-    func writesBothRepresentations() {
+    @Test("写一次、只交 PNG（Q-04：剪贴板不双写 TIFF）")
+    func writesPngOnly() {
         let pb = MSFakePasteboard()
-        let ok = MSClipboardWriter(pasteboard: pb).write(image, scale: 2, pngAndTiff: true)
+        let ok = MSClipboardWriter(pasteboard: pb).write(image, scale: 2)
         #expect(ok)
         #expect(pb.writeCount == 1, "one atomic write, no half-filled pasteboard")
-        #expect(pb.writtenPNG != nil)
-        #expect(pb.writtenTIFF != nil)
+        let png = try? #require(pb.writtenPNG)
+        #expect(png != nil && png!.count > 0, "PNG 载荷必须在")
+        #expect(png.map { $0.starts(with: [0x89, 0x50, 0x4E, 0x47]) } ?? false, "签名必须是 PNG，不是别的容器")
     }
 
     @Test("changeCount 未变时报失败，不静默（overview.md §6）")

@@ -67,6 +67,18 @@ if let i = CommandLine.arguments.firstIndex(of: "--dump-chrome") {
     MainActor.assumeIsolated { MSChromeDump.run(to: out) }
 }
 
+// --probe-clipboard：合成图真写系统剪贴板并读回类型集合，给 Q-04"只写 PNG"出判据。
+if CommandLine.arguments.contains("--probe-clipboard") {
+    let app = NSApplication.shared
+    let delegate = MainActor.assumeIsolated { MSAppDelegate(autoSnip: false) }
+    app.delegate = delegate
+    app.setActivationPolicy(.accessory)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+        MainActor.assumeIsolated { delegate.probeClipboard() }
+    }
+    app.run()
+}
+
 // --probe-pin <ms>：真采集 → 真贴窗 → 编辑态常驻，给 make probe-pin 截那块窗口。
 if let i = CommandLine.arguments.firstIndex(of: "--probe-pin") {
     let ms = CommandLine.arguments.count > i + 1 ? (Int(CommandLine.arguments[i + 1]) ?? 4_000) : 4_000

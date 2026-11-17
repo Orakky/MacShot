@@ -18,11 +18,14 @@ public struct FixedClock: MSClock {
     public func now() -> Date { date }
 }
 
-/// Writing an image to the system pasteboard. `png`/`tiff` payloads are pre-encoded off the main
-/// actor; the implementation performs one atomic write (`ADR-014`).
+/// Writing an image to the system pasteboard. The PNG payload is pre-encoded off the main actor
+/// and the implementation performs one atomic write (`ADR-014`).
+///
+/// 只有一个载荷是有意的：`Q-04` 裁定剪贴板只写 PNG。以前"猜"要双写 TIFF，
+/// 结果 `MSPNGItem` 得替 `.tiff` 现算一份表示，两边不一致就成了粘贴事故的源头。
 public protocol MSPasteboardWriting: Sendable {
     var changeCount: Int { get }
-    @discardableResult func writeImage(png: Data, tiff: Data) -> Bool
+    @discardableResult func writeImage(png: Data) -> Bool
 }
 
 public protocol MSFileWriting: Sendable {

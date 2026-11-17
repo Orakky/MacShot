@@ -20,7 +20,7 @@ ClipboardWriter  FileExporter      PinWindow（不烘焙，走文档）
 
 | 项 | 决策（待 ADR-014 accepted） | 依据 |
 |---|---|---|
-| 表示集合 | **仅 `public.png`**（11-17 Q-04 裁决） | 双写 TIFF 是当初的猜测档，Snipaste 是否双写始终没找到官方出处。用户裁定只写 PNG，粘贴兼容性由用户自行实测（`V-003` 矩阵降级为自测记录，不再是 ADR 的决策门）。**代价要写明白**：走 `NSImage` 的原生目标（Pages/Word/Finder 拖动）历史上偏好 TIFF，若实测失败，恢复 TIFF 只是加回一个表示，不动数据结构 |
+| 表示集合 | **我们只写一个 `public.png`**（11-17 Q-04 裁决）。但 `NSPasteboard.types` 里仍会出现 `public.tiff` / `NeXT TIFF v4.0` / `Apple PNG pasteboard type`——**那是 AppKit 自己派生的**，对照组（`NSPasteboardItem` 只塞 PNG）实测一模一样，拦不住也不必拦（`E-062`） | 双写 TIFF 是当初的猜测档，Snipaste 是否双写始终没找到官方出处。用户裁定只写 PNG，粘贴兼容性由用户自行实测（`V-003` 矩阵降级为自测记录，不再是 ADR 的决策门）。**代价要写明白**：走 `NSImage` 的原生目标（Pages/Word/Finder 拖动）历史上偏好 TIFF，若实测失败，恢复 TIFF 只是加回一个表示，不动数据结构 |
 | 位图表示 | **不写** `NSBitmapImageRep` 类型化数据之外的东西 | 避免多份表示不一致 |
 | 文件表示 | P0 不写 `fileURL`（写了会让"粘贴到聊天框"变成贴附件，行为不可控） | P1 与"拖出"一起定（`FR-EXP-011`） |
 | 清空策略 | `clearContents()` 一次 → 同一次 `writeObjects` 写完 | 分两次写会出现"粘贴到半成品" |
@@ -97,14 +97,14 @@ public enum CommitIntent: Sendable {
 | 权限缺失 | 不适用（剪贴板写入不需 TCC） |
 | 大图画 PNG 耗时 | 编码在后台；提交动画期间完成，不阻塞（NFR 延迟目标） |
 | 目录被删 | 重建 → 失败则回落保存面板 |
-| 目标应用只认 TIFF | 由 §2 双表示覆盖；若仍失败，记录进 `docs/runbook/troubleshooting.md` 并按应用加表示 |
+| 目标应用只认 TIFF | 不需要我们加：系统会从 PNG 派生 TIFF（`E-062` 对照组）。若某应用仍粘不上，记录进 `docs/runbook/troubleshooting.md`，先量它的实际请求类型再决定加不加表示 |
 | 用户以为"复制的是屏幕原图没含标注" | 属渲染 bug，不是导出 bug；用 `annotate-model.md` §10.2 基线用例拦 |
 
 ## 8. 测试清单
 
-1. 表示集合断言（假 `MSPasteboardWriting` 捕获 types）。
+1. 表示集合断言：包内用假 `MSPasteboardWriting` 断言**只收到一个 PNG 载荷**；真壳用 `make probe-clipboard` 打印 `NSPasteboard.types` + 对照组，分清"我们写的"与"系统派生的"。
 2. `changeCount` 语义 + 哨兵不被 `cancel` 覆盖（FR-SESS-002）。
-3. DPI 往返：PNG/TIFF 写→读，scale ∈ {1,2}。
+3. DPI 往返：PNG 写→读 `kCGImagePropertyTIFFXResolution` = `72×scale`，scale ∈ {1,2}（剪贴板路径实测 144，`E-062`）。
 4. 命名模板展开：含非法字符、目录不存在、重名 10 次。
 5. `CommitIntent` × 是否写剪贴板 的矩阵表（每条一行，全绿才算 `FR-EXP-001` 达成）。
 6. 实拍偏色对照（`V-004`）。

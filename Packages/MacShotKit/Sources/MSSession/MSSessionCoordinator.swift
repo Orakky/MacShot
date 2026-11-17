@@ -343,8 +343,7 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
                 let scale = Int(display.scale)
                 switch intent {
                 case .copy:
-                    let ok = self.clipboard.write(image, scale: scale,
-                                                  pngAndTiff: self.preferences.current.export.writesPngAndTiffToPasteboard)
+                    let ok = self.clipboard.write(image, scale: scale)
                     self.onToast?(ok ? "已复制 \(image.width)×\(image.height)" : "剪贴板写入失败")
                 case .quickSave, .savePanel:
                     let url = self.exportDirectory()
@@ -486,7 +485,7 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
     public func pinDidRequestCopy(_ pin: MSPinWindow) {
         guard let image = pin.pinView.bakedImage() else { return }
         let scale = Int((pin.screen?.backingScaleFactor ?? 2).rounded())
-        let ok = clipboard.write(image, scale: scale, pngAndTiff: preferences.current.export.writesPngAndTiffToPasteboard)
+        let ok = clipboard.write(image, scale: scale)
         onToast?(ok ? "已复制贴图（\(image.width)×\(image.height)）" : "剪贴板写入失败")
     }
 

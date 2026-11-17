@@ -55,16 +55,15 @@ public final class MSFakeCapturer: ScreenCapturing, @unchecked Sendable {
 
 public final class MSFakePasteboard: MSPasteboardWriting, @unchecked Sendable {
     public private(set) var writtenPNG: Data?
-    public private(set) var writtenTIFF: Data?
     public private(set) var writeCount = 0
     public var changeCount: Int { writeCount }
     public var acceptsWrites = true
 
     public init() {}
 
-    public func writeImage(png: Data, tiff: Data) -> Bool {
+    public func writeImage(png: Data) -> Bool {
         guard acceptsWrites else { return false }
-        writtenPNG = png; writtenTIFF = tiff
+        writtenPNG = png
         writeCount += 1
         return true
     }

@@ -35,3 +35,16 @@
 一旦某个常用目标（Pages / Word / Finder 拖动）实测拿不到图或尺寸错，就说明"TIFF 缺失"是真代价，届时**加回 TIFF 表示**而不是加设置项：数据结构不动、只是多写一种表示。
 
 被否决方案保留：PNG + TIFF 双表示（原推荐档）。否决原因：用户偏好单一表示、避免两份内容不一致；不是实测失败。
+
+## 实测补充（2026-11-17，`make probe-clipboard`，判据 `E-062`）
+
+**"只写 PNG"并不等于"剪贴板里只有 PNG"。** 真壳读数：我们只交一个 `public.png` item，`NSPasteboard.types` 仍报
+`["Apple PNG pasteboard type", "NeXT TIFF v4.0 pasteboard type", "public.png", "public.tiff"]`，`data(forType: .tiff)`
+拿到 157 KB 的真 TIFF（magic `4d4d002a`＝MM*）。**对照组**——换成系统自带的 `NSPasteboardItem`、只 `setData(png, forType: "public.png")`——
+types 一模一样。所以那份 TIFF 是 AppKit 自己派生的兼容表示，不是我们写的，也拦不住。
+
+这条把两件事说清楚了：
+1. 本 ADR 的"不写 TIFF"约束的是**我们那次 `writeObjects` 的内容**（一份、自洽、不出现两份表示打架），不是系统对外声明的类型集合。
+2. 上文"届时加回 TIFF 表示"这个退路**多半不需要走**：走 `NSImage` 的目标本来就能拿到系统派生的 TIFF。真出现粘贴失败时，
+   先量那个应用实际请求了哪个类型，再决定要不要动代码——不要凭"少了 TIFF"这个猜测去加回一次编码。
+3. PNG 的 DPI 元数据实测 `144 = 72 × 2` 仍在（`FR-EXP-004` 未受影响）。
