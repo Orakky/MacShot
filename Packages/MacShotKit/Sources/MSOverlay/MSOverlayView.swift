@@ -172,9 +172,13 @@ public final class MSOverlayView: NSView {
 
     public private(set) var selection: CGRect?
     public var tool: MSTool = .select { didSet { needsDisplay = true } }
+    /// 这三个字段的**真源是设置**（`annotationDefaults` → `MSAnnotationStyleSpec`），
+    /// 这里的值只是"还没接到偏好"时的兜底。以前它们被写死在这里，`annotationStyle()` 没有
+    /// 任何调用者 ⇒ 用户在设置里改描边色/线宽/字号/模糊半径全都不生效（A-11 的真身，`E-069`）。
     public var colorHex: String = "#E83347"
     public var lineWidth: Int = 3
     public var blurRadius: Int = 14
+    public var fontSize: Int = 18
 
     /// internal 而非 private：`@testable` 要直接喂文档、点一次动作、再看撤销栈（`AnnotationToolTests`）。
     /// internal：`@testable` 用它直接喂文档，测试因此不必靠合成鼠标事件构造状态。
@@ -896,9 +900,20 @@ public final class MSOverlayView: NSView {
         }
     }
 
+    /// 把设置里的默认样式装进视图。会话在建遮罩窗后立刻调一次（`MSSessionCoordinator`）。
+    public func applyDefaults(_ spec: MSAnnotationStyleSpec) {
+        if MSColorRGBA(hex: spec.strokeHex) != nil { colorHex = spec.strokeHex }
+        lineWidth = spec.lineWidth
+        fontSize = spec.fontSize
+        blurRadius = spec.blurRadius
+        MSLog.info(.annotate, "annotation defaults applied stroke=\(self.colorHex) width=\(self.lineWidth) "
+                   + "font=\(self.fontSize) blur=\(self.blurRadius)")
+    }
+
     private func currentStyle() -> MSAnnotationStyle {
         var s = MSAnnotationStyle(stroke: MSColorRGBA(hex: colorHex) ?? .rgb(232, 51, 71), lineWidth: lineWidth)
         s.blurRadius = blurRadius
+        s.fontSize = fontSize
         if tool == .highlighter { s.fill = nil }
         return s
     }

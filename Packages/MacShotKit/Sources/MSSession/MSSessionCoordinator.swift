@@ -282,6 +282,8 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
                 MSLog.info(.capture, "t.hotkey→frozen \(started.duration(to: ContinuousClock.now))")
                 let window = MSOverlayWindow(display: display, frame: frame.image)
                 window.overlayDelegate = self
+                // 设置里的默认样式必须在这里进视图：A-11 的判据是"改了真的生效"，不是"存下来了"。
+                window.overlayView.applyDefaults(self.preferences.current.annotationStyle())
                 self.overlay = window
                 if self.presentsOverlay { window.present() }
                 self.run(.overlayShown)
