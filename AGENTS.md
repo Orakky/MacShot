@@ -29,13 +29,14 @@ make dmg               # 产出 build/MacShot-<version>.dmg（ad-hoc 签名）
 make install           # 装到 /Applications 或 ~/Applications（去 quarantine）
 make check             # 本地门禁：build + test + 风格/依赖方向/文档一致性
 make clean             # 清 build 与 Derived
-make probe             # 采一帧并打印尺寸/耗时/权限（V-001/V-019 取证）
-make probe-menu        # 打印状态栏菜单行与"权限行是否真挂在菜单上"（常驻读数行的取证）
-make probe-chrome      # 遮罩界面离屏自绘成 build/chrome.png（不碰 TCC，用来看）
+make probe            # 采一帧并打印尺寸/耗时/权限（V-001/V-019 取证）
+make probe-menu       # 打印状态栏菜单行与"权限行是否真挂在菜单上"（常驻读数行的取证）
+make probe-chrome     # 遮罩界面离屏自绘成 build/chrome.png（不碰 TCC，用来看）
 make probe-clipboard  # 真写系统剪贴板再读回 types/DPI，分清"我们写的"与"系统派生的"（会覆盖剪贴板）
+make probe-memory     # 10 张贴图的内存读数（NFR-005/008）：夹具是噪声，读数用 ps/vmmap 外部复核；会短暂开 N 个窗
 make probe-hotkey     # 改绑→退出→再启动读回→还原：热键跨进程持久化取证（会临时改你的快捷键，最后还原成 F1）
-make probe-pin       # 真贴窗 + 编辑态离屏自绘成 build/probe-pin.png，并打印 strip/imageRect 读数（B-028 形态用来看）
-make probe-freeze      # 三连拍验冻结语义 + 真剪贴板哨兵（会在你屏幕上开约 3 秒遮罩）
+make probe-pin        # 真贴窗 + 编辑态离屏自绘成 build/probe-pin.png，并打印 strip/imageRect 读数（B-028 形态用来看）
+make probe-freeze     # 三连拍验冻结语义 + 真剪贴板哨兵（会在你屏幕上开约 3 秒遮罩）
 make icon              # assets/branding 的 SVG → build/macshot.icns（只用系统工具）
 make appicon           # build + icon + 注入 .icns 与菜单栏 SVG + 重签（run/run-term/probe/dmg/install/check 都走它）
 scripts/reset-tcc.sh   # 重置屏幕录制授权（排查黑图）

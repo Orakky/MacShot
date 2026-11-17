@@ -79,6 +79,21 @@ if CommandLine.arguments.contains("--probe-clipboard") {
     app.run()
 }
 
+// --probe-memory <张数> [宽pt] [高pt]：NFR-005 / NFR-008 的内存读数（会短暂开 N 张贴图）。
+if let i = CommandLine.arguments.firstIndex(of: "--probe-memory") {
+    let args = CommandLine.arguments
+    func arg(_ k: Int, _ d: Int) -> Int { args.count > i + k ? (Int(args[i + k]) ?? d) : d }
+    let count = arg(1, 10), w = arg(2, 1920), h = arg(3, 1080), hold = arg(4, 600)
+    let app = NSApplication.shared
+    let delegate = MainActor.assumeIsolated { MSAppDelegate(autoSnip: false) }
+    app.delegate = delegate
+    app.setActivationPolicy(.regular)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+        MainActor.assumeIsolated { delegate.probeMemory(count: count, w: w, h: h, holdMs: hold) }
+    }
+    app.run()
+}
+
 // --probe-hotkey <set|show|restore>：热键跨进程持久化取证（V-037④ 的机制半）。
 if let i = CommandLine.arguments.firstIndex(of: "--probe-hotkey") {
     let mode = CommandLine.arguments.count > i + 1 ? CommandLine.arguments[i + 1] : "show"

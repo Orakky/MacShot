@@ -15,6 +15,7 @@
 | `make release` | Release 配置构建 | 同 build，另加 `strip` 后体积读数（写进 done.md） | 优化导致的编译期差异 |
 | `make dmg` | `hdiutil create` 打包 `.app`（含 `/Applications` 软链接） | 挂载后能看到 app；`codesign -dv` 显示 `Signature=adhoc` | `hdiutil` 权限 |
 | `make install` | 复制到 `/Applications`（或 `~/Applications`），**清除 quarantine 属性** | 复制后 `xattr -l` 无 `com.apple.quarantine`；启动成功 | 目录权限 |
+| `make probe-memory` | `open -n` 起一个进程开 10 张 4K 源贴图（随机噪声夹具）→ 逐张读 `phys_footprint` → 关全部再读；期间用 `ps -o rss` / `footprint` / `vmmap -summary` 外部复核 | 判据看 **RSS 增量**：单张 ≤ 源×1.5、10 张 ≤ 330MB、关完回基线 ±10%（`E-067`）| **别用进程内 `phys_footprint` 当结论**：CG 的图像数据在可回收区，它只报 12MB 而 RSS 报 86MB；夹具也不许用纯色（会被压缩器吃掉，量的是压缩器） |
 | `make probe-hotkey` | 三次独立启动：`set`（改绑 ⌥⌘9）→ `show`（读盘并重新注册）→ `restore`（还原 F1）；读数写 `/tmp/macshot-probe-hotkey.txt` | `show` 那行必须是 `读盘=true snip=⌥⌘9 注册=ok`——**下一次进程**仍然认这个键，才算 `V-037④` 的机制半；跑完一定回到 `F1` | 物理按键那半（真按 ⌥⌘9 出遮罩）要人手，见 `B-032`；临时改的是**你的**快捷键 |
 | `make probe-clipboard` | 合成图 → `MSClipboardWriter` 真写系统剪贴板 → 读回 `NSPasteboard.types`、PNG 的 `kCGImagePropertyTIFFXResolution`，并用 `NSPasteboardItem` 做对照组 | `types` 里出现 `public.tiff` **不算失败**：对照组证明那是 AppKit 派生的；要绿的是"我们只交一个 PNG 载荷"与 `dpi=72×scale`（`E-062`） | **会覆盖用户剪贴板**，所以不进 `make check`；跑前提醒用户 |
 | `make probe-pin` | build + `open -n` 起一个真贴窗并立刻进编辑态，把视图离屏自绘成 `build/probe-pin.png`，读数写 `/tmp/macshot-probe-pin.txt` | 读数里 `strip>0` 且 `frame.height == 图片高 + strip`（图片不缩）；PNG 里工具带在画面**下方** | 采集被 TCC 拒（cdhash 换了）时自动退回合成画面——这里裁的是形态不是屏幕内容；`open --args` 对**已运行实例**无效，必须先 `pkill -x MacShot` |

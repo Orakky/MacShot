@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import MSAnnotate
 import MSCapture
 import MSCore
@@ -255,6 +256,93 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// `--probe-hotkey <set|show|restore>`：热键**跨进程**的持久化取证。
     /// `set` 改绑 → 进程退出；`show` 是**下一次启动**读盘并重新注册；`restore` 把键位还回 `F1`。
     /// 三次启动连起来就是 `V-037④` 的机制部分；物理按键那半只能人手（`B-032`）。
+    /// `--probe-memory <张数> [宽pt] [高pt]`：`NFR-005` 的两个上限与 `NFR-008` 的回基线，一次跑完出读数。
+    /// 用合成画面是有意的：这里要量的是"文档 + 位图 + 窗口"的常驻成本，与屏幕内容无关，
+    /// 也就不必等 `T-090` 的签名/授权（cdhash 一变就采不到）。默认 `10 张 3840×2160pt`。
+    /// 会在你屏幕上短暂开 N 张贴图，跑完自动关。
+    func probeMemory(count: Int, w: Int, h: Int, holdMs: Int) {
+        MainActor.assumeIsolated {
+                    func report(_ line: String) {
+                        MSLog.info(.pin, "probe-memory \(line)")
+                        let url = URL(fileURLWithPath: "/tmp/macshot-probe-memory.txt")
+                        if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(Data((line + "\n").utf8)); try? h.close() }
+                        else { try? (line + "\n").write(to: url, atomically: true, encoding: .utf8) }
+                    }
+                    func rssMB() -> Double {
+                        var info = task_vm_info_data_t()
+                        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+                        let kr = withUnsafeMutablePointer(to: &info) {
+                            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+                            }
+                        }
+                        // 判据用 resident_size（RSS）。phys_footprint 看不见 CoreGraphics 放在
+                        // 可回收区的图像数据：`E-067` 实测 10 张贴图时它报 12MB 而 RSS 报 86MB。
+                        return kr == KERN_SUCCESS ? Double(info.resident_size) / 1_048_576 : -1
+                    }
+                    func physMB() -> Double {
+                        var info = task_vm_info_data_t()
+                        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+                        let kr = withUnsafeMutablePointer(to: &info) {
+                            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+                            }
+                        }
+                        return kr == KERN_SUCCESS ? Double(info.phys_footprint) / 1_048_576 : -1
+                    }
+                    let scale = 2
+                    let pxW = w * scale, pxH = h * scale
+                    let sourceMB = Double(pxW * pxH * 4) / 1_048_576
+                    let baseline = rssMB()
+                    report("基线 rss=\(String(format: "%.1f", baseline))MB｜源 \(w)x\(h)pt @\(scale)x = \(pxW)x\(pxH)px ≈ \(String(format: "%.1f", sourceMB))MB/张")
+                    var last = baseline
+                    for i in 0..<count {
+                        // 合成画面：这里量的是"文档 + 位图 + 窗口"的常驻成本，与屏幕内容无关，也就不必碰 TCC。
+                        let ctx = CGContext(data: nil, width: pxW, height: pxH, bitsPerComponent: 8, bytesPerRow: 0,
+                                            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                        // 夹具必须**不可压缩**：纯色 4K 缓冲会被内存压缩器吃掉（第一次实测就是
+                        // 第一张 +32MB、后面每张 +0.1MB），量出来的是压缩器的成绩而不是贴图的。
+                        // 真截图的熵接近噪声 ⇒ 直接铺随机字节。
+                        var buf = [UInt8](repeating: 0, count: pxW * pxH * 4)
+                        for k in stride(from: 0, to: buf.count, by: 4) {
+                            buf[k] = UInt8.random(in: 0...255)
+                            buf[k + 1] = UInt8.random(in: 0...255)
+                            buf[k + 2] = UInt8.random(in: 0...255)
+                            buf[k + 3] = 255
+                        }
+                        ctx.data?.copyMemory(from: &buf, byteCount: buf.count)
+                        ctx.flush()
+                        guard let img = ctx.makeImage() else { report("FAIL 合成不出第 \(i) 张"); break }
+                        let rect = MSIntRect(x: 0, y: 0, width: pxW, height: pxH)
+                        let content = MSPinContent(document: MSAnnotationDocument(canvasSize: MSIntSize(width: pxW, height: pxH)),
+                                                   source: img, scale: scale, sourcePixelRect: rect)
+                        let pin = pins.open(content, near: NSPoint(x: 30 + CGFloat(i % 5) * 60, y: 30 + CGFloat(i / 5) * 60),
+                                            menu: nil, onClose: { _ in })
+                        pin.center(on: NSScreen.screens.first, display: true)
+                        let now = rssMB()
+                        report("第 \(i + 1) 张 rss=\(String(format: "%.1f", now))MB 本次+\(String(format: "%.1f", now - last))MB 累计+\(String(format: "%.1f", now - baseline))MB")
+                        last = now
+                    }
+                    let peak = last
+        // 留一段"贴图都开着"的窗口给外部裁判（vmmap / ps）对数：footprint 与外部读数不一致时，
+        // 要能分清是"探针读错了"还是"这条指标本来就不算 CGImage 的后备存储"。
+        if holdMs > 600 {
+            report("保持 \(holdMs)ms，外部读数请在此期间取（pid=\(getpid())）")
+            usleep(UInt32(holdMs) * 1_000)
+        }
+                    report("（参考）phys_footprint 现在=\(String(format: "%.1f", physMB()))MB——不作判据，理由见 E-067")
+                    report("判据：单张增量=\(String(format: "%.1f", (peak - baseline) / Double(max(1, count))))MB "
+                           + "vs 上限 源×1.5=\(String(format: "%.1f", sourceMB * 1.5))MB｜"
+                           + "\(count) 张累计=\(String(format: "%.1f", peak - baseline))MB vs 上限 330MB")
+                    pins.closeAll()
+                    usleep(600_000)
+                    let after = rssMB()
+                    report("关全部贴图后 rss=\(String(format: "%.1f", after))MB（NFR-008：应回基线 ±10%，基线 \(String(format: "%.1f", baseline))）")
+                    exit(0)
+        }
+    }
+
     func probeHotKeyPersist(mode: String) {
         MainActor.assumeIsolated {
                     func report(_ line: String) {

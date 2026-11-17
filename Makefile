@@ -55,6 +55,16 @@ probe-chrome: appicon
 	@"$(PRODUCT)/Contents/MacOS/MacShot" --dump-chrome build/chrome.png
 	@echo "→ build/chrome.png（遮罩界面自绘，用来看，不是用来判绿）"
 
+# NFR-005 / NFR-008 的内存读数：开 N 张贴图（默认 10 张 4K 源）→ 关全部 → 回基线
+# 夹具是随机噪声（纯色会被内存压缩器吃掉，量的是压缩器不是贴图）；会短暂在你屏幕上开 N 个窗
+probe-memory: appicon
+	@rm -f /tmp/macshot-probe-memory.txt
+	@pkill -x MacShot 2>/dev/null; sleep 1; \
+	open -n "$(PRODUCT)" --args --probe-memory 10 1920 1080 9000; \
+	sleep 16; PID=$$(pgrep -x MacShot | head -1); \
+	echo "   外部裁判 pid=$$PID：ps 报 rss=$$(( $$(ps -o rss= -p $$PID) / 1024 ))MB"; \
+	sleep 8; echo "→ 探针读数："; cat /tmp/macshot-probe-memory.txt 2>/dev/null | sed 's/^/   /'
+
 # V-037④ 的机制半：改绑 → 退出 → 再启动读回 → 还原，三次独立启动都算一次取证
 probe-hotkey: appicon
 	@rm -f /tmp/macshot-probe-hotkey.txt
