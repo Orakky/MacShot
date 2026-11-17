@@ -7,7 +7,7 @@ RELEASE   := $(DERIVED)/Build/Products/Release/MacShot.app
 ICNS      := build/macshot.icns
 VERSION   := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Config/Info.plist 2>/dev/null)
 
-.PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-clipboard probe-pin probe-freeze icon appicon
+.PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-clipboard probe-pin probe-hotkey probe-freeze icon appicon
 
 doctor:
 	@sh scripts/doctor.sh
@@ -54,6 +54,15 @@ probe-menu: appicon
 probe-chrome: appicon
 	@"$(PRODUCT)/Contents/MacOS/MacShot" --dump-chrome build/chrome.png
 	@echo "→ build/chrome.png（遮罩界面自绘，用来看，不是用来判绿）"
+
+# V-037④ 的机制半：改绑 → 退出 → 再启动读回 → 还原，三次独立启动都算一次取证
+probe-hotkey: appicon
+	@rm -f /tmp/macshot-probe-hotkey.txt
+	@for m in set show restore; do \
+	  pkill -x MacShot 2>/dev/null; sleep 0.6; \
+	  open -n "$(PRODUCT)" --args --probe-hotkey "$$m"; sleep 2.5; \
+	done; \
+	echo "→ 三次独立启动的读数："; cat /tmp/macshot-probe-hotkey.txt 2>/dev/null | sed 's/^/   /'
 
 # Q-04"只写 PNG"的真壳判据：合成图写进系统剪贴板，再读回 types + DPI + TIFF 来源对照
 # 注意：这条路会覆盖你剪贴板里的东西（探针本来就要测"写"这个动作）

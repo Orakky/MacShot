@@ -79,6 +79,19 @@ if CommandLine.arguments.contains("--probe-clipboard") {
     app.run()
 }
 
+// --probe-hotkey <set|show|restore>：热键跨进程持久化取证（V-037④ 的机制半）。
+if let i = CommandLine.arguments.firstIndex(of: "--probe-hotkey") {
+    let mode = CommandLine.arguments.count > i + 1 ? CommandLine.arguments[i + 1] : "show"
+    let app = NSApplication.shared
+    let delegate = MainActor.assumeIsolated { MSAppDelegate(autoSnip: false) }
+    app.delegate = delegate
+    app.setActivationPolicy(.accessory)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        MainActor.assumeIsolated { delegate.probeHotKeyPersist(mode: mode) }
+    }
+    app.run()
+}
+
 // --probe-pin <ms>：真采集 → 真贴窗 → 编辑态常驻，给 make probe-pin 截那块窗口。
 if let i = CommandLine.arguments.firstIndex(of: "--probe-pin") {
     let ms = CommandLine.arguments.count > i + 1 ? (Int(CommandLine.arguments[i + 1]) ?? 4_000) : 4_000

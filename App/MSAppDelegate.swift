@@ -252,6 +252,41 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// `--probe-hotkey <set|show|restore>`：热键**跨进程**的持久化取证。
+    /// `set` 改绑 → 进程退出；`show` 是**下一次启动**读盘并重新注册；`restore` 把键位还回 `F1`。
+    /// 三次启动连起来就是 `V-037④` 的机制部分；物理按键那半只能人手（`B-032`）。
+    func probeHotKeyPersist(mode: String) {
+        MainActor.assumeIsolated {
+                    func report(_ line: String) {
+                        MSLog.info(.hotkey, "probe-hotkey \(line)")
+                        let url = URL(fileURLWithPath: "/tmp/macshot-probe-hotkey.txt")
+                        if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(Data((line + "\n").utf8)); try? h.close() }
+                        else { try? (line + "\n").write(to: url, atomically: true, encoding: .utf8) }
+                    }
+                    let path = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+                        .appendingPathComponent("MacShot/preferences.json").path ?? "?"
+                    switch mode {
+                    case "set":
+                        let before = settings.current.hotKeys.snip.display
+                        settings.update { $0.hotKeys.snip = MSKeyCombo(keyCode: 25, command: true, option: true) }   // ⌥⌘9（键名表在 `MSKeyCombo.keyNames`，25 才是 9）
+                        let after = settings.current.hotKeys.snip.display
+                        let r = register(.snip, settings.current.hotKeys.snip)
+                        report("set 旧=\(before) 新=\(after) 注册=\(r) 文件=\(path)")
+                    case "restore":
+                        settings.update { $0.hotKeys.snip = .f1 }
+                        let r = register(.snip, settings.current.hotKeys.snip)
+                        report("restore 现=\(settings.current.hotKeys.snip.display) 注册=\(r)")
+                    default:
+                        let combo = settings.current.hotKeys.snip
+                        let r = register(.snip, combo)
+                        let exists = FileManager.default.fileExists(atPath: path)
+                        report("show 读盘=\(exists) snip=\(combo.display) 注册=\(r) "
+                               + "pinClipboard=\(settings.current.hotKeys.pinClipboard.display)")
+                    }
+                    exit(0)
+        }
+    }
+
     func probePin(thenExitAfter ms: Int) {
         Task { @MainActor in
                 func report(_ line: String) {

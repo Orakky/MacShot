@@ -32,6 +32,7 @@ handler 内：只做一件事 —— DispatchQueue.main.async { 触发 }   // �
 | 冲突 | `RegisterEventHotKey` 返回 **-9878**（`eventHotKeyExistsErr`，2026-11-16 实测，E-023）→ 置 `conflicts`，状态栏标记 + 文案（P1 `FR-HOT-011`；P0 已实现为一次性 toast + 错误日志） |
 | 重绑 | 改设置时：先全部 `UnregisterEventHotKey` → 注册新集合 → 失败则回滚旧集合并报错（不许出现"新旧都能触发"或"全都失效"）（FR-HOT-002） |
 | 录制控件 | 设置窗里按新键时，**先注销**该 id 的旧注册，否则会被自己吞掉（这是自测才能发现的坑，写在这里） |
+| 持久化 | 改绑写 `~/Library/Application Support/MacShot/preferences.json`（`schemaVersion=2`，`hotKeys.*` = keyCode + 四个修饰键布尔）。启动顺序：`MSSettingsStore` 读盘 → `registerHotKeys()` 用**读到的值**注册。重启电脑不需要任何额外机制——它是个普通文件，不是登录项、不涉及 TCC；实测见 `E-066`（`make probe-hotkey` 三次独立启动） |
 | 睡眠/唤醒、退出 | 监 `NSWorkspace.willPowerOff`/`didWake`；退出前注销全部（FR-HOT-001 稳定性） |
 
 ## 4. 权限地图
