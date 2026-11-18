@@ -1,72 +1,47 @@
 # MacShot
 
-macOS 原生截图工具：**快速截图 → 标注 → 贴图置顶 → 一键进剪贴板**。形态参考 Snipaste，技术栈 Swift + AppKit。
+macOS 原生截图工具：**快速截图 → 标注 → 贴图置顶 → 一键进剪贴板**。形态参考 Snipaste，技术栈 Swift + AppKit（无第三方依赖）。
 
-## 当前状态：文档裁决期（无代码）
+## 五分钟上手
 
-| 层 | 状态 |
+1. **装**：`make dmg` 后打开 `build/MacShot-<版本>.dmg`，把 MacShot 拖进 `Applications`（卷里已带软链）；或 `make install` 装到 `~/Applications`。
+2. **给权限**：首次按截图键时，macOS 会要求 **屏幕录制** 授权（系统设置 → 隐私与安全性 → 屏幕录制与系统音频录制，勾选 MacShot），按提示重启一次它。
+3. **用**：菜单栏有品牌图标；左键点图标＝直接截图，右键＝菜单。
+
+| 想做什么 | 按键（默认值，真源 `docs/design/keymap.md` §1–§3） |
 |---|---|
-| 范围裁决 D-01…D-04 | ✅ 已签（见下表） |
-| 需求清单（P0 见 §0 统计，每条带判据） | ✅ 已成文，待逐条 `accepted` |
-| 技术架构（8 份）+ ADR（16 条：4 accepted / 12 proposed） | ✅ 已成文，**proposed 项不可落地为代码** |
-| 设计原型（token + 逐屏线框 + 状态机 + 键位） | ✅ 已成文，待裁决 |
-| 可操作原型（9 屏共用一套标注文档） | ✅ `prototypes/index.html`；数学与路径已量测（E-014），**视觉观感需你在真浏览器目测**（E-015） |
-| 里程碑 M-0…M-6 + 待办/已办/卡点台账 | ✅ 已成文 |
-| 工程骨架、构建脚本、任何 `.swift` | ⛔ 未开始（`docs/tasks/todo.md` 第 0 档仍红，硬约束见 `docs/README.md` §4） |
+| 截图 | `F1`（MacBook 上可能要 `fn`） |
+| 贴出并复制（钉在屏幕上，同时可直接 `⌘V` 粘走） | `Enter` |
+| 只复制不贴 | `⌘C` ｜ 固定走"贴出"：`⌘P`（**同样带复制**，11-17 起「贴出」这个出口本身就写剪贴板，见 `E-063`） |
+| 默认出口键 | `Enter` = 设置里"提交动作"选的那个出口（默认贴出）；改设置**即时生效**，无需重启（`V-052`） |
+| 保存 / 免面板直存 | `⌘S` / `⌘⇧S` |
+| 取消（什么都不写） | `Esc` |
+| 贴图再编辑 / 退出编辑 | `E` ／ `Enter`、`Esc` |
+| 取色 | 拖框时放大镜自动出现（`⌥` 可强制），`C` 复制色值、`⇧C` 切 Hex/RGB |
 
-已裁决的四条：
+## 现在做到哪了
 
-| | 结论 | 代价 |
-|---|---|---|
-| D-01 | 首版只做四大件，P0 必须能映射到某一件 | 窗口自动识别、历史、分组、水印等全部 P1/P2 |
-| D-02 | 本机直装 + ad-hoc 签名，不启用沙盒 | 不能直接发给别人（无证书、无公证） |
-| D-03 | Xcode 工程（同步文件夹组）+ 本地 SPM 多模块包 | agent 不许改 `project.pbxproj` |
-| D-04 | 贴图携带**可编辑标注文档**（保留矢量层） | schema 第一天冻结、两套宿主共用渲染器、内存一档代价（NFR-005 是回退阀）。注意：这在 Snipaste 属付费 PRO 能力，见 `docs/reference/snipaste-gap.md` §4 |
+| 里程碑 | 状态 |
+|---|---|
+| M-0 文档与骨架、M-1 采集与几何、M-2 遮罩与选区、M-3 贴图、M-4 标注与再编辑 | **已落地**，判据见 `docs/tasks/done.md`（E-001…E-076） |
+| M-5 设置与导出 | 大部分落地：设置窗已含提交动作 / 热键 / 目录 / 命名模板 / 明暗 / 放大镜 / 格式 / JPEG 质量 / 开机自启，且**改动即时生效**有判据（`V-052`）；对比度与自启注册仍欠 |
+| M-6 打磨与发布 | 起步：DMG 结构可验（`make verify-dmg` 4/4）、已知限制清单成文、使用计数脚本就绪；兼容矩阵 15 格只填了 1 格 |
+| 代码规模 | 10 个模块 + **142 条单测**，`make check` 绿（构建 + 测试 + 风格/依赖方向/文档一致性） |
 
-## 我要看什么（按裁决顺序）
+## 开发与验证
 
-1. **先打开 `prototypes/index.html`**（可操作原型，9 屏一套标注文档）—— 手感对不对、D-04 值不值，看它比看表快
-2. `docs/charter.md` §6 —— **Q-01…Q-15 待你签字**，这是解锁编码的唯一门槛（Q-15 建议先做 M-0.5 探针再签）
-3. `docs/adr/README.md` —— 12 条 `proposed` 决策（含每条的否决方案与翻案条件）
-4. `docs/requirements/requirements.md` —— P0 清单与判据（条数只在 §0 统计）；§3 是 P1
-5. `docs/design/screens.md` —— 逐屏线框规格（真源；原型只是对照）
-6. `docs/plan/roadmap.md` + `docs/tasks/todo.md` / `done.md` / `blocked.md`
+- 命令一览的**真源是 `AGENTS.md` §2**（`make doctor` / `build` / `test` / `check` / `dmg` / `install`，以及一批取证探针 `probe-chrome`、`probe-pin`、`probe-clipboard`、`probe-memory`、`probe-hotkey`、`probe-settings`、`probe-freeze`）。这里不复制表，避免两处不同步。
+- 纪律：**未观察不写完成**——每条"做完了"都要附命令输出、日志行、读数或截图路径。
+- 文档地图与冲突消解序：`docs/README.md`；决策记录：`docs/charter.md` §1/§6b 与 `docs/adr/`。
 
-协作方式（人 + agent）写在 `AGENTS.md` 与 `docs/protocol/agent-playbook.md`。
+## 明确不做 / 已知限制
 
-## 目录
+发布说明的取材地是 **`docs/reference/known-limitations.md`**（功能边界 / 形态取舍 / 还没证完的缺口，逐条挂 ID）。要点：
 
-```
-AGENTS.md                 agent 入口（纪律 + 命令 + 领活）
-docs/
-  charter.md              最高真源：范围 / 术语 / 模块名 / ID 规则 / 待裁决
-  README.md               文档地图 + 单一真源分配 + 冲突消解序
-  requirements/           vision · requirements(P0/P1/P2) · nfr
-  architecture/           overview · modules · capture · overlay · annotate · pin · export · hotkey
-  adr/                    README(索引) · ADR-001…016
-  design/                 design-system · screens · state-machines · keymap
-  plan/  tasks/           roadmap · todo · done · blocked
-  protocol/               agent-playbook · coding-conventions · verification · git-and-release
-  runbook/                setup · build-and-verify · permissions-tcc · troubleshooting
-  reference/              snipaste-gap（全部带出处）
-  templates/              task-card · adr · spec-doc
-spikes/                   未裁决代码停放处（当前为空；一版骨架在 stash@{0}）
-App/  Config/  Packages/  Makefile  scripts/     ← M-0 才创建
-```
+- 本期不做：贴图分组与鼠标穿透、跨屏选区、滚动截图与录制、非中文界面、键盘完成全流程、`W/A/S/D` 逐像素。
+- 有意的取舍：极小贴图编辑态退回字母选工具；贴图编辑态把窗口向下撑高一条工具带（画面与导出不变）；未保存的标注/贴图退出即抛弃、不提示。
+- 还没证完的：真壳 `Enter`→贴图、改绑后真按一下新热键、贴图拖动帧率、放大镜在真屏幕上的逐点一致、设置窗排版观感、两处色板的对比度不达标（`warn` 在浅浮层 1.82:1）——它们的状态在 `docs/tasks/blocked.md`。
 
-## 计划中的命令（M-0 落地后生效）
+## 许可与署名
 
-```sh
-make doctor  build  test  run  dmg  install  check
-```
-构建与验证目标的具体契约已写成规格：`docs/runbook/build-and-verify.md`。
-
-## 已知限制（现在就写清，避免以后当惊喜）
-
-- 最低 macOS 14（`ADR-003` 待签）；macOS 13 及以下不支持。
-- 首版键盘-only 链路**不闭合**（选区方向键微调在 P1，`NFR-022`）。
-- VoiceOver 对自绘遮罩/贴图的支持首版不完整，只交付"不可读范围清单"（`V-028`）。
-- ad-hoc 签名 ⇒ 不能直接分发；重装后可能需要重新授予屏幕录制权限（`P-002`）。
-- 首版不落盘任何截图（无历史），贴图内的再编辑内容在退出后丢失（Q-06 推荐 A，`UI-003` 有"未导出"标记）。
-
-环境事实与验证方式见 `docs/runbook/setup.md`；所有性能数字目前是**目标值（待实测）**，实测数据集中在 `docs/tasks/done.md`。
+个人项目，参考 Snipaste 的**交互形态**而非其代码；未使用任何第三方依赖（本机也没有 Homebrew，全部走系统工具链）。
