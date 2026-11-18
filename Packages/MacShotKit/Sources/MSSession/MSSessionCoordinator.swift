@@ -346,6 +346,9 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
         guard let cropped = RegionCropper.crop(frame, logicalSelection: globalSel, in: display) else {
             onToast?("选区无效"); return
         }
+        // `G-03` 要的是"各出口占比"，所以标记必须**每个出口都打、格式统一**，
+        // 而不是只有 pin 有一行自定义日志。计数脚本 `scripts/usage-report.sh` 只认这一条。
+        MSLog.info(.session, "commit intent=\(intent.rawValue)")
         let doc = document ?? MSAnnotationDocument(canvasSize: cropped.pixelSize)
         guard let image = baker.bake(doc, source: cropped.image) ?? Optional(cropped.image) else { return }
         switch intent {

@@ -79,6 +79,7 @@
 | T-105 | **NFR-008 在 RSS 口径下收口**：区分实验 + 把残留还给系统 | B-035 | `Sources/MSPin/MSPinWindow.swift`（`releaseMemoryIfEmpty`）、`App/MSAppDelegate.swift`（`--probe-memory` 两轮）、`Makefile`、`docs/requirements/nfr.md` | ① 两轮批次峰值差 < 8MB ⇒ 判为缓存不是泄漏 ② 关全部贴图后 RSS 回基线 ±10% ③ 探针里显式再压一次应当变成空操作（产品已压）| **done**（E-072：峰值差 1.2–1.9MB；关闭后 55.1MB vs 基线 58.2MB = −5.1% 绿。`B-034` 重绘成本仍开） |
 | T-106 | **需求逐条复审**：`requirements.md` 里还有 32 行状态列是裸 `待裁决`（FR-CAP/SESS/PIN/ANN/EXP/SET 各域都有），它们不是 Q 决策，而是"这条要不要、优先级对不对、验收判据够不够"的逐条旗子 | 用户 | 每条要么转 `已裁`、要么改判 P1/P2、要么明确写"接受现状"；`check-docs.py` 的 P0 计数随之稳定 | open（我可以先出一份带建议档的清单给你圈，不用你逐条想） |
 | T-107 | **M-6 发布核验起步**：DMG 配方修好并结构可验，已知限制清单成文 | roadmap M-6①④ | `Makefile`（`dmg`/`verify-dmg`）、`scripts/verify-dmg.sh`、`docs/reference/known-limitations.md`、`docs/README.md`、`docs/requirements/nfr.md` §5 | ① `make verify-dmg` 四项全绿（卷根 .app / `/Applications` 软链 / 卷标图标 / DR=identifier+leaf） ② 限制清单每条都有真源 ID，且"还没证完的"一节与 `blocked.md` 对得上 ③ 兼容矩阵每填一格都要带来源与口径 | **部分完成**（E-075：DMG 抓到并修掉三条假陈述；矩阵 1/15 格；M-6①"全新用户流程走一遍"、②矩阵填满、③usage-report 仍开——前三条都要真机或你点头） |
+| T-108 | **`make usage-report` 落地 + 日志通道订正** | roadmap M-6③、vision §4 | `scripts/usage-report.sh`、`Makefile`、`Sources/MSSession/`（`commit intent=`）、`Sources/MSPin/`（`edit enter`）、`docs/requirements/vision.md`、`docs/reference/known-limitations.md` | ① `--include-tests` 档能数出非零（模式自校验）② app-only 档在无数据时明确报"不是达标"并退出非零 ③ 四个计数标记都由生产路径发出（跑套件后验证）| **done**（E-076；真实日常数据要等 `T-090` 授权，达标线仍待你裁决） |
 
 ## 已知"提前做也没用"的项（防顺手实现）
 

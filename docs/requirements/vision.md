@@ -29,6 +29,7 @@ S3 正是 D-04 的存在理由；也是最贵的一条（`ADR-005` 后果、NFR-
 | G-05 | 无"我以为截成功了"事故 | `failed`/`gate` 状态的会话占比与后续人工报错 | 0 次静默黑图（`ADR-008` 红线） |
 
 实现要求：G-01/G-03/G-04 需要的计数只能通过**本地日志**得到，不联网、不遥测（NFR-030/032）。计数脚本 `scripts/usage-report.sh` 属 M-6 交付物。
+> **11-18 落地状态**：计数脚本 `make usage-report`（`scripts/usage-report.sh`）已跑通，标记由生产代码发出并经测试自校验（`commit intent=…` / `edit enter` / `t.hotkey→frozen` / `capture.perm-missing`）。但**达标线仍是"待你裁决"**，且 app 侧数据要等 `T-090` 那次授权之后才产生得出来——现在报"无数据"，不是报达标。
 
 ## 5. 反定位（明确不是什么）
 

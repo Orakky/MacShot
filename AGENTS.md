@@ -28,6 +28,7 @@ make test              # swift test（Packages/MacShotKit，无需 Xcode GUI）
 make run               # 构建并 open 启动（11-17 起签名身份稳定，重建不再掉授权；旧 Q-18=B 的坑见 E-070）
 make run-term          # 构建后直接 exec 产物二进制 —— 日常入口（借终端的屏幕录制授权，不弹框）
 make release           # Release 配置构建
+make usage-report      # vision §4 的 G-01…G-05 计数（只数 process=MacShot；加 --include-tests 是模式自校验，不是达标数据）
 make verify-dmg        # 挂上 DMG 逐条核验：卷根 .app、/Applications 软链、卷标图标、签名身份
 make dmg               # 产出 build/MacShot-<version>.dmg（11-17 起用本地自签身份，不再是 ad-hoc）
 make install           # 装到 /Applications 或 ~/Applications（去 quarantine）

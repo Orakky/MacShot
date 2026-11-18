@@ -12,7 +12,7 @@ VERSION   := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionStri
 # 没有身份时自动退回 ad-hoc（`-`），构建与门禁不会因为环境缺身份而变红。
 SIGN_IDENTITY := $(shell security find-identity -v -p codesigning 2>/dev/null | grep -q "MacShot Dev" && echo "MacShot Dev" || echo "-")
 
-.PHONY: doctor contrast verify-dmg build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-clipboard probe-pin probe-settings probe-hotkey probe-freeze icon appicon
+.PHONY: doctor contrast verify-dmg usage-report build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-clipboard probe-pin probe-settings probe-hotkey probe-freeze icon appicon
 
 doctor:
 	@echo "  签名身份 = $(SIGN_IDENTITY)（有 MacShot Dev 则 DR=identifier+leaf，重建不掉授权）"
@@ -116,6 +116,9 @@ probe-freeze: appicon
 sign: build
 	codesign --force --sign "$(SIGN_IDENTITY)" --timestamp=none "$(PRODUCT)"
 	codesign -dv "$(PRODUCT)" 2>&1 | grep -E 'Signature|Identifier' || true
+
+usage-report: ## vision.md §4 的 G-01…G-05 计数（只读本地 unified log，不联网不遥测）
+	@sh scripts/usage-report.sh 7d
 
 verify-dmg: dmg
 	@sh scripts/verify-dmg.sh

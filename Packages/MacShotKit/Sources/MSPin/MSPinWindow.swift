@@ -99,6 +99,8 @@ public final class MSPinWindow: NSPanel {
 
     private func pinDidRequestToggleEdit() {
         pinView.isEditing.toggle()
+        // `G-04`：再编辑次数 / 贴图次数。没有这行，G-04 只能靠猜。
+        MSLog.info(.pin, self.pinView.isEditing ? "edit enter" : "edit exit")
         isMovableByWindowBackground = !pinView.isEditing      // drag-window vs drag-annotation (`pin-window.md` §4`)
         markDirty()
         pinDelegate?.pinDidRequestToggleEdit(self)
