@@ -50,7 +50,7 @@ make probe-pin        # 真贴窗 + 编辑态离屏自绘成 build/probe-pin.png
 make probe-pin-real   # 真截图→真遮罩→真选区→贴出并复制的闭环读数（B-030 的真壳判据；会开遮罩数秒）
 make probe-loupe-real # 真采集画面上**按住 ⌥** 开放大镜（11-18 起默认不自动弹），比取样色与渲染中心格，并另记一行"不按键可见="当默认档读数（B-036 的真壳判据；会开遮罩约 12 秒）
 make probe-freeze     # 三连拍验冻结语义 + 真剪贴板哨兵（会在你屏幕上开约 3 秒遮罩）
-make icon             # assets/branding 的 SVG → build/macshot.icns（只用系统工具）
+make icon             # assets/branding 的 SVG → build/macshot.icns（AppKit 解 SVG，只用系统工具）；四角不透明就退出 1
 make appicon          # build + icon + 注入 .icns 与菜单栏 SVG + 重签（run/run-term/probe/dmg/install/check 都走它）
 scripts/reset-tcc.sh   # 重置屏幕录制授权（排查黑图）
 ```
