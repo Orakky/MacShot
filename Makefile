@@ -7,9 +7,16 @@ RELEASE   := $(DERIVED)/Build/Products/Release/MacShot.app
 ICNS      := build/macshot.icns
 VERSION   := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Config/Info.plist 2>/dev/null)
 
+# Q-18=A（11-17 落地）：登录钥匙串里有自签身份 "MacShot Dev" 就用它签名 ⇒ designated requirement
+# 变成 `identifier + certificate leaf`，重建不再换身份、屏幕录制授权不再每次失效；
+# 没有身份时自动退回 ad-hoc（`-`），构建与门禁不会因为环境缺身份而变红。
+SIGN_IDENTITY := $(shell security find-identity -v -p codesigning 2>/dev/null | grep -q "MacShot Dev" && echo "MacShot Dev" || echo "-")
+
 .PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-clipboard probe-pin probe-hotkey probe-freeze icon appicon
 
 doctor:
+	@echo "  签名身份 = $(SIGN_IDENTITY)（有 MacShot Dev 则 DR=identifier+leaf，重建不掉授权）"
+	@echo "  当前产物 DR = $$(codesign -d -r- "$(PRODUCT)" 2>&1 | grep -oE "(identifier|cdhash).*" | head -1)"
 	@sh scripts/doctor.sh
 
 build:
@@ -28,7 +35,7 @@ icon:
 # 往 .app 里加资源会让原 ad-hoc 签名失效 ⇒ 注入后重签（D-02）。
 # appicon = "把产物做成能用的一份"，所以 run/run-term/probe 都挂在它上面，不让开发入口跑在缺素材的 bundle 上。
 appicon: build icon
-	@sh scripts/inject-brand.sh "$(PRODUCT)"
+	@MACSHOT_SIGN_IDENTITY="$(SIGN_IDENTITY)" sh scripts/inject-brand.sh "$(PRODUCT)"
 
 test:
 	@cd Packages/MacShotKit && swift test > $(CURDIR)/build/test.log 2>&1; rc=$$?; 	  tail -4 $(CURDIR)/build/test.log; 	  grep -q "Test run with" $(CURDIR)/build/test.log 	    || { echo "✗ 没跑到测试（编译失败或空套件），不算绿"; exit 1; }; 	  exit $$rc
@@ -95,7 +102,7 @@ probe-freeze: appicon
 	@sh scripts/probe-freeze.sh
 
 sign: build
-	codesign --force --sign - --timestamp=none "$(PRODUCT)"
+	codesign --force --sign "$(SIGN_IDENTITY)" --timestamp=none "$(PRODUCT)"
 	codesign -dv "$(PRODUCT)" 2>&1 | grep -E 'Signature|Identifier' || true
 
 dmg: release icon

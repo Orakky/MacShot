@@ -14,5 +14,5 @@ menubar_svg="$root/assets/branding/macshot-menubar-template.svg"
 mkdir -p "$app/Contents/Resources"
 cp "$root/build/macshot.icns" "$app/Contents/Resources/macshot.icns"
 cp "$menubar_svg" "$app/Contents/Resources/macshot-menubar-template.svg"
-codesign --force --sign - --timestamp=none "$app" >/dev/null
+codesign --force --sign "${MACSHOT_SIGN_IDENTITY:--}" --timestamp=none "$app" >/dev/null
 echo "→ 品牌素材已注入 $app（macshot.icns + macshot-menubar-template.svg，已重签）"

@@ -59,6 +59,17 @@ xattr -l /Applications/MacShot.app                                # 期望无 co
 - 缓解 3：若实测确认"每次重装都要重新授权"，把它写进发布说明与 `troubleshooting.md`，并在引导窗文案里提前说（用户预期管理比技术绕法便宜）。
 - 根治：需要 Developer ID 证书（B-010，需外部条件，届时补 ADR）。
 
+## 3b. 授权到底认谁：`designated requirement`（11-17 实测，`E-070`）
+
+| 签名方式 | `codesign -d -r-` 的 DR | 后果 |
+|---|---|---|
+| ad-hoc（`codesign -s -`） | `designated => cdhash H"…"` | **重建即换身份** ⇒ 屏幕录制授权每次失效、每次启动都要重新勾。这就是 11-16 用户报"为什么每次启动都要权限"的根因 |
+| 本地自签（`MacShot Dev`） | `designated => identifier "com.macshot.app" and certificate leaf = H"…"` | 与 cdhash 无关 ⇒ 一次授权长期有效；`make doctor` 第二行读数就是它 |
+
+- 建证书：`openssl req -x509`（`codeSigning` EKU + `CA:false` + `digitalSignature`，10 年）→ `security import` 进 **登录**钥匙串 → `security add-trusted-cert -p codeSign`。只影响本用户，不动系统信任库。
+- 撤销：`security delete-certificate -c "MacShot Dev" ~/Library/Keychains/login.keychain-db`，再 `sh scripts/reset-tcc.sh`。
+- 注意：`--probe-capture` **不走**申请权限那条路（只有真截图路径会调 `CGRequestScreenCaptureAccess`），所以它报 `permission=denied` 不代表没弹框；要判"有没有弹框"请用 `--snip-now`。
+
 ## 4. 复位与清理
 
 ```sh
