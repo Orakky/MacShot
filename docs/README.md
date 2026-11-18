@@ -21,6 +21,7 @@
 | `requirements/vision.md` | 定位、3 场景、G-01…G-05 成功指标、反定位 | 愿景 | 已落，待裁决 |
 | `requirements/requirements.md` | FR P0（条数见 §0）/ P1 / P2 / 不做 | 功能需求 | 已落，逐条待转 accepted |
 | `reference/known-limitations.md` | 发布说明取材地：功能边界 / 形态取舍 / 还没证完的缺口，逐条指向真源 ID | 引用（不新增决定） | 已落（11-17，`M-6` 准出④） |
+| `tasks/review-proposal.md` | 32 条裸 `待裁决` 需求的**证据面与建议档**（`T-106` 的输入，不改变任何需求地位） | 提案（非真源） | 草稿（11-18） |
 | `requirements/nfr.md` | NFR-001…036（全部"目标值待实测"） | 非功能需求 | 已落，§9 待签字 |
 | `adr/README.md` | ADR 索引 + 状态（4 accepted / 12 proposed）+ 待补占位 | 决策状态 | 已落 |
 | `adr/ADR-001…016-*.md` | 16 条决策正文（含否决方案与翻案决策门） | 决策正文 | 已落，proposed 待签 |
