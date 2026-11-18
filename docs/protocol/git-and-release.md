@@ -41,7 +41,7 @@ make build      # build/MacShot.app（Debug）
 make release    # Release 配置 + 优化编译
 make dmg        # build/MacShot-<version>.dmg
 make sign       # codesign --force -s -  （不 --deep 除非确有必要，理由见 ADR-004 风险）
-make install    # 复制到 /Applications 或 ~/Applications，且不带 quarantine
+make install    # 先打 DMG，再从 DMG 里装；覆盖已有安装，且不带 quarantine
 ```
 发布检查表（M-6）：
 1. `codesign -dv` 显示 `Signature=adhoc`、无 TeamIdentifier。

@@ -160,12 +160,22 @@ dmg: release icon
 	@rm -rf build/dmg-staging
 	@echo "→ build/MacShot-$(VERSION).dmg（含 /Applications 软链 + 卷标图标，签名身份=$(SIGN_IDENTITY)）"
 
-install: appicon
-	@rm -rf "$(HOME)/Applications/MacShot.app"
-	@mkdir -p "$(HOME)/Applications"
-	cp -R "$(PRODUCT)" "$(HOME)/Applications/"
-	xattr -dr com.apple.quarantine "$(HOME)/Applications/MacShot.app" 2>/dev/null || true
-	@echo "→ 已安装到 ~/Applications/MacShot.app"
+# 装的就是**打出来的那个包**（11-18 实测的第二个坑：旧写法 `install: appicon` 装的是 **Debug**
+# 产物，而 `dmg` 打的是 **Release** ⇒ 两边二进制从来不一样，"装好的=发布的那份"这句话一直不成立；
+# 逐字节 shasum 一比就露馅）。现在挂上 DMG 用 ditto 复制，用户拖拽安装拿到的是同一个东西。
+# 想指定别处：make install INSTALL_DIR=/path/to/Applications
+INSTALL_DIR ?= $(shell [ -d /Applications/MacShot.app ] && echo /Applications || echo $(HOME)/Applications)
+DMG         := build/MacShot-$(VERSION).dmg
+install: dmg
+	@MNT=build/dmg-mnt; rm -rf "$$MNT"; mkdir -p "$$MNT"; \
+	trap 'hdiutil detach "$$MNT" -quiet >/dev/null 2>&1 || true; rm -rf "$$MNT"' EXIT; \
+	hdiutil attach -nobrowse -readonly -mountpoint "$$MNT" "$(DMG)" >/dev/null || { echo "✗ 挂载失败：$(DMG)"; exit 2; }; \
+	rm -rf "$(INSTALL_DIR)/MacShot.app"; mkdir -p "$(INSTALL_DIR)"; \
+	ditto "$$MNT/MacShot.app" "$(INSTALL_DIR)/MacShot.app"; \
+	xattr -dr com.apple.quarantine "$(INSTALL_DIR)/MacShot.app" 2>/dev/null || true; \
+	echo "→ 已安装 $(DMG)（Release）到 $(INSTALL_DIR)/MacShot.app"
+	@/usr/bin/codesign -dvv "$(INSTALL_DIR)/MacShot.app" 2>&1 | awk -F= '/^Authority|^Identifier=/{print "   " $$0}'
+	@/usr/bin/codesign --verify --deep --strict --verbose=1 "$(INSTALL_DIR)/MacShot.app" 2>&1 | tail -1
 
 check: doctor
 	@sh scripts/check-style.sh

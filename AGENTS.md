@@ -32,7 +32,7 @@ make release          # Release 配置构建
 make usage-report     # vision §4 的 G-01…G-05 计数（只数 process=MacShot；加 --include-tests 是模式自校验，不是达标数据）
 make verify-dmg       # 挂上 DMG 逐条核验：卷根 .app、/Applications 软链、卷标图标、签名身份
 make dmg              # 产出 build/MacShot-<version>.dmg（11-17 起用本地自签身份，不再是 ad-hoc）
-make install          # 装到 /Applications 或 ~/Applications（去 quarantine）
+make install          # 先 make dmg，再装 DMG 里那份 **Release**；覆盖已有安装（去 quarantine）
 make contrast         # NFR-024 对比度校验（11 组配对；不达 WCAG 2.2 就退出 1，目前 9/11，见 B-039）
 make check            # 本地门禁：build + test + 风格/依赖方向/文档一致性
 make clean            # 清 build 与 Derived

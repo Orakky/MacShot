@@ -8,7 +8,7 @@
 ## 决策
 - **不启用 App Sandbox**（`com.security.app-sandbox = false`），entitlements 只留必要项（无网络、无 jit）。
 - 产物：`build/MacShot.app` + `build/MacShot.dmg`，`codesign --force --deep -s -`（ad-hoc）。
-- 装到本机：`make install` 把 .app 复制到 `/Applications`（或 `~/Applications`），不带 quarantine 属性 → Gatekeeper 不拦。
+- 装到本机：`make install` 先打 DMG 再从 DMG 里 `ditto` 到 `/Applications`（或 `~/Applications`），不带 quarantine 属性 → Gatekeeper 不拦。
 - 全局热键、跨 Space 贴图、任意目录导出、`tccutil` 排查脚本，都按"非沙盒"写判据。
 
 ## 已考虑并否决的方案
