@@ -24,11 +24,11 @@
 | `float.stroke` | `#000000` @ 12% | `#FFFFFF` @ 14% | 浮层描边 |
 | `float.shadow` | `0 6 18 -4 #000000` @ 28% | 同 | 浮层投影 |
 | `text.primary` | `#1D1D1F` | `#F2F2F7` | 读数、标签 |
-| `text.secondary` | `#6E6E73` | `#A1A1A6` | 次要说明 |
+| `text.secondary` | `#6E6E73` | `#A1A1A6` | 次要说明（11-17 实测浅浮层 **4.49:1**，差 0.01 不达 AA ⇒ `B-039`） |
 | `text.onDark` | `#FFFFFF` | `#FFFFFF` | 遮罩上的读数（读数永远在暗背景上） |
 | `accent` | `#0A84FF` | `#409CFF` | 焦点、当前工具、进度 |
 | `danger` | `#FF3B30` | `#FF453A` | 销毁贴图、清空标注提示 |
-| `warn` | `#FF9F0A` | `#FF9F0A` | 权限缺失、热键冲突 |
+| `warn` | `#FF9F0A` | `#FF9F0A` | 权限缺失、热键冲突（11-17 实测浅浮层 **1.82:1**，连大字 3:1 都不达 ⇒ `B-039`，两条里更严重的那条） |
 | `pin.badge.surface` | `#000000` @ 62% | `#000000` @ 62% | 贴图角标（未导出/倍率/透明度） |
 
 > `overlay.scrim` 是本表唯一的暗化层数值来源：代码经 `OverlayChrome.scrimAlpha(isDark:)` 取值，不许在渲染处写死。

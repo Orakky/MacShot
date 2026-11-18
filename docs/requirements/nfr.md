@@ -61,7 +61,7 @@
 |---|---|---|
 | NFR-022 | 全链路键盘可达（截图 → 标注 → 复制） | **首版做不到闭环**：选区微调（`FR-CAP-013`）在 P1；P0 只支持"全屏截图"这一键盘可达路径。发布说明必须如实写，不许宣称全键盘可用（`keymap.md` §6） |
 | NFR-023 | 可点元素命中 ≥ 24pt | `design-system.md` §4 `hit.min`；`check-style` 无法测，靠 UI 快照评审 |
-| NFR-024 | 对比度 ≥ WCAG 2.2 AA（4.5:1） | 读数永远画在深色药丸上（`design-system.md` §8），校验脚本 `scripts/contrast-check.swift`（M-5） |
+| NFR-024 | 对比度 ≥ WCAG 2.2 AA（4.5:1） | 读数永远画在深色药丸上（`design-system.md` §8），校验脚本 `scripts/contrast-check.swift`（M-5） **11-17 脚本已落地（`make contrast`，`scripts/contrast-check.swift`）并量出两条不达标**：`text.secondary/#6E6E73` 在浅色浮层 4.49:1（差 0.01）、`warn/#FF9F0A` 在浅色浮层 **1.82:1**（连大字 3:1 都不够）⇒ 色板要改，登记 `B-039` 等点名；**在色板定下来之前本条不写通过** |
 | NFR-025 | 减少动态效果 | `accessibilityDisplayShouldReduceMotion` 为真时动画全降 0 |
 | NFR-026 | VoiceOver 对贴图/工具条 | 贴图窗是 borderless 自绘视图 → 需显式 `NSAccessibility` 元素；**风险：不做则完全不可读**。列为 P1 但必须在 M-4 出口给"已知不可读范围"的书面说明（不许默认通过） |
 | NFR-027 | 鼠标穿透 / 无边框窗的可访问性代价 | 穿透态下贴图不能被 VoiceOver/键盘操作 → 需在 UI 上明示"穿透=不可交互"（P1） |

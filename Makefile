@@ -12,7 +12,7 @@ VERSION   := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionStri
 # 没有身份时自动退回 ad-hoc（`-`），构建与门禁不会因为环境缺身份而变红。
 SIGN_IDENTITY := $(shell security find-identity -v -p codesigning 2>/dev/null | grep -q "MacShot Dev" && echo "MacShot Dev" || echo "-")
 
-.PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-clipboard probe-pin probe-settings probe-hotkey probe-freeze icon appicon
+.PHONY: doctor contrast build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-clipboard probe-pin probe-settings probe-hotkey probe-freeze icon appicon
 
 doctor:
 	@echo "  签名身份 = $(SIGN_IDENTITY)（有 MacShot Dev 则 DR=identifier+leaf，重建不掉授权）"
@@ -107,6 +107,9 @@ probe-pin: appicon
 	 echo "→ build/probe-pin.png + 读数："; cat /tmp/macshot-probe-pin.txt 2>/dev/null | sed 's/^/   /'
 
 # 冻结语义 + 剪贴板哨兵的运行时取证：会在你屏幕上开约 4 秒遮罩
+contrast: ## NFR-024 对比度校验：把 §2 的语义 token 成对算 WCAG 2.2 比值
+	@xcrun swift scripts/contrast-check.swift
+
 probe-freeze: appicon
 	@sh scripts/probe-freeze.sh
 

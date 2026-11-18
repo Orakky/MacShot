@@ -30,6 +30,7 @@ make run-term          # 构建后直接 exec 产物二进制 —— 日常入�
 make release           # Release 配置构建
 make dmg               # 产出 build/MacShot-<version>.dmg（ad-hoc 签名）
 make install           # 装到 /Applications 或 ~/Applications（去 quarantine）
+make contrast          # NFR-024 对比度校验（11 组配对；不达 WCAG 2.2 就退出 1，目前 9/11，见 B-039）
 make check             # 本地门禁：build + test + 风格/依赖方向/文档一致性
 make clean             # 清 build 与 Derived
 make probe            # 采一帧并打印尺寸/耗时/权限（V-001/V-019 取证）
