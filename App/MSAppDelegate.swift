@@ -323,6 +323,59 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// 以及 `B-035` 的**区分实验**（`rounds=2`：开 N 张 → 全关 → 再开 N 张）。
     /// 用合成画面是有意的：这里裁的是"文档 + 位图 + 窗口"的常驻成本，与屏幕内容无关，
     /// 也就不必等 `T-090` 的签名/授权（cdhash 一变就采不到）。会在你屏幕上短暂开 N 张贴图。
+    /// `--snip-then-pin <ms>`：**真截图 → 真遮罩 → 真选区 → 等价于按 Enter 的贴出**，
+    /// 然后报"贴图数 / 剪贴板 types / PNG 字节 / DPI / 哨兵有没有被覆盖"。
+    /// 这条补的是 `B-030`：以前只有包内断言，没有一次真壳闭环。会在你屏幕上真开遮罩与贴图，跑完自动关。
+    ///
+    /// 写法纪律：**一步都不许 block 主线程**（`probeSnipThenCancel` 就是这么绿的，
+    /// 我第一版用 `usleep`/`RunLoop.run` 等待，MainActor 上的采集 Task 排不上，
+    /// 报"遮罩没起来"看着像产品坏了，其实是我的等待写错）。
+    func probeSnipThenPin(thenExitAfter ms: Int) {
+        func report(_ line: String) {
+            MSLog.info(.pin, "probe-pinreal \(line)")
+            let url = URL(fileURLWithPath: "/tmp/macshot-probe-pinreal.txt")
+            if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(Data((line + "\n").utf8)); try? h.close() }
+            else { try? (line + "\n").write(to: url, atomically: true, encoding: .utf8) }
+        }
+        // 哨兵：先放一段已知文本，`Enter` 之后它必须被我们的 PNG 覆盖掉；
+        // 反过来 `--snip-then-cancel` 里它必须原样还在（两条方向相反，`V-036` 要的就是这个）。
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("MACSHOT-PINREAL-SENTINEL", forType: .string)
+        coordinator.onToast = { report("toast=\($0)") }
+        report("mouse=\(NSStringFromPoint(NSEvent.mouseLocation)) displays=\(MSDisplayInventory.current().count)")
+        coordinator.handle(.snip)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self else { return }
+            report("遮罩可见性=\(self.coordinator.overlayVisible)")
+            guard let window = self.coordinator.overlay else { report("FAIL 遮罩没起来（授权？采集失败？）"); exit(5) }
+            let view = window.overlayView
+            let sel = CGRect(x: view.bounds.midX - 180, y: view.bounds.midY - 110, width: 360, height: 220)
+            view.setSelection(sel)
+            self.coordinator.overlay(window, selectionDidChange: sel)
+            report("选区就绪 \(sel)，贴图数=\(self.pins.count)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                self.coordinator.overlay(window, didRequest: .pin)   // 等价于真按 Enter（默认出口＝贴出）
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    let pb = NSPasteboard.general
+                    let types = (pb.types ?? []).map(\.rawValue).sorted()
+                    let png = pb.data(forType: NSPasteboard.PasteboardType("public.png"))
+                    var dpi = "?"
+                    if let d = png, let src = CGImageSourceCreateWithData(d as CFData, nil),
+                       let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+                       let t = props[kCGImagePropertyTIFFDictionary] as? [CFString: Any],
+                       let x = t[kCGImagePropertyTIFFXResolution] as? Double { dpi = "\(x)" }
+                    report("贴出后 pins=\(self.pins.count) overlayVisible=\(self.coordinator.overlayVisible) "
+                           + "pngBytes=\(png?.count ?? -1) dpi=\(dpi)")
+                    report("types=\(types)")
+                    report("哨兵被覆盖=\(pb.string(forType: .string) != "MACSHOT-PINREAL-SENTINEL")（期望 true：贴出同时写剪贴板）")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Double(max(0, ms)) / 1000) {
+                        self.pins.closeAll()
+                        exit(0)
+                    }
+                }
+            }
+        }
+    }
     func probeMemory(count: Int, w: Int, h: Int, holdMs: Int, rounds: Int = 1) {
         MainActor.assumeIsolated {
             func report(_ line: String) {

@@ -68,6 +68,7 @@ xattr -l /Applications/MacShot.app                                # 期望无 co
 
 - 建证书：`openssl req -x509`（`codeSigning` EKU + `CA:false` + `digitalSignature`，10 年）→ `security import` 进 **登录**钥匙串 → `security add-trusted-cert -p codeSign`。只影响本用户，不动系统信任库。
 - 撤销：`security delete-certificate -c "MacShot Dev" ~/Library/Keychains/login.keychain-db`，再 `sh scripts/reset-tcc.sh`。
+- **首次用自签身份签名会弹一次钥匙串授权框**（"codesign 想访问密钥 MacShot Dev"）——点「始终允许」。没点之前 `make build` / `make check` 会像卡死（实测挂了几分钟，还会把并发的第二个 `make check` 一起拖住，因为两个 xcodebuild 抢同一个 DerivedData）。点过一次之后签名只要 7 秒（`E-079⑦`）。
 - 注意：`--probe-capture` **不走**申请权限那条路（只有真截图路径会调 `CGRequestScreenCaptureAccess`），所以它报 `permission=denied` 不代表没弹框；要判"有没有弹框"请用 `--snip-now`。
 
 ## 4. 复位与清理

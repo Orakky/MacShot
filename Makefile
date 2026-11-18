@@ -12,7 +12,7 @@ VERSION   := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionStri
 # 没有身份时自动退回 ad-hoc（`-`），构建与门禁不会因为环境缺身份而变红。
 SIGN_IDENTITY := $(shell security find-identity -v -p codesigning 2>/dev/null | grep -q "MacShot Dev" && echo "MacShot Dev" || echo "-")
 
-.PHONY: doctor contrast verify-dmg usage-report build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-clipboard probe-pin probe-settings probe-hotkey probe-freeze icon appicon
+.PHONY: doctor contrast verify-dmg usage-report build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-clipboard probe-pin probe-pin-real probe-settings probe-hotkey probe-freeze icon appicon
 
 doctor:
 	@echo "  签名身份 = $(SIGN_IDENTITY)（有 MacShot Dev 则 DR=identifier+leaf，重建不掉授权）"
@@ -22,7 +22,12 @@ doctor:
 build:
 	xcodebuild -project $(XCODEPROJ) -scheme $(SCHEME) -configuration Debug \
 	  -derivedDataPath $(DERIVED) -quiet build
-	@echo "→ $(PRODUCT)"
+	# 陷阱就在这儿：xcodebuild 按工程设置用 **ad-hoc** 签产物，所以单独 `make build` 一次，
+	# 屏幕录制授权就打回原形（实测：build 后 `-3801`，appicon 重签后 `granted`）。
+	# 任何能跑起来的产物都必须以自签身份结尾，否则"重建不掉授权"这句话只在走 appicon 时成立。
+	@codesign --force --sign "$(SIGN_IDENTITY)" --timestamp=none "$(PRODUCT)" 2>/dev/null \
+	  || echo "  （身份不可用，退回 ad-hoc：授权会随重建失效，见 Q-18）"
+	@echo "→ $(PRODUCT)  签名=$(SIGN_IDENTITY)"
 
 release:
 	xcodebuild -project $(XCODEPROJ) -scheme $(SCHEME) -configuration Release \
@@ -80,6 +85,14 @@ probe-settings: appicon
 	@pkill -x MacShot 2>/dev/null; sleep 1; \
 	open -n "$(PRODUCT)" --args --probe-settings 700; sleep 5; \
 	echo "→ 设置窗控件清单："; cat /tmp/macshot-probe-settings.txt 2>/dev/null | sed 's/^/   /'
+
+# B-030 的真壳闭环：真截图 → 真遮罩 → 真选区 → 等价按 Enter 的贴出，读数写 /tmp
+# 会在你屏幕上开约 6 秒遮罩与一张贴图，跑完自动关
+probe-pin-real: appicon
+	@rm -f /tmp/macshot-probe-pinreal.txt
+	@pkill -x MacShot 2>/dev/null; sleep 1; \
+	open -n "$(PRODUCT)" --args --snip-then-pin 4000; sleep 10; \
+	echo "→ 真壳贴出读数："; cat /tmp/macshot-probe-pinreal.txt 2>/dev/null | sed 's/^/   /'
 
 # V-037④ 的机制半：改绑 → 退出 → 再启动读回 → 还原，三次独立启动都算一次取证
 probe-hotkey: appicon

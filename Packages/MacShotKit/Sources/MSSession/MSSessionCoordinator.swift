@@ -179,7 +179,7 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
     private var reducer = MSSessionReducer()
 
     /// internal 只读（测试缝）：测试用它断言"窗创建了但没呈现"，生产代码不读。
-    private(set) var overlay: MSOverlayWindow?
+    public private(set) var overlay: MSOverlayWindow?
     private var frozenFrame: MSCaptureFrame?
     private var displaySnapshot: [MSDisplay] = []
     private var activeDisplay: MSDisplay?

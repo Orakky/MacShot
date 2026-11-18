@@ -25,11 +25,19 @@ if CommandLine.arguments.contains("--probe-permission") {
 }
 
 if CommandLine.arguments.contains("--probe-capture") {
+    // 探针一律同时写 /tmp：`open` 起的进程 stdout 拿不到；unified log 能读但慢，
+    // 而且这个 shell 里裸 `log` 会被同名函数遮蔽（要用 /usr/bin/log）。文件是最稳的通道。
+    var lines: [String] = []
+    func say(_ s: String) { print(s); lines.append(s) }
+    func flush() {
+        try? (lines.joined(separator: "\n") + "\n")
+            .write(toFile: "/tmp/macshot-probe-capture.txt", atomically: true, encoding: .utf8)
+    }
     let state = PermissionProbe.screenRecording()
-    print("permission=\(state.rawValue)")
+    say("permission=\(state.rawValue)")
     let displays = MSDisplayInventory.current()
-    print("displays=\(displays.map { "\($0.localizedName):\($0.logicalFrame.width)x\($0.logicalFrame.height)@x\($0.scale)px\($0.pixelSize.width)x\($0.pixelSize.height)" }.joined(separator: ", "))")
-    guard let display = displays.first else { print("FAIL no display"); exit(2) }
+    say("displays=\(displays.map { "\($0.localizedName):\($0.logicalFrame.width)x\($0.logicalFrame.height)@x\($0.scale)px\($0.pixelSize.width)x\($0.pixelSize.height)" }.joined(separator: ", "))")
+    guard let display = displays.first else { say("FAIL no display"); flush(); exit(2) }
     let backend = CaptureBackendSelector.decide()
     let capturer = CaptureBackendSelector.makeCapturer(backend: backend)
     Task { @MainActor in
@@ -42,20 +50,22 @@ if CommandLine.arguments.contains("--probe-capture") {
                 durations.append("\(started.duration(to: ContinuousClock.now))")
                 last = frame
             } catch {
-                print("FAIL capture: \(error)")
+                say("FAIL capture: \(error)")
+                flush()
                 exit(3)
             }
         }
-        guard let frame = last else { exit(3) }
+        guard let frame = last else { flush(); exit(3) }
         let degenerate = MSCaptureDiagnostics.isDegenerate(frame.image)
-        print("backend=\(backend.rawValue) pixels=\(frame.image.width)x\(frame.image.height) scale=\(frame.scale)")
-        print("degenerate=\(degenerate)  (true ⇒ 屏幕录制权限没给或系统拒绝)")
-        print("5 次耗时: \(durations.joined(separator: " "))")
+        say("backend=\(backend.rawValue) pixels=\(frame.image.width)x\(frame.image.height) scale=\(frame.scale)")
+        say("degenerate=\(degenerate)  (true ⇒ 屏幕录制权限没给或系统拒绝)")
+        say("5 次耗时: \(durations.joined(separator: " "))")
         // Pixel probe on a known spot so colour can be eyeballed against the real screen.
         if let bmp = MSBitmap(image: frame.image) {
             let centre = MSIntPoint(x: frame.image.width / 2, y: frame.image.height / 2)
-            print("centre pixel = \(bmp.sample(pixelAt: centre)?.hex() ?? "?")")
+            say("centre pixel = \(bmp.sample(pixelAt: centre)?.hex() ?? "?")")
         }
+        flush()
         exit(degenerate ? 4 : 0)
     }
     dispatchMain()
@@ -88,6 +98,19 @@ if CommandLine.arguments.contains("--probe-clipboard") {
     app.setActivationPolicy(.accessory)
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
         MainActor.assumeIsolated { delegate.probeClipboard() }
+    }
+    app.run()
+}
+
+// --snip-then-pin <ms>：真截图 → 真选区 → 贴出并复制，读结果写 /tmp（B-030 的真壳判据）。
+if let i = CommandLine.arguments.firstIndex(of: "--snip-then-pin") {
+    let ms = CommandLine.arguments.count > i + 1 ? (Int(CommandLine.arguments[i + 1]) ?? 3_000) : 3_000
+    let app = NSApplication.shared
+    let delegate = MainActor.assumeIsolated { MSAppDelegate(autoSnip: false) }
+    app.delegate = delegate
+    app.setActivationPolicy(.regular)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+        MainActor.assumeIsolated { delegate.probeSnipThenPin(thenExitAfter: ms) }
     }
     app.run()
 }
@@ -163,3 +186,5 @@ let delegate = MainActor.assumeIsolated { MSAppDelegate() }
 app.delegate = delegate
 app.setActivationPolicy(.accessory)     // LSUIElement equivalent even when run from DerivedData
 app.run()
+
+
