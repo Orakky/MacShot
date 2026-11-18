@@ -74,7 +74,8 @@ if CommandLine.arguments.contains("--probe-capture") {
 // --dump-chrome <png>：把遮罩界面离屏自绘成 PNG（不采集、不碰 TCC），给"眼睛"补一次账。
 if let i = CommandLine.arguments.firstIndex(of: "--dump-chrome") {
     let out = CommandLine.arguments.count > i + 1 ? CommandLine.arguments[i + 1] : "build/chrome.png"
-    MainActor.assumeIsolated { MSChromeDump.run(to: out, loupe: CommandLine.arguments.contains("loupe")) }
+    MainActor.assumeIsolated { MSChromeDump.run(to: out, loupe: CommandLine.arguments.contains("loupe"),
+                                                draft: CommandLine.arguments.contains("draft")) }
 }
 
 // --probe-settings：真建设置窗并自绘成 PNG，给"加了控件"这件事一双眼睛。

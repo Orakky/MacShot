@@ -63,8 +63,9 @@ probe-permission: appicon
 	@"$(PRODUCT)/Contents/MacOS/MacShot" --probe-permission
 probe-menu: appicon
 	@"$(PRODUCT)/Contents/MacOS/MacShot" --probe-menu
+# ARGS=draft / ARGS="loupe"：把额外参数原样传给 --dump-chrome（复现"标注拖到一半时屏幕上有什么"）
 probe-chrome: appicon
-	@"$(PRODUCT)/Contents/MacOS/MacShot" --dump-chrome build/chrome.png
+	@"$(PRODUCT)/Contents/MacOS/MacShot" --dump-chrome build/chrome.png $(ARGS)
 	@echo "→ build/chrome.png（遮罩界面自绘，用来看，不是用来判绿）"
 
 # NFR-005 / NFR-008 的内存读数：开 10 张 4K 源贴图 → 关全部 → **再开 10 张**（第二轮是 B-035 的区分实验：

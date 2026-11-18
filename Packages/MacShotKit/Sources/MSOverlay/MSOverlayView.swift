@@ -450,6 +450,12 @@ public final class MSOverlayView: NSView {
         return loupeBitmap?.sample(pixelAt: px)
     }
 
+    /// 探针读数用：拖拽中的草稿是什么种类（不把可变引用递出去）。
+    public var draftKindForProbe: MSAnnotationKind? { draft?.kind }
+
+    /// 探针读数用：已提交元素数（拖拽中该是 0，屏幕上的墨来自草稿）。
+    public var committedElementCount: Int { document?.elements.count ?? -1 }
+
     /// 放大镜该不该出现。
     public var isLoupeVisible: Bool {
         loupeAnchor != nil && ((isDraggingSelection && autoLoupeWhileDragging) || loupeForced)
@@ -628,7 +634,6 @@ public final class MSOverlayView: NSView {
     }
 
     public override func mouseDown(with event: NSEvent) {
-        isDraggingSelection = true
         let p = convert(event.locationInWindow, from: nil)
         if OverlayChrome.cancelHitRect(in: bounds).contains(p) {
             MSLog.info(.overlay, "cancel button pressed")
@@ -669,6 +674,9 @@ public final class MSOverlayView: NSView {
             host.map { delegate?.overlay($0, drawingPhaseDidChange: .began(tool)) }   // tool 这里已是 MSAnnotationKind
             return
         }
+        // 走到这里才是"拖选区"（新框 / 移动 / 改尺寸）——放大镜的拖拽档只认这一种。
+        // 以前 mouseDown 一进来就置位，画箭头/矩形也算"拖拽"，标注时放大镜跟着弹（用户 11-18 撤的就是这个）。
+        isDraggingSelection = true
         if let sel = selection {
             let h = MSSelectionGeometry.handle(at: p, of: sel)
             switch h {
@@ -722,6 +730,9 @@ public final class MSOverlayView: NSView {
 
     public override func mouseDragged(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
+        // 拖拽期间系统不再发 mouseMoved，锚点必须在这里跟着鼠标走：否则放大镜停在"最后一次悬停的位置"，
+        // 放大的是别处的像素（用户 11-18 那张截图里，读数条就是半路停着的）。
+        loupeAnchor = p
         switch dragMode {
         case .newSize(let anchor):
             var rect = CGRect(x: min(anchor.x, p.x), y: min(anchor.y, p.y),

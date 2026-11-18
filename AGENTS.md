@@ -8,11 +8,12 @@ macOS 原生截图 → 标注 → 贴图置顶 → 剪贴板 工具（形态参�
 
 - 已裁决：D-01 首版只做四大件 / D-02 本机签名（11-17 由 ad-hoc 改为**本地自签 `MacShot Dev`**，Q-18=A，理由见 `E-070`） / D-03 Xcode + SPM / D-04 贴图携带可编辑标注层（见 `docs/charter.md` §1）。
 - **11-18 两条用户改判（呈现档，不是翻案）**：① 放大镜**默认不自动弹**，只有 `⌥` 强制（`Q-07` 裁的是"要不要做"，这条裁的是"什么时候出现"；偏好 schema 3→4）② 标注**边画边看到**——拖拽期草稿必须实时上屏，判据 `V-053`。两者都记在 §6b 末尾两行，`E-081`。
+  **①当天又提了一次**，因为翻默认档对他**不生效**：落盘的 `preferences.json` 里旧默认被 materialize 成 `true` 压过了新默认。三条修复＝迁移（`schema<4` 该字段回落出厂默认）＋范围（放大镜只认**选区**拖拽，画标注不弹）＋锚点跟手，判据 `V-054`、记录 `E-083`。**教训：改"默认值"必须同时改"读旧文件的规则"，否则只对全新用户生效。**
 - **11-17 已全部裁决**：`docs/adr/README.md` = accepted 16 / proposed 0，`charter.md` §6b 是签字记录；
   §6 那张"临时默认"表只作历史保留，冲突时以 §6b 为准。**还剩两类真口子**：
   ① `requirements.md` 里 32 行状态列是裸 `待裁决`（逐条需求复审，登记为 `T-106`）；
   ② `blocked.md` 里标"需用户"的条目（`B-033/B-034/B-036/B-038` 等，多数卡在同一个 TCC 前置上）。
-- 正式代码在 `App/` + `Packages/MacShotKit/` + `MacShot.xcodeproj`（10 模块 + 145 条单测，`make check` 绿）。`stash@{0}` 那份旧骨架已 `apply` 并按 accepted ADR 改写完毕（`modules.md` §12 的 3 处不符都处理了），**不要再 pop 第二次**。
+- 正式代码在 `App/` + `Packages/MacShotKit/` + `MacShot.xcodeproj`（10 模块 + 147 条单测，`make check` 绿）。`stash@{0}` 那份旧骨架已 `apply` 并按 accepted ADR 改写完毕（`modules.md` §12 的 3 处不符都处理了），**不要再 pop 第二次**。
 
 改任何曾被临时默认档覆盖的行为前，先看 §6b 的签字记录（§6 只是历史）；**改判决要用户点头**，agent 不许自己翻案（NFR-036：文档与代码同批提交）。
 
@@ -38,7 +39,7 @@ make check            # 本地门禁：build + test + 风格/依赖方向/文档
 make clean            # 清 build 与 Derived
 make probe            # 采一帧并打印尺寸/耗时/权限（V-001/V-019 取证）
 make probe-menu       # 打印状态栏菜单行与"权限行是否真挂在菜单上"（常驻读数行的取证）
-make probe-chrome     # 遮罩界面离屏自绘成 build/chrome.png（不碰 TCC，用来看）；加 `loupe` 参数连放大镜一起出图
+make probe-chrome     # 遮罩界面离屏自绘成 build/chrome.png（不碰 TCC，用来看）；`loupe` 参数连放大镜一起出图，`draft` 参数按**真落盘偏好**拖一个矩形给你看标注中途那一帧
 make probe-clipboard  # 真写系统剪贴板再读回 types/DPI，分清"我们写的"与"系统派生的"（会覆盖剪贴板）
 make probe-memory     # 10 张贴图的内存读数（NFR-005/008）：夹具是噪声，读数用 ps/vmmap 外部复核；会短暂开 N 个窗
 make probe-hotkey     # 改绑→退出→再启动读回→还原：热键跨进程持久化取证（会临时改你的快捷键，最后还原成 F1）

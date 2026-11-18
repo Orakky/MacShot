@@ -26,6 +26,27 @@ struct MSDefaultPreferencesTests {
         #expect(p.annotationDefaults.lineWidth == 3)
     }
 
+    @Test("旧文件（schema<4）里放大镜那个字段是旧默认、不是用户选择 ⇒ 回落到出厂默认；v4 显式写 true 才尊重")
+    func preV4LoupeFieldIsNotAUserChoice() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("macshot-mig-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent("preferences.json")
+
+        // 夹具由编码器生成，不手写 JSON（上一版手写的形状和真盘上那份不一样，测了个假的）。
+        var old = MSAppPreferences(schemaVersion: 2)
+        old.showMagnifierWhileDragging = true            // 旧版本每次写盘都会 materialize 这个旧默认
+        try JSONEncoder.pretty.encode(old).write(to: file)
+        #expect(MSSettingsStore(directory: dir).current.showMagnifierWhileDragging == false,
+                "schema 2 落盘的 true 是旧默认，照读就等于用户 11-18 的要求永远不生效")
+
+        var explicit = MSAppPreferences(schemaVersion: 4)
+        explicit.showMagnifierWhileDragging = true       // v4 的 true 只可能是用户在设置窗点的
+        try JSONEncoder.pretty.encode(explicit).write(to: file)
+        #expect(MSSettingsStore(directory: dir).current.showMagnifierWhileDragging == true,
+                "迁移不能顺手把用户的显式选择也清掉")
+        try? FileManager.default.removeItem(at: dir)
+    }
+
     @Test("未落盘时读默认，落盘后读回一致")
     func persistenceRoundTrip() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("macshot-tests-\(UUID().uuidString)")

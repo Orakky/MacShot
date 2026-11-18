@@ -116,6 +116,15 @@ public final class MSSettingsStore: MSReadingPreferences, @unchecked Sendable {
            let decoded = try? JSONDecoder().decode(MSAppPreferences.self, from: data),
            decoded.schemaVersion <= MSAppPreferences.currentSchemaVersion {
             cached = decoded
+            // **低于 4 的文件里这个字段不是用户的选择**：当时设置窗还没有这个开关，而每次
+            // `update()` 都会把整份结构体连默认值一起 materialize 落盘 ⇒ 读到的 `true` 只是旧默认。
+            // 照读的话，11-18 翻过来的新默认永远到不了用户屏幕上（实测：这台机器的
+            // `preferences.json` 是 schema 2、里面就写着 `showMagnifierWhileDragging: true`）。
+            if decoded.schemaVersion < MSAppPreferences.currentSchemaVersion,
+               cached.showMagnifierWhileDragging != MSAppPreferences().showMagnifierWhileDragging {
+                MSLog.info(.settings, "schema \(decoded.schemaVersion) 的放大镜字段按旧默认落盘，回落到出厂默认")
+                cached.showMagnifierWhileDragging = MSAppPreferences().showMagnifierWhileDragging
+            }
             MSLog.info(.settings, "loaded schema=\(decoded.schemaVersion)")
         } else {
             cached = .init()

@@ -2,6 +2,7 @@ import AppKit
 import MSCapture
 import MSCore
 import MSOverlay
+import MSSettings
 
 /// `--dump-chrome <png>`：把遮罩 chrome（暗化层 + 选区 + 把手 + 读数 + 工具条）**离屏自绘**成 PNG。
 ///
@@ -9,7 +10,7 @@ import MSOverlay
 /// 所以不碰 TCC、不弹权限、也不需要合成鼠标事件。
 @MainActor
 enum MSChromeDump {
-    static func run(to path: String, loupe: Bool = false) {
+    static func run(to path: String, loupe: Bool = false, draft: Bool = false) {
         guard let display = MSDisplayInventory.current().first else {
             print("FAIL 没有可用显示器"); exit(2)
         }
@@ -35,6 +36,27 @@ enum MSChromeDump {
         let logical = display.logicalFrame
         view.setSelection(CGRect(x: logical.midX - 210, y: logical.midY - 130, width: 420, height: 260))
         view.tool = .rect
+        // draft 档：装**用户机器上真落盘的偏好**，再用不带 ⌥ 的真事件拖一个矩形。
+        // 复现的是"截图标注拖到一半时屏幕上到底有什么"，不碰 TCC。
+        var draftNote = ""
+        if draft {
+            let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("MacShot", isDirectory: true)
+            let prefs = MSSettingsStore(directory: dir).current
+            view.autoLoupeWhileDragging = prefs.showMagnifierWhileDragging
+            draftNote = "落盘 schema=\(prefs.schemaVersion) showMagnifierWhileDragging=\(prefs.showMagnifierWhileDragging)"
+            let src = CGEventSource(stateID: .combinedSessionState)
+            let realH = NSScreen.screens.first?.frame.height ?? 1080
+            func mouse(_ type: CGEventType, _ p: CGPoint) -> NSEvent {
+                let cg = CGEvent(mouseEventSource: src, mouseType: type,
+                                 mouseCursorPosition: CGPoint(x: p.x, y: realH - p.y), mouseButton: .left)!
+                return NSEvent(cgEvent: cg)!
+            }
+            let sel = view.selection!
+            view.mouseMoved(with: mouse(.mouseMoved, CGPoint(x: sel.minX + 60, y: sel.maxY - 60)))
+            view.mouseDown(with: mouse(.leftMouseDown, CGPoint(x: sel.minX + 60, y: sel.maxY - 60)))
+            view.mouseDragged(with: mouse(.leftMouseDragged, CGPoint(x: sel.minX + 210, y: sel.maxY - 170)))
+        }
         if loupe {
             // 放大镜只能由真事件驱动：合成一次带 ⌥ 的 mouseMoved，让它按生产路径出现。
             let src = CGEventSource(stateID: .combinedSessionState)
@@ -45,7 +67,8 @@ enum MSChromeDump {
             cg.flags = CGEventFlags.maskAlternate
             view.mouseMoved(with: NSEvent(cgEvent: cg)!)
         }
-        print("   loupe visible=\(view.isLoupeVisible) pixel=\(String(describing: view.loupePixel)) color=\(String(describing: view.loupeColor?.hex()))")
+        print("   loupe visible=\(view.isLoupeVisible) autoWhileDragging=\(view.autoLoupeWhileDragging) \(draftNote)")
+        if draft { print("   拖拽中 draft=\(String(describing: view.draftKindForProbe)) 已提交元素=\(view.committedElementCount)") }
         view.needsDisplay = true
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
             print("FAIL 离屏渲染拿不到位图"); exit(4)

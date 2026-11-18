@@ -171,6 +171,45 @@ struct SettingsTakeEffectTests {
     }
 
     @MainActor
+    @Test("设置=开 时放大镜只跟**选区**拖拽且跟着鼠标走；画标注不许弹（UI-008 的「拖新选区」是字面意思）")
+    func loupeDragCaseIsScopedToSelectionDrags() async throws {
+        var prefs = MSAppPreferences()
+        prefs.showMagnifierWhileDragging = true
+        let (coord, _, _, window) = try await session(prefs: prefs)
+        let view = window.overlayView
+        select(coord, window, CGRect(x: 30, y: 30, width: 300, height: 220))
+
+        let src = CGEventSource(stateID: .combinedSessionState)
+        let realH = NSScreen.screens.first?.frame.height ?? 1080
+        func mouse(_ type: CGEventType, _ p: CGPoint) -> NSEvent {
+            let cg = CGEvent(mouseEventSource: src, mouseType: type,
+                             mouseCursorPosition: CGPoint(x: p.x, y: realH - p.y), mouseButton: .left)!
+            return NSEvent(cgEvent: cg)!
+        }
+
+        // ① 画标注：悬停 → 按下 → 拖，全程不许弹（设置开着也不该跟标注）
+        view.tool = .rect
+        view.mouseMoved(with: mouse(.mouseMoved, CGPoint(x: 120, y: 150)))
+        view.mouseDown(with: mouse(.leftMouseDown, CGPoint(x: 120, y: 150)))
+        view.mouseDragged(with: mouse(.leftMouseDragged, CGPoint(x: 220, y: 90)))
+        #expect(view.draftKindForProbe == .rect && view.committedElementCount == 0,
+                "前置：这次拖的确实是**未提交的标注草稿**（draft=\(String(describing: view.draftKindForProbe)) 已提交=\(view.committedElementCount)），否则下面那条「不弹」是空的")
+        #expect(!view.isLoupeVisible, "画矩形时弹放大镜＝用户要撤掉的那个额外画面，设置开着也不该跟标注拖拽")
+        view.mouseUp(with: mouse(.leftMouseUp, CGPoint(x: 220, y: 90)))
+
+        // ② 对照：拖选区必须弹，而且锚点跟着鼠标走（停在悬停点＝放大的是别处的像素）
+        view.tool = .select
+        view.mouseMoved(with: mouse(.mouseMoved, CGPoint(x: 420, y: 330)))
+        let parked = view.loupePixel
+        view.mouseDown(with: mouse(.leftMouseDown, CGPoint(x: 420, y: 330)))
+        view.mouseDragged(with: mouse(.leftMouseDragged, CGPoint(x: 600, y: 200)))
+        #expect(view.isLoupeVisible, "设置=开 时拖选区必须弹，这个开关不能变成死设置")
+        let moved = try #require(view.loupePixel)
+        #expect(moved != parked, "拖拽中锚点没动（\(String(describing: parked)) → \(moved)）⇒ 放大镜停在最后一次悬停的位置")
+        view.mouseUp(with: mouse(.leftMouseUp, CGPoint(x: 600, y: 200)))
+    }
+
+    @MainActor
     @Test("放大镜默认不再自动弹（Q-07 改判）：拖框与移动都不出现，⌥ 仍能强制呼出")
     func magnifierDefaultsOffButOptionStillForces() async throws {
         let (coord, _, _, window) = try await session(prefs: MSAppPreferences())
