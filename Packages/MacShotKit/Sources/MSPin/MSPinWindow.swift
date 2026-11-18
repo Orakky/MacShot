@@ -56,6 +56,21 @@ public protocol MSPinDelegate: AnyObject {
     func pinDidBecomeIdle(_ pin: MSPinWindow)
 }
 
+/// 贴图边缘的"悬浮"光晕（用户 11-18 要的效果）。
+///
+/// **只活在 chrome 层**：导出与剪贴板走 `bakedImage()` → `MSAnnotationRenderer`，压根不经过视图绘制，
+/// 所以加光晕不会改动任何一个内容像素（判据 `V-057①`）。环全部画在图片**外面**的留白里，
+/// 一圈都不压图片（压边就是"看到的光晕"和"复制出去的图"不一致，那是 `NFR-011` 的反面）。
+public enum MSPinGlow {
+    /// 留白宽度：窗比图片每边大这么多。太窄光晕铺不开，太宽会吃掉可点区域。
+    public static let pad: CGFloat = 10
+    /// 由外到内的三层环（线宽 pt / 不透明度）。白色是为了在深色桌面上真的看得见；
+    /// 浅色桌面的接地感交给系统窗影（`hasShadow = true`）。
+    public static let rings: [(width: CGFloat, alpha: CGFloat)] = [(9, 0.07), (5, 0.15), (2, 0.30)]
+    /// 紧贴图片外沿的一圈高光，让边缘在两种桌面上都有一条干净的界。
+    public static let rimAlpha: CGFloat = 0.45
+}
+
 public final class MSPinWindow: NSPanel {
     public let pinView: MSPinView
     public let id = UUID()
@@ -64,7 +79,8 @@ public final class MSPinWindow: NSPanel {
     public var hasExported: Bool = true
 
     public init(content: MSPinContent, origin: NSPoint?, menu: NSMenu?) {
-        let size = content.logicalSize
+        let size = CGSize(width: content.logicalSize.width + MSPinGlow.pad * 2,
+                          height: content.logicalSize.height + MSPinGlow.pad * 2)
         pinView = MSPinView(content: content)
         super.init(contentRect: NSRect(origin: origin ?? .zero, size: size),
                    styleMask: [.borderless, .nonactivatingPanel],
@@ -142,9 +158,12 @@ public final class MSPinView: NSView {
     /// 11-17 走过折行方案，实测 200×140 的贴图要盖掉 75% 画面，于是改成撑高窗口（`B-028`）。
     public private(set) var stripHeight: CGFloat = 0
 
-    /// 图片实际占据的矩形（视图坐标，y 向上：底部让给工具带）。
+    /// 图片实际占据的矩形（视图坐标，y 向上：四周是光晕留白，底部再让给工具带）。
+    /// 位图、矢量层、工具带、徽章、`docPoint` 全部从这里取——两处各算一遍就是"画在一处、点在另一处"。
     public var imageRect: CGRect {
-        CGRect(x: 0, y: stripHeight, width: bounds.width, height: max(1, bounds.height - stripHeight))
+        CGRect(x: MSPinGlow.pad, y: MSPinGlow.pad + stripHeight,
+               width: max(1, bounds.width - MSPinGlow.pad * 2),
+               height: max(1, bounds.height - MSPinGlow.pad * 2 - stripHeight))
     }
 
     public var isEditing = false { didSet { if oldValue != isEditing { applyStrip() } } }
@@ -173,9 +192,9 @@ public final class MSPinView: NSView {
 
     private func resizeWindow() {
         guard let window else { return }
-        // 图片尺寸 + 编辑态工具带；工具带长在下方，所以顶边不动（与 zoom 同一套锚定规则）
-        let size = CGSize(width: content.logicalSize.width * zoom,
-                          height: content.logicalSize.height * zoom + stripHeight)
+        // 图片尺寸 + 四周留白 + 编辑态工具带；工具带长在下方，所以顶边不动（与 zoom 同一套锚定规则）
+        let size = CGSize(width: content.logicalSize.width * zoom + MSPinGlow.pad * 2,
+                          height: content.logicalSize.height * zoom + stripHeight + MSPinGlow.pad * 2)
         var f = window.frame
         let dy = size.height - f.height
         f.origin.y -= dy                                   // keep the top edge put while zooming
@@ -207,6 +226,34 @@ public final class MSPinView: NSView {
 
         if isEditing { drawEditModeChrome(); drawEditToolbar() }
         drawBadge()
+        // 4) 边缘光晕**最后**画，且裁剪到留白区：顺序与裁剪只要少一个，画面像素就会被吃到
+        //    （判据 `PinGlowTests.glowNeverCoversContent` 正是靠"画在后面"才有牙齿）。
+        drawGlow(in: ctx)
+    }
+
+    /// 三层由外到内的白色环 + 一圈紧贴外沿的高光。环的**内沿**正好落在图片边界上，
+    /// 所以往里一个像素都不吃；往外铺到留白边缘。
+    private func drawGlow(in ctx: CGContext) {
+        let image = imageRect
+        ctx.saveGState()
+        // 几何上就保证：光晕只许待在留白里（奇偶填充 = 整块窗 减去 图片区域）
+        let margin = CGMutablePath()
+        margin.addRect(bounds)
+        margin.addRect(image)
+        ctx.addPath(margin)
+        ctx.clip(using: .evenOdd)
+        ctx.setLineJoin(.round)
+        for ring in MSPinGlow.rings {
+            ctx.setStrokeColor(NSColor.white.withAlphaComponent(ring.alpha).cgColor)
+            ctx.setLineWidth(ring.width)
+            let outset = image.insetBy(dx: -ring.width / 2, dy: -ring.width / 2)
+            ctx.addPath(CGPath(roundedRect: outset, cornerWidth: 4, cornerHeight: 4, transform: nil))
+            ctx.strokePath()
+        }
+        ctx.setStrokeColor(NSColor.white.withAlphaComponent(MSPinGlow.rimAlpha).cgColor)
+        ctx.setLineWidth(1)
+        ctx.stroke(image.insetBy(dx: -0.5, dy: -0.5))
+        ctx.restoreGState()
     }
 
     private func draftDocument(_ element: MSAnnotationElement) -> MSAnnotationDocument {
@@ -244,7 +291,7 @@ public final class MSPinView: NSView {
         let budget = min(160, imageHeight)
         guard let flow = MSAnnotationToolbar.flow(toolCount: tools.count,
                                                   colorCount: MSAnnotationPalette.toolbar.count,
-                                                  maxWidth: bounds.width - 8, maxHeight: budget) else {
+                                                  maxWidth: imageRect.width - 8, maxHeight: budget) else {
             if stripHeight != 0 { stripHeight = 0; resizeWindow(); needsDisplay = true }
             return
         }
@@ -262,10 +309,11 @@ public final class MSPinView: NSView {
         let tools = Self.pinToolbarTools
         guard stripHeight > 0, let flow = MSAnnotationToolbar.flow(toolCount: tools.count,
                                                   colorCount: MSAnnotationPalette.toolbar.count,
-                                                  maxWidth: bounds.width - 8,
+                                                  maxWidth: imageRect.width - 8,
                                                   maxHeight: stripHeight) else { return nil }
-        // flow 给的是"以 0 为原点"的局部格子，整体平移到视图底部的工具带里
-        let origin = CGPoint(x: (bounds.width - flow.rect.width) / 2, y: bounds.minY + 4)
+        // flow 给的是"以 0 为原点"的局部格子，整体平移到**留白之上**的工具带里（不许压在光晕上）
+        let origin = CGPoint(x: imageRect.minX + (imageRect.width - flow.rect.width) / 2,
+                             y: MSPinGlow.pad + 4)
         let move: (CGRect) -> CGRect = { $0.offsetBy(dx: origin.x, dy: origin.y) }
         return EditToolbarLayout(rect: move(flow.rect),
                                  items: Array(zip(tools, flow.toolBoxes.map(move))),

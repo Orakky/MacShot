@@ -36,7 +36,8 @@ struct ToolbarFlowTests {
         view.isEditing = true
         #expect(view.stripHeight > 0, "撑高方案下 200×140 必须有工具带（折行方案在这里判为放不下）")
         #expect(abs(view.imageRect.height - 140) < 0.5, "图片区域必须还是 140pt，got=\(view.imageRect)")
-        #expect(abs(window.frame.height - (140 + view.stripHeight)) < 0.5, "窗口只长高，图片不缩")
+        #expect(abs(window.frame.height - (140 + view.stripHeight + MSPinGlow.pad * 2)) < 0.5,
+                "窗口只长高，图片不缩（账＝图片 + 带 + 上下留白）")
         #expect(abs(window.frame.maxY - frameBefore.maxY) < 0.5, "顶边不许跳：向下长")
 
         if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) { view.cacheDisplay(in: view.bounds, to: rep) }
@@ -44,7 +45,8 @@ struct ToolbarFlowTests {
         #expect(layout.items.count == MSPinView.pinToolbarTools.count, "不许静默少画工具")
         #expect(layout.colors.count == MSAnnotationPalette.toolbar.count)
         for (_, box) in layout.items {
-            #expect(box.maxY <= view.stripHeight + 0.5, "工具格必须待在工具带里，不许爬到画面上：\(box)")
+            #expect(box.maxY <= view.stripHeight + MSPinGlow.pad + 0.5,
+                    "工具格必须待在工具带里（带 + 下方留白），不许爬到画面上：\(box)")
             #expect(view.bounds.contains(box.insetBy(dx: -0.5, dy: -0.5)), "格子出界 \(box)")
         }
         for i in 0..<layout.items.count {
@@ -149,11 +151,11 @@ struct ToolbarFlowTests {
         // 缩到 25%：图片只剩 35pt，预算 min(160, 35) 放不下两行 ⇒ 带必须缩掉，而不是压过画面
         view.zoom = 0.25
         #expect(view.stripHeight <= 35 + 0.5, "工具带不该比图片还高，got=\(view.stripHeight)")
-        #expect(abs(window.frame.height - (35 + view.stripHeight)) < 0.5,
-                "窗口高必须等于「缩放后的图片高 + 带」，got=\(window.frame.height)")
+        #expect(abs(window.frame.height - (35 + view.stripHeight + MSPinGlow.pad * 2)) < 0.5,
+                "窗口高必须等于「缩放后的图片高 + 带 + 留白」，got=\(window.frame.height)")
         view.zoom = 2
         #expect(view.stripHeight > 0, "放大回来工具带要在")
-        #expect(abs(window.frame.height - (280 + view.stripHeight)) < 0.5, "2× 的账：280 + 带")
+        #expect(abs(window.frame.height - (280 + view.stripHeight + MSPinGlow.pad * 2)) < 0.5, "2× 的账：280 + 带 + 留白")
     }
 
     @MainActor
@@ -162,7 +164,7 @@ struct ToolbarFlowTests {
         let (window, view) = makePin(width: 60, height: 40)
         view.isEditing = true
         #expect(view.stripHeight == 0, "为 40pt 高的贴图撑一条 394pt 的工具带是荒谬的")
-        #expect(abs(window.frame.height - 40) < 0.5, "窗口不该被撑大")
+        #expect(abs(window.frame.height - (40 + MSPinGlow.pad * 2)) < 0.5, "窗口不该被工具带撑大（只有固定留白）")
         if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) { view.cacheDisplay(in: view.bounds, to: rep) }
         #expect(view.editToolbarLayout == nil)
         let src = CGEventSource(stateID: .combinedSessionState)

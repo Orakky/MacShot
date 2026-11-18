@@ -12,6 +12,7 @@
 | `level` | **待定，ADR-019**。正确升序：`.floating`(3) = `.tornOffMenu`(3) < `.modalPanel`(8) < `.dock`(20) < `.mainMenu`(24) < `.statusBar`(25) < `.popUpMenu`(101) < `.screenSaver`(1000) < `CGWindowLevelForKey(.cursorWindow)`。候选值只取 `.statusBar`、`.statusBar + 1`、`.popUpMenu` 三档。**原稿把 `.modalPanel` 排在 `.mainMenu` 之后是错的。** 另需明确：能否盖住全屏 App，**主要取决于 `collectionBehavior`（`.fullScreenAuxiliary` + `.canJoinAllSpaces`），不是 level 越大越好** —— 所以必须实测（V-010），不要凭"调高 level"了事 | 判据 FR-PIN-001：要能盖在**全屏 Space 的 Safari / Keynote 演示**之上 |
 | `collectionBehavior` | `[.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]` | `.fullScreenAuxiliary` 是能进入全屏 Space 的关键；`.stationary` 使其不随 Mission Control 挪动（P1 再评估副作用） |
 | `hasShadow` | true（P0 默认开） | Snipaste 边框/阴影属视觉件，P1 可关 |
+| 边缘光晕 | `MSPinGlow`（留白 10pt + 三层软环 + 1pt 高光），**最后画且奇偶裁剪到留白** | 用户 11-18 要"悬浮感"；环全部落在图片外面，导出走渲染器不经过视图 ⇒ 内容像素零改动（`V-057`） |
 | `isMovableByWindowBackground` | true | FR-PIN-002"任意处拖拽"；但绘制层要能区分"拖窗"与"画标注"（编辑态下关掉） |
 | `hidesOnDeactivate` | false | MacShot 无常驻前台，不能被隐藏 |
 | `isOpaque` / `backgroundColor` | false / clear | 圆角与非矩形内容（P1）需要 |

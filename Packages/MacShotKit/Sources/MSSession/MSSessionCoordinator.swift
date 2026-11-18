@@ -336,8 +336,10 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
         }
         let scale = Int((NSScreen.main?.backingScaleFactor ?? 2).rounded())
         let content = MSPinContent.bitmap(cg, scale: scale)
-        let origin = NSPoint(x: NSEvent.mouseLocation.x - content.logicalSize.width / 2,
-                            y: NSEvent.mouseLocation.y - content.logicalSize.height / 2)
+        // 居中要按**窗**尺寸算：窗比图片每边大一个光晕留白，只减图片一半会让画面偏出鼠标 pad pt。
+        let pad = MSPinGlow.pad
+        let origin = NSPoint(x: NSEvent.mouseLocation.x - content.logicalSize.width / 2 - pad,
+                             y: NSEvent.mouseLocation.y - content.logicalSize.height / 2 - pad)
         let pin = pins.open(content, near: origin, menu: pinMenu(), onClose: { _ in })
         pin.pinDelegate = self
         MSLog.info(.pin, "pinned pasteboard \(cg.width)x\(cg.height) scale=\(scale)")
