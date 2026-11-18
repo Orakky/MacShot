@@ -376,6 +376,57 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
     }
+    /// `--snip-then-loupe <ms>`：`B-036` 的真壳判据——**真采集**的画面上开遮罩、强制呼出放大镜，
+    /// 然后比两件事：① 视图算出的取样色 ② 离屏渲染里中心格真的画成了那个颜色。
+    /// 以前只有合成底图（`probe-chrome`），所以"逐点一致"只证到几何，没证到真像素。
+    /// 写法同 `probeSnipThenPin`：分步 `asyncAfter`，一步都不许 block 主线程。
+    func probeSnipThenLoupe(thenExitAfter ms: Int) {
+        func report(_ line: String) {
+            MSLog.info(.overlay, "probe-loupe \(line)")
+            let url = URL(fileURLWithPath: "/tmp/macshot-probe-loupe.txt")
+            if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(Data((line + "\n").utf8)); try? h.close() }
+            else { try? (line + "\n").write(to: url, atomically: true, encoding: .utf8) }
+        }
+        coordinator.onToast = { report("toast=\($0)") }
+        coordinator.handle(.snip)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self, let window = self.coordinator.overlay else { report("FAIL 遮罩没起来"); exit(5) }
+            let view = window.overlayView
+            let src = CGEventSource(stateID: .combinedSessionState)
+            let realH = NSScreen.screens.first?.frame.height ?? 1080
+            // 取屏上一个**有内容**的点（避开菜单栏与边缘），用真事件的同一套坐标系
+            let anchor = CGPoint(x: view.bounds.width * 0.42, y: view.bounds.height * 0.55)
+            let cg = CGEvent(mouseEventSource: src, mouseType: .mouseMoved,
+                             mouseCursorPosition: CGPoint(x: anchor.x, y: realH - anchor.y), mouseButton: .left)!
+            cg.flags = CGEventFlags.maskAlternate
+            view.mouseMoved(with: NSEvent(cgEvent: cg)!)
+            guard let px = view.loupePixel, let sampled = view.loupeColor else {
+                report("FAIL 取样点算不出来 anchor=\(anchor)"); exit(6)
+            }
+            report("放大镜 visible=\(view.isLoupeVisible) 取样像素=\(px) 取样色=\(sampled.hex())")
+            guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { report("FAIL 拿不到位图"); exit(7) }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            let scale = CGFloat(rep.pixelsWide) / view.bounds.width
+            let cell = MSLoupeModel.centerCell(in: MSLoupeModel.rect(anchor: anchor, bounds: view.bounds)).insetBy(dx: 3, dy: 3)
+            let col = Int(cell.midX * scale)
+            let row = Int((view.bounds.height - cell.midY) * scale)
+            guard let shown = rep.colorAt(x: col, y: row) else { report("FAIL 量不到中心格"); exit(8) }
+            let shownRGB = MSColorRGBA(red: UInt8((shown.redComponent * 255).rounded()),
+                                       green: UInt8((shown.greenComponent * 255).rounded()),
+                                       blue: UInt8((shown.blueComponent * 255).rounded()))
+            let diff = abs(shown.redComponent * 255 - Double(sampled.red))
+                + abs(shown.greenComponent * 255 - Double(sampled.green))
+                + abs(shown.blueComponent * 255 - Double(sampled.blue))
+            report("中心格=rgb(\(Int(shown.redComponent * 255)),\(Int(shown.greenComponent * 255)),\(Int(shown.blueComponent * 255))) "
+                   + "取样=\(sampled.hex()) 差=\(Int(diff.rounded()))（色彩管理往返允许小偏移）")
+            report("判定：差 ≤ 60 ⇒ \(diff <= 60 ? "真屏幕上放大镜逐点一致 PASS" : "FAIL")；"
+                   + "渲染侧 scale=\(scale) 格子=\(cell.integral)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(max(0, ms)) / 1000) {
+                self.coordinator.cancelSession()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { exit(0) }
+            }
+        }
+    }
     func probeMemory(count: Int, w: Int, h: Int, holdMs: Int, rounds: Int = 1) {
         MainActor.assumeIsolated {
             func report(_ line: String) {

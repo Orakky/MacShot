@@ -102,6 +102,19 @@ if CommandLine.arguments.contains("--probe-clipboard") {
     app.run()
 }
 
+// --snip-then-loupe <ms>：真采集画面上强制开放大镜，比"取样色"与"渲染出来的中心格"（B-036）。
+if let i = CommandLine.arguments.firstIndex(of: "--snip-then-loupe") {
+    let ms = CommandLine.arguments.count > i + 1 ? (Int(CommandLine.arguments[i + 1]) ?? 1_500) : 1_500
+    let app = NSApplication.shared
+    let delegate = MainActor.assumeIsolated { MSAppDelegate(autoSnip: false) }
+    app.delegate = delegate
+    app.setActivationPolicy(.regular)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+        MainActor.assumeIsolated { delegate.probeSnipThenLoupe(thenExitAfter: ms) }
+    }
+    app.run()
+}
+
 // --snip-then-pin <ms>：真截图 → 真选区 → 贴出并复制，读结果写 /tmp（B-030 的真壳判据）。
 if let i = CommandLine.arguments.firstIndex(of: "--snip-then-pin") {
     let ms = CommandLine.arguments.count > i + 1 ? (Int(CommandLine.arguments[i + 1]) ?? 3_000) : 3_000

@@ -22,19 +22,19 @@ macOS 原生截图 → 标注 → 贴图置顶 → 剪贴板 工具（形态参�
 ## 2. 命令（已生效，与 `docs/runbook/build-and-verify.md` 一致）
 
 ```sh
-make doctor            # 环境自检：Xcode / SDK / 证书 / 构建号 / 权限 / 未验证项计数
-make build             # xcodebuild 无头构建 .app
-make test              # swift test（Packages/MacShotKit，无需 Xcode GUI）
-make run               # 构建并 open 启动（11-17 起签名身份稳定，重建不再掉授权；旧 Q-18=B 的坑见 E-070）
-make run-term          # 构建后直接 exec 产物二进制 —— 日常入口（借终端的屏幕录制授权，不弹框）
-make release           # Release 配置构建
-make usage-report      # vision §4 的 G-01…G-05 计数（只数 process=MacShot；加 --include-tests 是模式自校验，不是达标数据）
-make verify-dmg        # 挂上 DMG 逐条核验：卷根 .app、/Applications 软链、卷标图标、签名身份
-make dmg               # 产出 build/MacShot-<version>.dmg（11-17 起用本地自签身份，不再是 ad-hoc）
-make install           # 装到 /Applications 或 ~/Applications（去 quarantine）
-make contrast          # NFR-024 对比度校验（11 组配对；不达 WCAG 2.2 就退出 1，目前 9/11，见 B-039）
-make check             # 本地门禁：build + test + 风格/依赖方向/文档一致性
-make clean             # 清 build 与 Derived
+make doctor           # 环境自检：Xcode / SDK / 证书 / 构建号 / 权限 / 未验证项计数
+make build            # xcodebuild 无头构建 .app
+make test             # swift test（Packages/MacShotKit，无需 Xcode GUI）
+make run              # 构建并 open 启动（11-17 起签名身份稳定，重建不再掉授权；旧 Q-18=B 的坑见 E-070）
+make run-term         # 构建后直接 exec 产物二进制 —— 日常入口（借终端的屏幕录制授权，不弹框）
+make release          # Release 配置构建
+make usage-report     # vision §4 的 G-01…G-05 计数（只数 process=MacShot；加 --include-tests 是模式自校验，不是达标数据）
+make verify-dmg       # 挂上 DMG 逐条核验：卷根 .app、/Applications 软链、卷标图标、签名身份
+make dmg              # 产出 build/MacShot-<version>.dmg（11-17 起用本地自签身份，不再是 ad-hoc）
+make install          # 装到 /Applications 或 ~/Applications（去 quarantine）
+make contrast         # NFR-024 对比度校验（11 组配对；不达 WCAG 2.2 就退出 1，目前 9/11，见 B-039）
+make check            # 本地门禁：build + test + 风格/依赖方向/文档一致性
+make clean            # 清 build 与 Derived
 make probe            # 采一帧并打印尺寸/耗时/权限（V-001/V-019 取证）
 make probe-menu       # 打印状态栏菜单行与"权限行是否真挂在菜单上"（常驻读数行的取证）
 make probe-chrome     # 遮罩界面离屏自绘成 build/chrome.png（不碰 TCC，用来看）；加 `loupe` 参数连放大镜一起出图
@@ -44,9 +44,10 @@ make probe-hotkey     # 改绑→退出→再启动读回→还原：热键跨�
 make probe-settings   # 真建设置窗并递归打印控件清单（FR-SET-002 逐项对照；离屏 PNG 画不出文字，判据是清单）
 make probe-pin        # 真贴窗 + 编辑态离屏自绘成 build/probe-pin.png，并打印 strip/imageRect 读数（B-028 形态用来看）
 make probe-pin-real   # 真截图→真遮罩→真选区→贴出并复制的闭环读数（B-030 的真壳判据；会开遮罩数秒）
+make probe-loupe-real # 真采集画面上强制开放大镜，比取样色与渲染中心格（B-036 的真壳判据；会开遮罩约 12 秒）
 make probe-freeze     # 三连拍验冻结语义 + 真剪贴板哨兵（会在你屏幕上开约 3 秒遮罩）
-make icon              # assets/branding 的 SVG → build/macshot.icns（只用系统工具）
-make appicon           # build + icon + 注入 .icns 与菜单栏 SVG + 重签（run/run-term/probe/dmg/install/check 都走它）
+make icon             # assets/branding 的 SVG → build/macshot.icns（只用系统工具）
+make appicon          # build + icon + 注入 .icns 与菜单栏 SVG + 重签（run/run-term/probe/dmg/install/check 都走它）
 scripts/reset-tcc.sh   # 重置屏幕录制授权（排查黑图）
 ```
 
