@@ -11,7 +11,7 @@ struct MSDefaultPreferencesTests {
     @Test("默认值与文档表格逐字段相等（FR-SET-003）")
     func defaultsMatchDocumentation() {
         let p = MSAppPreferences()
-        #expect(p.schemaVersion == 3, "v3＝删掉 confirmBeforeDiscardingUnexportedPins（Q-06 已裁退出即抛弃，前提作废）；v2＝剪贴板只写 PNG")
+        #expect(p.schemaVersion == 4, "v4＝放大镜默认不自动弹（Q-07 改判）；v3＝删掉 confirmBeforeDiscardingUnexportedPins（Q-06 已裁退出即抛弃，前提作废）；v2＝剪贴板只写 PNG")
         #expect(p.hotKeys.snip == .f1, "F1 — keymap.md §1")
         #expect(p.hotKeys.pinClipboard == .f3, "F3")
         #expect(p.hotKeys.fullScreen == MSKeyCombo(keyCode: 0, command: true), "⌘A")

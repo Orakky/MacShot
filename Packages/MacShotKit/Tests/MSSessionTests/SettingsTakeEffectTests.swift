@@ -166,18 +166,17 @@ struct SettingsTakeEffectTests {
         // 像素判据（V-044）：同一处画面，深色档必须压得更暗
         #expect(dark.lum < light.lum, "深色档并没有更暗：dark=\(dark.lum) light=\(light.lum)")
 
-        let (coord, _, _, window) = try await session(prefs: MSAppPreferences())   // 默认 .system
+        let (_, _, _, window) = try await session(prefs: MSAppPreferences())   // 默认 .system
         #expect(window.appearance == nil, ".system 档必须把窗口外观交回系统，got=\(String(describing: window.appearance))")
     }
 
     @MainActor
-    @Test("「拖拽时显示放大镜」关掉后拖框不再自动弹，但 ⌥ 仍能强制呼出")
-    func magnifierToggleGatesTheDragCase() async throws {
-        var prefs = MSAppPreferences()
-        prefs.showMagnifierWhileDragging = false
-        let (coord, _, _, window) = try await session(prefs: prefs)
+    @Test("放大镜默认不再自动弹（Q-07 改判）：拖框与移动都不出现，⌥ 仍能强制呼出")
+    func magnifierDefaultsOffButOptionStillForces() async throws {
+        let (coord, _, _, window) = try await session(prefs: MSAppPreferences())
         let view = window.overlayView
-        #expect(!view.autoLoupeWhileDragging, "设置没落到视图上，这条判据就是空的")
+        #expect(!view.autoLoupeWhileDragging, "默认档就该是关（用户 2026-11-18 改判 Q-07）")
+        #expect(!MSAppPreferences().showMagnifierWhileDragging, "偏好默认值本身就是判据的一半")
         select(coord, window, CGRect(x: 30, y: 30, width: 260, height: 180))
 
         let src = CGEventSource(stateID: .combinedSessionState)
@@ -191,18 +190,22 @@ struct SettingsTakeEffectTests {
         view.mouseDown(with: mouse(.leftMouseDown, CGPoint(x: 120, y: 120)))
         view.mouseDragged(with: mouse(.leftMouseDragged, CGPoint(x: 200, y: 80)))
         view.mouseMoved(with: mouse(.mouseMoved, CGPoint(x: 200, y: 80)))
-        #expect(!view.isLoupeVisible, "开关关了还自动弹放大镜 ⇒ 这个设置等于没做")
+        #expect(!view.isLoupeVisible, "默认档拖框/移动还自动弹 ⇒ 用户要撤掉的那个额外画面又回来了")
 
         view.mouseMoved(with: mouse(.mouseMoved, CGPoint(x: 200, y: 80), option: true))
-        #expect(view.isLoupeVisible, "⌥ 强制是另一条路，不该被这个开关关掉")
+        #expect(view.isLoupeVisible, "⌥ 强制是唯一入口，不该被这个开关关掉")
         view.mouseUp(with: mouse(.leftMouseUp, CGPoint(x: 200, y: 80)))
 
-        // 对照：默认档开着，拖框必须自动弹——否则上面那条"不弹"什么也没证明
-        let (coord2, _, _, window2) = try await session(prefs: MSAppPreferences())
+        // 对照：把开关显式打开，拖框必须自动弹——否则上面那条"不弹"什么也没证明
+        var on = MSAppPreferences()
+        on.showMagnifierWhileDragging = true
+        let (coord2, _, _, window2) = try await session(prefs: on)
         let view2 = window2.overlayView
         select(coord2, window2, CGRect(x: 30, y: 30, width: 260, height: 180))
+        #expect(view2.autoLoupeWhileDragging, "设置=开 时开关没落到视图上，这条对照是空的")
         view2.mouseDown(with: mouse(.leftMouseDown, CGPoint(x: 120, y: 120)))
         view2.mouseMoved(with: mouse(.mouseMoved, CGPoint(x: 200, y: 80)))
-        #expect(view2.autoLoupeWhileDragging && view2.isLoupeVisible, "默认档拖框应自动出现放大镜")
+        #expect(view2.isLoupeVisible, "设置=开 时拖框应自动出现放大镜")
+        view2.mouseUp(with: mouse(.leftMouseUp, CGPoint(x: 200, y: 80)))
     }
 }

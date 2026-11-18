@@ -7,11 +7,12 @@ macOS 原生截图 → 标注 → 贴图置顶 → 剪贴板 工具（形态参�
 用户 2026-11-16 放行开发：**未签决策按 `docs/charter.md` §6 顶部的临时默认档实现**，不再是"没签就不能写"。现状：
 
 - 已裁决：D-01 首版只做四大件 / D-02 本机签名（11-17 由 ad-hoc 改为**本地自签 `MacShot Dev`**，Q-18=A，理由见 `E-070`） / D-03 Xcode + SPM / D-04 贴图携带可编辑标注层（见 `docs/charter.md` §1）。
+- **11-18 两条用户改判（呈现档，不是翻案）**：① 放大镜**默认不自动弹**，只有 `⌥` 强制（`Q-07` 裁的是"要不要做"，这条裁的是"什么时候出现"；偏好 schema 3→4）② 标注**边画边看到**——拖拽期草稿必须实时上屏，判据 `V-053`。两者都记在 §6b 末尾两行，`E-081`。
 - **11-17 已全部裁决**：`docs/adr/README.md` = accepted 16 / proposed 0，`charter.md` §6b 是签字记录；
   §6 那张"临时默认"表只作历史保留，冲突时以 §6b 为准。**还剩两类真口子**：
   ① `requirements.md` 里 32 行状态列是裸 `待裁决`（逐条需求复审，登记为 `T-106`）；
   ② `blocked.md` 里标"需用户"的条目（`B-033/B-034/B-036/B-038` 等，多数卡在同一个 TCC 前置上）。
-- 正式代码在 `App/` + `Packages/MacShotKit/` + `MacShot.xcodeproj`（10 模块 + 142 条单测，`make check` 绿）。`stash@{0}` 那份旧骨架已 `apply` 并按 accepted ADR 改写完毕（`modules.md` §12 的 3 处不符都处理了），**不要再 pop 第二次**。
+- 正式代码在 `App/` + `Packages/MacShotKit/` + `MacShot.xcodeproj`（10 模块 + 145 条单测，`make check` 绿）。`stash@{0}` 那份旧骨架已 `apply` 并按 accepted ADR 改写完毕（`modules.md` §12 的 3 处不符都处理了），**不要再 pop 第二次**。
 
 改任何曾被临时默认档覆盖的行为前，先看 §6b 的签字记录（§6 只是历史）；**改判决要用户点头**，agent 不许自己翻案（NFR-036：文档与代码同批提交）。
 
@@ -44,7 +45,7 @@ make probe-hotkey     # 改绑→退出→再启动读回→还原：热键跨�
 make probe-settings   # 真建设置窗并递归打印控件清单（FR-SET-002 逐项对照；离屏 PNG 画不出文字，判据是清单）
 make probe-pin        # 真贴窗 + 编辑态离屏自绘成 build/probe-pin.png，并打印 strip/imageRect 读数（B-028 形态用来看）
 make probe-pin-real   # 真截图→真遮罩→真选区→贴出并复制的闭环读数（B-030 的真壳判据；会开遮罩数秒）
-make probe-loupe-real # 真采集画面上强制开放大镜，比取样色与渲染中心格（B-036 的真壳判据；会开遮罩约 12 秒）
+make probe-loupe-real # 真采集画面上**按住 ⌥** 开放大镜（11-18 起默认不自动弹），比取样色与渲染中心格，并另记一行"不按键可见="当默认档读数（B-036 的真壳判据；会开遮罩约 12 秒）
 make probe-freeze     # 三连拍验冻结语义 + 真剪贴板哨兵（会在你屏幕上开约 3 秒遮罩）
 make icon             # assets/branding 的 SVG → build/macshot.icns（只用系统工具）
 make appicon          # build + icon + 注入 .icns 与菜单栏 SVG + 重签（run/run-term/probe/dmg/install/check 都走它）

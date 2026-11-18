@@ -198,4 +198,154 @@ struct ElementSelectionTests {
         view.changeLayer(up: true)
         #expect(view.document?.elements.map(\.z) == [1, 2], "没选中时层级键不许乱改")
     }
+
+    // MARK: - 拖拽过程中就要看到形状（2026-11-18 ②「标注不流畅」）
+
+    /// 差异像素的外接框（设备像素）；全空返回 nil。用来分清"位置错了"和"只是抗锯齿"。
+    private func diffBox(_ a: NSBitmapImageRep, _ b: NSBitmapImageRep, in view: MSOverlayView) -> [Int]? {
+        let scale = CGFloat(a.pixelsWide) / view.bounds.width
+        let x0 = Int(view.selection!.minX * scale), x1 = Int(view.selection!.maxX * scale)
+        let y0 = Int((view.bounds.height - view.selection!.maxY) * scale)
+        let y1 = Int((view.bounds.height - view.selection!.minY) * scale)
+        var mnx = Int.max, mxx = -1, mny = Int.max, mxy = -1
+        for y in stride(from: max(0, y0), to: min(a.pixelsHigh, y1), by: 2) {
+            for x in stride(from: max(0, x0), to: min(a.pixelsWide, x1), by: 2) {
+                guard let p = a.colorAt(x: x, y: y), let q = b.colorAt(x: x, y: y) else { continue }
+                let d = max(abs(p.redComponent - q.redComponent), abs(p.greenComponent - q.greenComponent))
+                if max(d, abs(p.blueComponent - q.blueComponent)) > 0.12 {
+                    mnx = min(mnx, x); mxx = max(mxx, x); mny = min(mny, y); mxy = max(mxy, y)
+                }
+            }
+        }
+        return mxx < 0 ? nil : [mnx, mny, mxx, mxy]
+    }
+
+    private func snapshot(_ view: MSOverlayView) -> NSBitmapImageRep? {
+        view.needsDisplay = true
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return nil }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        return rep
+    }
+
+    private func samplePoints(in view: MSOverlayView) -> Int {
+        let scale = CGFloat(2)
+        return (Int(view.selection!.width * scale) / 2) * (Int(view.selection!.height * scale) / 2)
+    }
+
+    /// 两张离屏图在给定视图矩形内的差异采样点数（步长 2，跳过透明）。
+    private func diffPoints(_ a: NSBitmapImageRep, _ b: NSBitmapImageRep, in view: MSOverlayView) -> Int {
+        let scale = CGFloat(a.pixelsWide) / view.bounds.width
+        var n = 0
+        let x0 = Int(view.selection!.minX * scale), x1 = Int(view.selection!.maxX * scale)
+        let y0 = Int((view.bounds.height - view.selection!.maxY) * scale)
+        let y1 = Int((view.bounds.height - view.selection!.minY) * scale)
+        for y in stride(from: max(0, y0), to: min(a.pixelsHigh, y1), by: 2) {
+            for x in stride(from: max(0, x0), to: min(a.pixelsWide, x1), by: 2) {
+                guard let p = a.colorAt(x: x, y: y), let q = b.colorAt(x: x, y: y) else { continue }
+                if max(abs(p.redComponent - q.redComponent), abs(p.greenComponent - q.greenComponent),
+                       abs(p.blueComponent - q.blueComponent)) > 0.12 { n += 1 }
+            }
+        }
+        return n
+    }
+
+    @MainActor
+    @Test("拖箭头时草稿当场就画出来，松手前后画面不跳（所见=所存）")
+    func arrowDraftIsPaintedWhileDragging() throws {
+        let view = try makeView(elements: [])
+        view.tool = .arrow
+        let from = viewPoint(view, canvas: MSIntPoint(x: 200, y: 120))
+        let to = viewPoint(view, canvas: MSIntPoint(x: 620, y: 380))
+        guard let bare = snapshot(view) else { Issue.record("离屏渲染拿不到位图"); return }
+
+        view.mouseDown(with: mouse(.leftMouseDown, from))
+        view.mouseDragged(with: mouse(.leftMouseDragged, to))
+        guard let mid = snapshot(view) else { Issue.record("离屏渲染拿不到位图"); return }
+        #expect(view.document?.elements.isEmpty == true, "还没松手，元素不该已提交（否则下面的差异是别的东西画出来的）")
+        #expect(diffPoints(bare, mid, in: view) > 60, "拖拽途中一个字节的墨都没多 ⇒ 草稿根本没上屏，这就是'松手才出现'")
+
+        view.mouseUp(with: mouse(.leftMouseUp, to))
+        guard let after = snapshot(view) else { Issue.record("离屏渲染拿不到位图"); return }
+        let appeared = diffPoints(bare, mid, in: view)
+        let jumped = diffPoints(mid, after, in: view)
+        let boxA = try #require(diffBox(bare, mid, in: view), "拖拽途中没有差异像素")
+        let boxB = try #require(diffBox(bare, after, in: view))
+        #expect(boxA == boxB, "松手后整体挪位：预览 bbox=\(boxA) 成图 bbox=\(boxB)")
+        #expect(jumped * 1000 < samplePoints(in: view),
+                "松手后跳变了 \(jumped)/\(samplePoints(in: view)) 个采样点，超过抗锯齿边缘的量级")
+    }
+
+    @MainActor
+    @Test("模糊拖拽期只画轮廓、不逐帧糊整块（否则每帧一次 CPU 盒式模糊就是卡顿源）")
+    func blurDraftShowsOutlineNotARender() throws {
+        // 夹具必须是噪声：纯灰底上"糊"与"没糊"看不出差别，判据就成了空的。
+        let w = 800, h = 500
+        var bytes = [UInt8](repeating: 0, count: w * h * 4)
+        var seed: UInt64 = 20261118
+        for i in stride(from: 0, to: bytes.count, by: 4) {
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            bytes[i] = UInt8((seed >> 41) & 0xFF)
+            bytes[i + 1] = UInt8((seed >> 29) & 0xFF)
+            bytes[i + 2] = UInt8((seed >> 17) & 0xFF)
+            bytes[i + 3] = 255
+        }
+        let noisyCtx = CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                 space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        let view = MSOverlayView(display: Self.display, frozenFrame: noisyCtx.makeImage()!)
+        view.setSelection(CGRect(x: 10, y: 10, width: 380, height: 230))
+        view.tool = .blur
+        let from = viewPoint(view, canvas: MSIntPoint(x: 200, y: 120))
+        let to = viewPoint(view, canvas: MSIntPoint(x: 620, y: 380))
+        guard let bare = snapshot(view) else { Issue.record("离屏渲染拿不到位图"); return }
+
+        view.mouseDown(with: mouse(.leftMouseDown, from))
+        view.mouseDragged(with: mouse(.leftMouseDragged, to))
+        guard let mid = snapshot(view) else { Issue.record("离屏渲染拿不到位图"); return }
+        let scale = CGFloat(mid.pixelsWide) / view.bounds.width
+        // 直接比对：框内每个采样点在拖拽前后必须逐通道相同（糊过就一定变），轮廓带上必须有新墨。
+        var changedInterior = 0, sampled = 0
+        for y in stride(from: 180, to: 320, by: 4) {
+            for x in stride(from: 260, to: 560, by: 4) {
+                let p = MSIntPoint(x: x, y: y).viewPoint(in: view.selection!, scale: Self.display.scale)
+                let px = Int(p.x * scale), py = Int((view.bounds.height - p.y) * scale)
+                guard let a = bare.colorAt(x: px, y: py), let b = mid.colorAt(x: px, y: py) else { continue }
+                sampled += 1
+                let d = max(abs(a.redComponent - b.redComponent),
+                            abs(a.greenComponent - b.greenComponent))
+                let d2 = max(d, abs(a.blueComponent - b.blueComponent))
+                if d2 > 0.02 { changedInterior += 1 }
+            }
+        }
+        #expect(sampled > 2000, "采样点太少，这条判据是空的：\(sampled)")
+        #expect(changedInterior == 0,
+                "拖拽途中框内部被改了 \(changedInterior)/\(sampled) 个采样点 ⇒ 每帧都在真糊，这就是卡顿源")
+        #expect(diffPoints(bare, mid, in: view) > 20, "轮廓也没画 ⇒ 拖模糊时屏幕上什么反馈都没有")
+    }
+
+    @MainActor
+    @Test("草稿拖拽不逐帧重烘焙整叠元素（V-053④ 的结构判据）")
+    func draftDragDoesNotRebakeTheDocument() throws {
+        let e = filledRect(MSIntPoint(x: 200, y: 200), MSIntPoint(x: 320, y: 320), z: 0)
+        let view = try makeView(elements: [e])
+        view.tool = .arrow
+        _ = snapshot(view)
+        #expect(view.compositeBakeCount == 1, "首帧烘焙一次建立缓存，got=\(view.compositeBakeCount)")
+
+        let from = viewPoint(view, canvas: MSIntPoint(x: 200, y: 120))
+        let to = viewPoint(view, canvas: MSIntPoint(x: 620, y: 380))
+        view.mouseDown(with: mouse(.leftMouseDown, from))
+        for i in 0..<60 {
+            let t = CGFloat(i) / 59
+            view.mouseDragged(with: mouse(.leftMouseDragged,
+                                          CGPoint(x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t)))
+            _ = snapshot(view)                   // 每帧真渲染，才量得到有没有重烤
+        }
+        #expect(view.compositeBakeCount == 1,
+                "拖 60 帧把整叠元素重烤了 \(view.compositeBakeCount - 1) 次 ⇒ '越画越卡'就是这个形状")
+        view.mouseUp(with: mouse(.leftMouseUp, to))
+        _ = snapshot(view)
+        #expect(view.compositeBakeCount == 2,
+                "松手提交了新元素，这一帧**该**重烤一次（不然就是缓存没失效）：got=\(view.compositeBakeCount)")
+    }
 }

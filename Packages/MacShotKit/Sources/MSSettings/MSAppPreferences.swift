@@ -4,12 +4,15 @@ import MSCore
 /// All persisted preferences in one value type with a schema version. Fields are append-only:
 /// renaming or re-purposing one is a schema break, not a refactor (`FR-SET-003`, `ADR-009` style).
 public struct MSAppPreferences: Codable, Sendable, Equatable {
+    /// 4 = `showMagnifierWhileDragging` 默认改 `false`（用户 2026-11-18 改判 Q-07：截图时不要
+    /// 那个自动弹出的额外画面）。**默认值变了、字段没变**，所以旧文件里显式存过 `true` 的人
+    /// 仍是 `true`——schema 不必升；这里升号只为了给"默认档变了"留一个可对账的记录点。
     /// 3 = 删掉 `confirmBeforeDiscardingUnexportedPins`：`Q-06` 已裁"退出直接抛弃、不加确认"，
     /// 这个字段的需求前提被推翻了，留着就是"有开关、没行为"（`B-037` / `E-070`）。
     /// 2 = 剪贴板不再双写 TIFF（`Q-04`），删掉 `Export.writesPngAndTiffToPasteboard`。
     /// 读侧允许 `schemaVersion <= current`（§114），旧文件里多出来的那个键会被忽略，
     /// 所以这是一次**向前兼容**的收窄，不是迁移。
-    public static let currentSchemaVersion = 3
+    public static let currentSchemaVersion = 4
 
     public var schemaVersion: Int
 
@@ -65,7 +68,7 @@ public struct MSAppPreferences: Codable, Sendable, Equatable {
                 commitBehavior: CommitBehavior = .pin,
                 appearance: Appearance = .system,
                 annotationDefaults: AnnotationDefaults = .standard,
-                showMagnifierWhileDragging: Bool = true) {
+                showMagnifierWhileDragging: Bool = false) {
         self.schemaVersion = schemaVersion
         self.hotKeys = hotKeys
         self.export = export

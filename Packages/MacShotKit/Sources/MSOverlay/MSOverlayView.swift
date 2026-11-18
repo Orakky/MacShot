@@ -340,6 +340,36 @@ public final class MSOverlayView: NSView {
         if let composite { ctx.draw(composite, in: sel) }
         else if let cropped = croppedSource(for: sel) { ctx.draw(cropped, in: sel) }
         ctx.restoreGState()
+        // 拖拽中的草稿走矢量层，和提交后的元素同一条渲染路径：所见=所存。
+        if draft != nil, let source = croppedSource(for: sel) { drawDraft(in: sel, source: source, in: ctx) }
+    }
+
+    /// 边画边看到形状跟着走（`FR-ANN-002`）。贴图编辑器一直有这一层（`MSPinWindow` 的 draft），
+    /// 遮罩这边只更新状态不上屏，于是"松手才出现"，体感就是标注卡死。
+    /// 模糊是唯一例外：每帧对整块区域跑 CPU 盒式模糊会真掉帧，拖拽期只画轮廓、松手才糊。
+    private func drawDraft(in sel: CGRect, source: CGImage, in ctx: CGContext) {
+        guard let draft else { return }
+        let canvas = MSIntSize(width: source.width, height: source.height)
+        ctx.saveGState()
+        ctx.clip(to: sel)
+        ctx.translateBy(x: sel.minX, y: sel.minY)
+        ctx.scaleBy(x: sel.width / CGFloat(canvas.width), y: sel.height / CGFloat(canvas.height))
+        if draft.kind == .blur {
+            // 这一支自己落笔，所以要自己进文档坐标（y-down）；矢量层交给 renderElements 翻正。
+            ctx.translateBy(x: 0, y: CGFloat(canvas.height))
+            ctx.scaleBy(x: 1, y: -1)
+            guard let box = MSAnnotationGeometry.bounds(of: draft) else { ctx.restoreGState(); return }
+            ctx.setStrokeColor(MSColorRGBA.rgb(255, 255, 255).cgColor)
+            ctx.setLineWidth(2)
+            ctx.setLineDash(phase: 0, lengths: [6, 4])
+            ctx.stroke(CGRect(x: CGFloat(box.minX), y: CGFloat(box.minY),
+                              width: CGFloat(box.width), height: CGFloat(box.height)))
+        } else {
+            var doc = document ?? MSAnnotationDocument(canvasSize: canvas)
+            doc.elements = [draft]
+            renderer.renderElements(of: doc, into: ctx, source: source, canvas: canvas, intent: .preview)
+        }
+        ctx.restoreGState()
     }
 
     private func compositedCrop(for sel: CGRect) -> CGImage? {
@@ -347,6 +377,7 @@ public final class MSOverlayView: NSView {
         if let cachedComposite, cachedElements == document.elements, cachedSourceSize == source.width * 1_000_000 + source.height {
             return cachedComposite
         }
+        compositeBakeCount += 1            // V-053④ 的读数：拖拽期应当一次都不增
         let image = renderer.render(document, source: source, intent: .preview)
         cachedComposite = image
         cachedElements = document.elements
@@ -354,6 +385,9 @@ public final class MSOverlayView: NSView {
         return image
     }
 
+    /// 整文档重烘焙的次数。**判据用得上**：拖拽草稿只该多画一个矢量元素，不该逐帧重烤整叠元素
+    /// （那才是"标注越画越卡"的形状）。V-053④ 读它，而不是读耗时（尾表：耗时 Δ 不当选点前提）。
+    public private(set) var compositeBakeCount = 0
     private var cachedElements: [MSAnnotationElement] = []
     private var cachedSourceSize = 0
 

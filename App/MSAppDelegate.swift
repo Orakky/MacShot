@@ -396,14 +396,22 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let realH = NSScreen.screens.first?.frame.height ?? 1080
             // 取屏上一个**有内容**的点（避开菜单栏与边缘），用真事件的同一套坐标系
             let anchor = CGPoint(x: view.bounds.width * 0.42, y: view.bounds.height * 0.55)
-            let cg = CGEvent(mouseEventSource: src, mouseType: .mouseMoved,
-                             mouseCursorPosition: CGPoint(x: anchor.x, y: realH - anchor.y), mouseButton: .left)!
-            cg.flags = CGEventFlags.maskAlternate
-            view.mouseMoved(with: NSEvent(cgEvent: cg)!)
+            func move(option: Bool) {
+                let cg = CGEvent(mouseEventSource: src, mouseType: .mouseMoved,
+                                 mouseCursorPosition: CGPoint(x: anchor.x, y: realH - anchor.y), mouseButton: .left)!
+                if option { cg.flags = CGEventFlags.maskAlternate }
+                view.mouseMoved(with: NSEvent(cgEvent: cg)!)
+            }
+            // Q-07 改判（2026-11-18）：默认档移动鼠标**不该**弹出放大镜，只有 ⌥ 才强制呼出。
+            // 两段都读数，免得"没弹"被误当成"坏了"。
+            move(option: false)
+            let autoShown = view.isLoupeVisible
+            move(option: true)
             guard let px = view.loupePixel, let sampled = view.loupeColor else {
                 report("FAIL 取样点算不出来 anchor=\(anchor)"); exit(6)
             }
-            report("放大镜 visible=\(view.isLoupeVisible) 取样像素=\(px) 取样色=\(sampled.hex())")
+            report("放大镜 不按键可见=\(autoShown)（默认档应为 false，Q-07 改判）"
+                   + " ⌥强制可见=\(view.isLoupeVisible) 取样像素=\(px) 取样色=\(sampled.hex())")
             guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { report("FAIL 拿不到位图"); exit(7) }
             view.cacheDisplay(in: view.bounds, to: rep)
             let scale = CGFloat(rep.pixelsWide) / view.bounds.width

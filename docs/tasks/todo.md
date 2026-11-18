@@ -81,6 +81,7 @@
 | T-107 | **M-6 发布核验起步**：DMG 配方修好并结构可验，已知限制清单成文 | roadmap M-6①④ | `Makefile`（`dmg`/`verify-dmg`）、`scripts/verify-dmg.sh`、`docs/reference/known-limitations.md`、`docs/README.md`、`docs/requirements/nfr.md` §5 | ① `make verify-dmg` 四项全绿（卷根 .app / `/Applications` 软链 / 卷标图标 / DR=identifier+leaf） ② 限制清单每条都有真源 ID，且"还没证完的"一节与 `blocked.md` 对得上 ③ 兼容矩阵每填一格都要带来源与口径 | **部分完成**（E-075：DMG 抓到并修掉三条假陈述；矩阵 1/15 格；M-6①"全新用户流程走一遍"、②矩阵填满、③usage-report 仍开——前三条都要真机或你点头） |
 | T-108 | **`make usage-report` 落地 + 日志通道订正** | roadmap M-6③、vision §4 | `scripts/usage-report.sh`、`Makefile`、`Sources/MSSession/`（`commit intent=`）、`Sources/MSPin/`（`edit enter`）、`docs/requirements/vision.md`、`docs/reference/known-limitations.md` | ① `--include-tests` 档能数出非零（模式自校验）② app-only 档在无数据时明确报"不是达标"并退出非零 ③ 四个计数标记都由生产路径发出（跑套件后验证）| **done**（E-076；真实日常数据要等 `T-090` 授权，达标线仍待你裁决） |
 | T-109 | **README 使用章节重写**（门面文档过期最害人） | roadmap M-6 交付 | `README.md`、`docs/design/keymap.md` §1 | ① 状态表与实际一致（10 模块 / 142 单测 / M-0…M-4 已落地）② 命令与限制**只引用真源不复制** ③ 键位描述与 `E-063` 之后的出口语义一致（贴出＝带复制）| **done**（E-077；顺手修 keymap §1 两行过期的 `待裁决 Q-02`） |
+| T-110 | **用户 11-18 两项改判落地**：① 截图时不要那个自动弹出的放大镜画面 ② 标注要"边画边看到变化" | agent | ① 默认档 `showMagnifierWhileDragging=false`＋schema 3→4，`⌥` 仍可强制；规格五处同步（`FR-CAP-016`/`UI-008`/`keymap.md`/`V-051③`/`README`）＋`charter.md` §6b 记两条改判 ② 遮罩拖拽期草稿实时上屏，判据 `V-053①②③④` ③ 门禁加"默认档代码↔规格同边"并**反证到红** | **done**（E-081；真壳读数 `不按键可见=false / ⌥强制=true / 逐点一致差 6`） |
 
 ## 已知"提前做也没用"的项（防顺手实现）
 
