@@ -33,7 +33,7 @@ stateDiagram-v2
 | 4 | `idle` | `hotkey(.pinClipboard)` + 剪贴板有图 | `idle` | `openPin(.bitmap)` | FR-PIN-006 |
 | 5 | `idle` | `hotkey(.pinClipboard)` + 无图 | `idle` | `toast("剪贴板里没有图像")` | `pin-window.md` §9 |
 | 6 | `frozen` | `overlayShown` | `selecting` | — | — |
-| 7 | `selecting` | `selectionChanged(rect)` | `selecting` | `updateReadout`；若 `elements` 非空 → `warnClearAnnotations` | FR-CAP-002、Q-11 |
+| 7 | `selecting` | `selectionChanged(rect)` | `selecting` | `updateReadout`；**不提示**（11-18 改判：范围内原地保留）。丢失条数由单独事件报：`annotationsDropped(n)`，`n>0` → `warnClearAnnotations(dropped:n)` | FR-CAP-002、FR-ANN-012、Q-11 改判 |
 
 > 行 7 的实现前提（11-17）：`hasElements` 由 `MSSessionEvent.elementCountChanged(Int)` 维护，生产者是
 > `MSOverlayView.document.didSet`；且视图**必须先通知选区变化、再清空文档**，顺序反了提示永远不响。

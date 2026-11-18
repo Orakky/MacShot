@@ -65,6 +65,21 @@ public struct MSAnnotationElement: Identifiable, Hashable, Sendable, Codable {
     /// Optional so documents written before the distinction still decode (`ADR-009`).
     public var variant: String?
     /// Freehand strokes may cache a bounds that is cheaper to keep than to re-derive.
+    /// 把所有锚点平移一个画布量（选区变化时保持屏幕位置）。
+    /// 平移量**只能**由 `MSIntPoint.documentDelta(selectionOld:to:scale:)` 给出（`ADR-013`），
+    /// 这里不做任何自己的换算。
+    public func translated(by d: CGSize) -> MSAnnotationElement {
+        var copy = self
+        copy.points = points.map { MSIntPoint(x: Int((CGFloat($0.x) + d.width).rounded()),
+                                              y: Int((CGFloat($0.y) + d.height).rounded())) }
+        if let box = boundsOverride {
+            copy.boundsOverride = MSIntRect(origin: MSIntPoint(x: box.minX + Int(d.width.rounded()),
+                                                               y: box.minY + Int(d.height.rounded())),
+                                            size: box.size)
+        }
+        return copy
+    }
+
     public var boundsOverride: MSIntRect?
 
     public init(id: UUID = UUID(), kind: MSAnnotationKind, points: [MSIntPoint],

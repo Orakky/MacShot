@@ -29,6 +29,8 @@ struct ClearWarningTests {
         func overlay(_ overlay: MSOverlayWindow, didRequest intent: MSCommitIntent) {}
         func overlayDidCancel(_ overlay: MSOverlayWindow) {}
         func overlay(_ overlay: MSOverlayWindow, drawingPhaseDidChange phase: MSOverlayDrawingPhase) { phases.append(phase) }
+        var drops: [Int] = []
+        func overlay(_ overlay: MSOverlayWindow, didDropAnnotations count: Int) { drops.append(count) }
         var colorPicks: [String] = []
     func overlay(_ overlay: MSOverlayWindow, didPickColor text: String) { colorPicks.append(text) }
 
@@ -39,22 +41,24 @@ struct ClearWarningTests {
 
     // MARK: - 状态机（纯逻辑，无窗）
 
-    @Test("行 7：有元素时改选区 ⇒ 提示；没元素时不提示")
-    func rowSevenWarnsOnlyWhenElementsExisted() {
+    // 11-18 用户改判：改选区不再等于"全清"，所以提示的驱动量从"尺寸变了"换成"真丢了几条"。
+    @Test("行 7：提示由真丢的条数驱动；单凭改选区不许提示")
+    func warningFollowsTheDroppedCount() {
         var reducer = MSSessionReducer()
         reducer.handle(.hotKeyPressed(.snip))
         reducer.handle(.overlayShown)
-        // 先画了一件
-        reducer.handle(.elementCountChanged(1))
+        reducer.handle(.elementCountChanged(3))
         #expect(reducer.hasElements)
 
-        let effects = reducer.handle(.selectionChanged(width: 200, height: 100))
-        #expect(effects.contains(.warnClearAnnotations), "有元素被清掉必须提示，got=\(effects)")
-        #expect(!reducer.hasElements, "提示之后标志要落回 false，免得下次空清也提示")
+        let moved = reducer.handle(.selectionChanged(width: 200, height: 100))
+        let warns = moved.contains { if case .warnClearAnnotations = $0 { true } else { false } }
+        #expect(!warns, "改选区不等于全清，单凭尺寸变化不许提示，got=\(moved)")
+        #expect(reducer.hasElements, "没丢东西就不该把 hasElements 抹成 false")
 
-        // 再来一次改尺寸：这次没有元素了，不该再提示
-        let second = reducer.handle(.selectionChanged(width: 300, height: 150))
-        #expect(!second.contains(.warnClearAnnotations), "空清空不该提示，got=\(second)")
+        let dropped = reducer.handle(.annotationsDropped(2))
+        #expect(dropped.contains(.warnClearAnnotations(dropped: 2)), "真丢了 2 条必须提示，got=\(dropped)")
+        let none = reducer.handle(.annotationsDropped(0))
+        #expect(none.isEmpty, "丢 0 条不许提示，got=\(none)")
     }
 
     @Test("行 9/10：绘制起止真的把 selecting ⇄ editing 走起来")
@@ -80,11 +84,13 @@ struct ClearWarningTests {
         reducer.handle(.hotKeyPressed(.snip))
         reducer.handle(.overlayShown)
         reducer.handle(.elementCountChanged(2))
-        let effects = reducer.handle(.selectionChanged(width: 100, height: 80))
-        #expect(effects.contains(.warnClearAnnotations))
-        // 文案不许暗示可撤销：清空同时重置了历史
-        #expect(!MSSessionCopy.annotationCleared.contains("撤销") || MSSessionCopy.annotationCleared.contains("无法撤销"),
-                "文案必须说实话：清空不可撤销")
+        let effects = reducer.handle(.annotationsDropped(3))
+        #expect(effects.contains(.warnClearAnnotations(dropped: 3)), "got=\(effects)")
+        // 文案必须说实话：范围内的原地保留、而且这是一条可撤销记录（旧文案两句都反了）
+        let copy = MSSessionCopy.annotationsDropped(3)
+        #expect(copy.contains("3"), "文案要带上条数，got=\(copy)")
+        #expect(copy.contains("原地保留") && copy.contains("撤销"),
+                "文案必须说清「只清范围外」与「可撤销」，got=\(copy)")
     }
 
     // MARK: - 视图侧的真实顺序（这条最容易写反）
@@ -119,11 +125,15 @@ struct ClearWarningTests {
 
         spy.selectionNotifications.removeAll()
         spy.elementCountAtNotification.removeAll()
+        spy.drops.removeAll()
         view.setSelection(CGRect(x: 20, y: 20, width: 120, height: 90))     // 改尺寸
         let countWhenNotified = try #require(spy.elementCountAtNotification.first)
-        #expect(countWhenNotified == 1, "通知会话那一刻元素必须还在，否则行 7 永远不提示（got \(countWhenNotified)）")
-        #expect(view.document?.elements.isEmpty == true, "通知之后才真的清空")
-        #expect(spy.elementCounts.last == 0, "清空也要报数，hasElements 才不会说谎")
+        #expect(countWhenNotified == 1, "通知会话那一刻元素必须还是改动前的真值（got \(countWhenNotified)）")
+        // 11-18 改判：缩选区不再全清——跑到外面的才丢，且必须单独报数
+        #expect(spy.drops.count <= 1, "丢失条数最多报一次，got=\(spy.drops)")
+        #expect((view.document?.elements.count ?? 0) >= 0)
+        #expect(spy.elementCounts.last == view.document?.elements.count,
+                "最后报的元素数必须等于文档真值，hasElements 才不会说谎")
     }
 
     @MainActor
@@ -161,7 +171,9 @@ struct ClearWarningTests {
 
         coord.overlay(window, elementCount: 2)
         coord.overlay(window, selectionDidChange: CGRect(x: 0, y: 0, width: 120, height: 90))
-        #expect(toasts == [MSSessionCopy.annotationCleared], "got=\(toasts)")
+        #expect(toasts.isEmpty, "改选区本身不再提示（11-18 改判），got=\(toasts)")
+        coord.overlay(window, didDropAnnotations: 2)
+        #expect(toasts == [MSSessionCopy.annotationsDropped(2)], "got=\(toasts)")
         // 回归护栏：会话中途的选区变化**不许**把遮罩关掉（11-17 我就写错过一次，
         // 症状是 probe-freeze 里 visible=false + 日志刷 illegal migration effectsFinished）
         #expect(coord.overlayVisible, "选区变化之后遮罩必须还在（finishEffects 误用的回归护栏）")

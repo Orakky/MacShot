@@ -103,7 +103,8 @@ struct OverlayPointerRouter {
 - 尺寸读数：`W×H` 设备像素（不是逻辑点），跟随选区右下角，边缘留 8pt；超出屏幕时翻到内侧。
 - 位置读数：`X,Y`（全局逻辑）随读数一起显示（P1）。
 - 缩放倍率提示：当显示器 scale ≠ 1 时显示 `@2x` 标记，避免用户困惑"为什么我拖了 100 得到 200"。
-- 清空标注提示（Q-11）：选区变形且 `elements` 非空时出现，见 `docs/design/screens.md#UI-001`。
+- 范围外标注清除（Q-11 于 11-18 改判）：选区变化时元素按 `documentDelta` 平移保屏幕位置，
+  与新画布不相交的才清；只有真清了东西才提示，见 `docs/design/screens.md#UI-001` 行 7 与 `annotate-model.md` §8。
 
 ## 7. 放大镜（P1，先定契约不做实现）
 

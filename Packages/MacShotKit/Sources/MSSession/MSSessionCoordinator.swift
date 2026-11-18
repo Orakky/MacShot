@@ -16,6 +16,9 @@ public enum MSSessionEvent: Sendable, Equatable {
     case permissionState(PermissionState)
     case overlayShown
     case selectionChanged(width: Int, height: Int)
+    /// 选区变化后落到范围外、被清掉的标注条数（0 不会发这个事件）。
+    /// 取代 11-18 之前的"改选区就全清"：范围内原地保留，所以提示只在**真丢了东西**时出现。
+    case annotationsDropped(Int)
     case drawBegan
     case drawEnded
     /// 元素层数量变了（提交/删除/清空/撤销都会报）。`hasElements` 的唯一维护入口，
@@ -37,18 +40,21 @@ public enum MSSessionEffect: Sendable, Equatable {
     case saveToFile(panel: Bool)
     case showPermissionGate
     case toast(String)
-    /// 改选区尺寸把已有标注清空了，必须显式提示（`ST-001` 行 7、Q-11 推荐档 A）。
-    /// 文案只有一个家：`MSSessionCopy.annotationCleared`。
+    /// 有标注落到新选区外面被清掉，必须显式提示（`ST-001` 行 7）。
+    /// 文案只有一个家：`MSSessionCopy.annotationsDropped(_:)`。
     /// 把取样色串写进剪贴板（`FR-CAP-016` 的 `C`）。
     case copyColorText(String)
-    case warnClearAnnotations
+    case warnClearAnnotations(dropped: Int)
     case log(String)
 }
 
 /// 会话侧给用户看的文案。**唯一一处**落这条字符串的地方，等 ADR-016（`MSStrings`）签字后整族迁过去。
 public enum MSSessionCopy {
-    /// 改选区尺寸清空标注的提示。不许暗示可撤销——清空同时重置了历史（`Q-11`）。
-    public static let annotationCleared = "选区尺寸已改变，原有标注已清空（无法撤销）"
+    /// 范围外标注被清掉的提示。11-18 改判后：范围内的**原地保留**、且这是一条可撤销记录，
+    /// 所以旧文案"原有标注已清空（无法撤销）"两句都不成立了，不许再写回来。
+    public static func annotationsDropped(_ count: Int) -> String {
+        "范围外的 \(count) 条标注已清除（范围内的原地保留，⌘Z 可撤销）"
+    }
 }
 
 /// Pure state machine, head-testable without a window (`ST-001`, `V-008`).
@@ -91,14 +97,13 @@ public struct MSSessionReducer: Sendable {
 
         case (.selecting, .selectionChanged(let w, let h)):
             hasSelection = w > 3 && h > 3
-            // 行 7：清空是遮罩那边做的，这里只负责"有元素就要提示"。
-            // 视图刻意把本通知排在清空之前，所以 `hasElements` 这里还是清空前的真值。
-            var effects: [MSSessionEffect] = [.log("selection \(w)x\(h)")]
-            if hasElements {
-                hasElements = false
-                effects.append(.warnClearAnnotations)
-            }
-            return effects
+            // 行 7 改判后不再"改选区＝全清"，所以这里**不**提示：丢没丢东西由
+            // `.annotationsDropped` 报数，提示只在真丢了的时候出现。
+            return [.log("selection \(w)x\(h)")]
+
+        case (.selecting, .annotationsDropped(let count)), (.editing, .annotationsDropped(let count)):
+            guard count > 0 else { return [] }
+            return [.log("dropped \(count)"), .warnClearAnnotations(dropped: count)]
 
         case (.selecting, .elementCountChanged(let count)), (.editing, .elementCountChanged(let count)):
             hasElements = count > 0
@@ -444,6 +449,11 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
         run(.selectionChanged(width: w, height: h))
     }
 
+    /// 遮罩那边算好了"落到范围外被清掉几条"，这里只把它变成一次提示。
+    public func overlay(_ overlay: MSOverlayWindow, didDropAnnotations count: Int) {
+        run(.annotationsDropped(count))
+    }
+
     public func overlay(_ overlay: MSOverlayWindow, didRequest intent: MSCommitIntent) {
         run(.commitRequested(intent))
         commit(intent: intent, selection: overlay.overlayView.globalSelection,
@@ -575,7 +585,7 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
             let ok = clipboard.writeText(text)
             onToast?(ok ? "已复制 \(text)" : "剪贴板写入失败")
 
-        case .warnClearAnnotations: onToast?(MSSessionCopy.annotationCleared)
+        case .warnClearAnnotations(let n): onToast?(MSSessionCopy.annotationsDropped(n))
         case .log(let message):   MSLog.info(.session, message)
         // 下面这些由 startSnip()/commit() 的执行流落地，显式声明归属而不是静默丢弃。
         case .freeze, .showOverlay:

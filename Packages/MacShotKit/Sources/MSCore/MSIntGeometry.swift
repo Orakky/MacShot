@@ -17,6 +17,19 @@ public struct MSIntPoint: Hashable, Sendable, Codable {
                 y: selection.maxY - CGFloat(y) / scale)
     }
 
+    /// 选区从 `old` 变到 `new`（视图坐标 y-up）时，**屏幕位置不动**的元素在画布坐标里要平移多少。
+    /// 这是 `canvasPoint(of:in:scale:)` 的差分形式：改选区后想把标注留在原地，就加这个量。
+    /// 单独成函数（而不是就地减一下）的理由与 ADR-013 一样——两处各算一遍就会有一处多翻一次 y。
+    public static func documentDelta(selectionOld old: CGRect, to new: CGRect, scale: CGFloat) -> CGSize {
+        CGSize(width: (old.minX - new.minX) * scale,
+               height: (new.maxY - old.maxY) * scale)     // y 向下：选区在屏幕上往上移 ⇒ 元素画布 y 变大
+    }
+
+    /// 反向：已知画布平移量，求选区在视图里动了多少（单测用来验两个方向互为逆运算）。
+    public static func selectionDelta(fromDocument d: CGSize, scale: CGFloat) -> CGSize {
+        CGSize(width: -d.width / scale, height: d.height / scale)
+    }
+
     /// 正向：视图点（y 向上）→ 画布像素（选区本地，y 向下）。
     /// 两个方向必须放在一起、互为逆运算，否则就会出现"某处又翻了一遍 y"的坐标 bug
     /// （2026-11-16 实拍抓到的 ✕ 画在左下就是这种形状）。

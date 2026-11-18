@@ -49,6 +49,9 @@ public enum MSOverlayDrawingPhase: Sendable, Equatable {
 
 public protocol MSOverlayDelegate: AnyObject {
     func overlay(_ overlay: MSOverlayWindow, selectionDidChange rect: CGRect?)
+    /// 选区变化后**落到范围外**被清掉的条数（0 不通知）。文案必须说清"只清了外面那些"，
+    /// 不许再写"原有标注已清空（无法撤销）"——11-18 改判后范围内的原地保留、且可撤销。
+    func overlay(_ overlay: MSOverlayWindow, didDropAnnotations count: Int)
     func overlay(_ overlay: MSOverlayWindow, didRequest intent: MSCommitIntent)
     func overlayDidCancel(_ overlay: MSOverlayWindow)
     /// 标注绘制的起止（`ST-001` 行 9/10）。会话靠它把 `selecting ⇄ editing` 走起来，
@@ -63,6 +66,11 @@ public protocol MSOverlayDelegate: AnyObject {
     /// Asks the session for the cropped pixels under a view-space rect (frozen frame, no re-capture).
     func overlay(_ overlay: MSOverlayWindow, cropOfViewRect rect: CGRect) -> CGImage?
     func overlayPreferences(_ overlay: MSOverlayWindow) -> MSAppPreferences
+}
+
+public extension MSOverlayDelegate {
+    /// 不关心"清了几条"的表面（贴图侧、测试替身）不必被迫实现。
+    func overlay(_ overlay: MSOverlayWindow, didDropAnnotations count: Int) {}
 }
 
 public final class MSOverlayWindow: NSWindow {
@@ -240,24 +248,48 @@ public final class MSOverlayView: NSView {
 
     public func setSelection(_ rect: CGRect?) {
         let previousSize = selection?.size
+        let previous = selection
         selection = rect
-        // 顺序有讲究：先让会话知道"选区变了"（此时 `hasElements` 还是清空前的真值，
+        // 顺序有讲究：先让会话知道"选区变了"（此时 `hasElements` 还是改动前的真值，
         // 行 7 才能提示），再真的换掉文档。反过来就永远不提示。
         if let size = rect?.size, let previousSize, size != previousSize, document?.isEmpty == false {
             host.map { delegate?.overlay($0, selectionDidChange: rect) }
         }
-        if let size = rect?.size, let previousSize, size != previousSize, document?.isEmpty == false {
-            // Q-11 (temporary default): resizing the selection clears the annotations, with the
-            // clear stated on screen rather than silently.
-            document = MSAnnotationDocument(canvasSize: canvasSize(for: rect ?? .zero))
-            history = MSAnnotationHistory()
-            cachedComposite = nil
-            MSLog.info(.overlay, "selection resized → annotations cleared (Q-11)")
+        if let rect, let previous, previous != rect, document?.isEmpty == false {
+            // Q-11 的旧档是"改选区＝全清、且不可撤销"。用户 11-18 改判：
+            // **屏幕位置落在新选区里的标注原地保留**，只有跑到外面的才清掉，而且这是一条可撤销记录。
+            retargetElements(from: previous, to: rect)
+        } else if let rect {
+            document = ensureDocument(for: rect)
         }
-        if let rect { document = ensureDocument(for: rect) }
         cachedComposite = nil
         needsDisplay = true
         delegate?.overlay(host ?? MSOverlayWindow(display: display, frame: frozenFrame), selectionDidChange: rect)
+    }
+
+    /// 选区变了 ⇒ 元素平移到新画布（平移量只问 `MSIntPoint.documentDelta` 要），
+    /// 落到新选区外面的清掉；整件事合成**一条**撤销记录，`⌘Z` 一次回到改动前。
+    private func retargetElements(from old: CGRect, to new: CGRect) {
+        guard let before = document else { return }
+        let canvas = canvasSize(for: new)
+        let d = MSIntPoint.documentDelta(selectionOld: old, to: new, scale: display.scale)
+        let area = CGRect(x: 0, y: 0, width: canvas.width, height: canvas.height)
+        var steps: [MSAnnotationCommand] = []
+        var dropped = 0
+        for element in before.elements {
+            let moved = element.translated(by: d)
+            let inside = MSAnnotationGeometry.bounds(of: moved).map { $0.cgRect.intersects(area) } ?? true
+            if !inside { steps.append(.remove(element)); dropped += 1; continue }
+            if moved.points != element.points || moved.boundsOverride != element.boundsOverride {
+                steps.append(.replace(before: element, after: moved))
+            }
+        }
+        var next = MSAnnotationDocument(canvasSize: canvas, elements: before.elements,
+                                        currentStyle: before.currentStyle, badgeCounter: before.badgeCounter)
+        if let command = MSAnnotationCommand.compose(steps) { history.apply(command, to: &next) }
+        document = next
+        if dropped > 0 { host.map { delegate?.overlay($0, didDropAnnotations: dropped) } }
+        MSLog.info(.overlay, "selection changed \(old.integral) → \(new.integral): kept \(next.elements.count), dropped \(dropped)")
     }
 
     private func canvasSize(for rect: CGRect) -> MSIntSize {
@@ -610,20 +642,52 @@ public final class MSOverlayView: NSView {
             }
         }
         if layout.showsActions {
-            NSAttributedString(string: "Enter 贴出  ⌘C 复制  ⌘S 保存  Esc 取消", attributes: [
-                .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor,
-            ]).draw(at: NSPoint(x: rect.maxX - 240, y: rect.midY - 7))
+            // 逐段画在 actionBoxes 给的格子里：绘制与命中读同一份几何，
+            // 以前是"一整串画在 rect.maxX - 240"（魔数），根本没有命中区。
+            for (action, box) in actionBoxes(in: rect) {   // 与 visibleActionBoxes 同一份几何
+                NSAttributedString(string: actionLabels()[action] ?? action.label(verb: "贴出"), attributes: [
+                    .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor,
+                ]).draw(at: NSPoint(x: box.minX, y: box.midY - 7))
+            }
         }
         ctx.restoreGState()
     }
 
-    /// 命中区直接取绘制用的同一份 layout：两处各算一遍就是 ✕ 那个 bug 的成因。
-    private func hitToolbar(_ p: NSPoint) -> Bool {
-        guard let layout = toolbarLayout, layout.rect.contains(p) else { return false }
-        for (t, box) in layout.toolBoxes where box.contains(p) { tool = t; return true }
-        for (hex, box) in layout.colorBoxes where box.insetBy(dx: -3, dy: -3).contains(p) { colorHex = hex; return true }
-        return true
+    /// 工具条命中结果。动作格必须**单独成档**：整条一律 `true` 的话，点"贴出"和点空白一样
+    /// 什么都没发生（用户 11-18 报的第 1 条）。
+    enum ToolbarHit {
+        case tool(MSTool), color(String), action(MSAnnotationToolbar.BarAction), blank
     }
+
+    /// 命中区直接取绘制用的同一份 layout：两处各算一遍就是 ✕ 那个 bug 的成因。
+    private func toolbarHit(_ p: NSPoint) -> ToolbarHit? {
+        guard let layout = toolbarLayout, layout.rect.contains(p) else { return nil }
+        for (t, box) in layout.toolBoxes where box.contains(p) { return .tool(t) }
+        for (hex, box) in layout.colorBoxes where box.insetBy(dx: -3, dy: -3).contains(p) { return .color(hex) }
+        for (a, box) in visibleActionBoxes() where box.contains(p) { return .action(a) }
+        return .blank
+    }
+
+    /// 动作格子的标签：`.commit` 那一格跟随设置项 `commitBehavior` 的动词，
+    /// 否则"点一个写着贴出的按钮却复制了"这种自相矛盾就会出现在屏幕上。
+    private func actionLabels() -> [MSAnnotationToolbar.BarAction: String] {
+        let verb = host.flatMap { delegate?.overlayPreferences($0) }?.commitBehavior.shortLabel ?? "贴出"
+        return Dictionary(uniqueKeysWithValues: MSAnnotationToolbar.BarAction.allCases.map { ($0, $0.label(verb: verb)) })
+    }
+
+    private func actionBoxes(in rect: CGRect) -> [(action: MSAnnotationToolbar.BarAction, rect: CGRect)] {
+        MSAnnotationToolbar.actionBoxes(rect: rect, labels: actionLabels())
+    }
+
+    /// 窄屏时动作文字整段不画（`showsActions` 先收提示文字、不收工具），
+    /// 所以命中区也必须一起收——否则格子压在色板上，点色块会误触发"保存"。
+    private func visibleActionBoxes() -> [(action: MSAnnotationToolbar.BarAction, rect: CGRect)] {
+        guard let layout = toolbarLayout, layout.showsActions else { return [] }
+        return actionBoxes(in: layout.rect)
+    }
+
+    /// 探针与测试用的只读视图：**画出来的**动作格（没画就不该能点）。
+    public var actionBoxesForProbe: [(action: MSAnnotationToolbar.BarAction, rect: CGRect)] { visibleActionBoxes() }
 
     // MARK: - mouse
 
@@ -640,7 +704,22 @@ public final class MSOverlayView: NSView {
             if let host { delegate?.overlayDidCancel(host) }
             return
         }
-        guard !hitToolbar(p) else { needsDisplay = true; return }
+        switch toolbarHit(p) {
+        case .tool(let t): tool = t; needsDisplay = true; return
+        case .color(let hex): colorHex = hex; needsDisplay = true; return
+        case .action(let a):
+            MSLog.info(.overlay, "toolbar action=\(a.rawValue)")
+            needsDisplay = true
+            switch a {
+            case .commit: commit(defaultIntent(from: host.flatMap { delegate?.overlayPreferences($0) }))
+            case .copy: commit(.copy)
+            case .save: commit(.savePanel)
+            case .cancel: if let host { delegate?.overlayDidCancel(host) }
+            }
+            return
+        case .blank: needsDisplay = true; return
+        case nil: break
+        }
         if let editing = textEditing {
             // 点到编辑框外＝先把这段文字了结（提交），再走正常路由；框内交给 field editor 自己
             if !editing.textView.frame.contains(p) { commitTextEditing() }

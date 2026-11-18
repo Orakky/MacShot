@@ -5,6 +5,28 @@ import Testing
 /// The measured rounding cases from `docs/adr/ADR-013`: both edges round independently, so the
 /// crop never exceeds the requested span. These numbers are arithmetic, not opinions.
 struct MSIntGeometryTests {
+    @Test("选区移动后标注留在屏幕原地：documentDelta 是 canvasPoint 的差分形式（ADR-013）")
+    func documentDeltaKeepsScreenPosition() {
+        let old = CGRect(x: 100, y: 200, width: 300, height: 200)
+        let new = CGRect(x: 160, y: 120, width: 420, height: 260)      // 往右上移，且改了尺寸
+        for scale in [1.0, 2.0, 1.799] as [CGFloat] {
+            let d = MSIntPoint.documentDelta(selectionOld: old, to: new, scale: scale)
+            for p in [CGPoint(x: 120, y: 380), CGPoint(x: 250, y: 210), CGPoint(x: 399, y: 201)] {
+                let before = MSIntPoint.canvasPoint(of: p, in: old, scale: scale)
+                let moved = MSIntPoint(x: Int((CGFloat(before.x) + d.width).rounded()),
+                                       y: Int((CGFloat(before.y) + d.height).rounded()))
+                let direct = MSIntPoint.canvasPoint(of: p, in: new, scale: scale)
+                #expect(abs(moved.x - direct.x) <= 1 && abs(moved.y - direct.y) <= 1,
+                        "scale=\(scale) 屏幕点 \(p)：平移量算完是 \(moved)，直接换算是 \(direct) ⇒ 标注会漂")
+            }
+            let back = MSIntPoint.selectionDelta(fromDocument: d, scale: scale)
+            #expect(abs(back.width - (new.minX - old.minX)) < 0.001,
+                    "逆运算对不上（x）：\(back.width) vs \(new.minX - old.minX)")
+            #expect(abs(back.height - (new.maxY - old.maxY)) < 0.001,
+                    "逆运算对不上（y）：\(back.height) vs \(new.maxY - old.maxY) ⇒ y 方向翻多了或翻少了")
+        }
+    }
+
 
     @Test("两条边分别取整 vs naive（1.799x 与 1x 半点坐标）")
     func roundingContract() {

@@ -49,6 +49,56 @@ public enum MSAnnotationToolbar {
         return (items, colors)
     }
 
+    /// 工具条右端的动作文字。**点击必须与按键同一条路**（用户 11-18 报的第 1 条：
+    /// 整条 `rect` 一律被工具条吃掉，点"贴出"没反应——文字只是画上去的，没有命中区）。
+    public enum BarAction: String, CaseIterable, Sendable {
+        case commit, copy, save, cancel
+
+        public var hint: String {
+            switch self { case .commit: "Enter"; case .copy: "⌘C"; case .save: "⌘S"; case .cancel: "Esc" }
+        }
+
+        /// `verb` = 提交动作的当前动词（跟随设置项 `commitBehavior`），只有 `.commit` 那一格用它。
+        public func label(verb: String) -> String {
+            let v: String
+            switch self {
+            case .commit: v = verb
+            case .copy: v = "复制"
+            case .save: v = "保存"
+            case .cancel: v = "取消"
+            }
+            return hint + " " + v
+        }
+    }
+
+    /// 中日韩字符按 1 em，其它（字母/符号/空格）按 0.6 em。近似值只用来定格子宽度：
+    /// **绘制与命中读同一份**，所以两者必然落在同一块地上；真实字形只会比它窄，不会点不到。
+    public static func textWidth(_ text: String, pointSize: CGFloat) -> CGFloat {
+        text.reduce(CGFloat(0)) { $0 + (isWide($1) ? pointSize : pointSize * 0.6) }
+    }
+
+    public static func isWide(_ c: Character) -> Bool {
+        guard let scalar = c.unicodeScalars.first else { return false }
+        let v = scalar.value
+        return (0x3000...0x303F).contains(v) || (0x3040...0x30FF).contains(v)
+            || (0x4E00...0x9FFF).contains(v) || (0xFF00...0xFFEF).contains(v)
+    }
+
+    /// 动作格子：从条的右边缘往左排，宽度取各段文字自己的 `textWidth`。
+    /// 返回的总宽不得超过 actionWidth，否则文字会挤到色板上（单测钉住这条）。
+    public static func actionBoxes(rect: CGRect, labels: [BarAction: String],
+                                   pointSize: CGFloat = 11, gap: CGFloat = 12) -> [(action: BarAction, rect: CGRect)] {
+        let order = BarAction.allCases
+        let widths = order.map { textWidth(labels[$0] ?? $0.label(verb: "贴出"), pointSize: pointSize) }
+        let total = widths.reduce(0, +) + gap * CGFloat(max(0, order.count - 1))
+        var x = rect.maxX - edgePad - total
+        return order.enumerated().map { (i, action) in
+            let box = CGRect(x: x, y: rect.minY + 4, width: widths[i], height: rect.height - 8)
+            x += widths[i] + gap
+            return (action, box)
+        }
+    }
+
     /// 多行（流程）布局：一行放不下时按宽度分行（贴图侧的工具带就是这么摆的，`B-028` 定稿＝带在图片下方）。
     ///
     /// 规则定死，免得每个表面各自发明：一行放 `perRow` 个工具格，工具排满若干行后

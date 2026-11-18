@@ -42,6 +42,13 @@ public struct MSAppPreferences: Codable, Sendable, Equatable {
         public var label: String {
             switch self { case .pin: "贴出"; case .copy: "复制"; case .save: "保存到文件" }
         }
+
+        /// 工具条动作格用的短动词。与 `label` 分开是因为条里给动作文字只预留了
+        /// `MSAnnotationToolbar.actionWidth = 250pt`，"保存到文件"四个汉字会把四段文字撑到 262pt
+        /// 挤到色板上（几何单测 `ToolbarGeometryTests` 钉住这条）。菜单与设置窗仍用 `label`。
+        public var shortLabel: String {
+            switch self { case .pin: "贴出"; case .copy: "复制"; case .save: "保存" }
+        }
     }
 
     public struct AnnotationDefaults: Codable, Sendable, Equatable {
