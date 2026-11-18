@@ -319,6 +319,118 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// 用合成画面是有意的：这里要量的是"文档 + 位图 + 窗口"的常驻成本，与屏幕内容无关，
     /// 也就不必等 `T-090` 的签名/授权（cdhash 一变就采不到）。默认 `10 张 3840×2160pt`。
     /// 会在你屏幕上短暂开 N 张贴图，跑完自动关。
+    /// `--probe-memory <张数> [宽pt] [高pt] [保持ms] [轮数]`：`NFR-005` 的两条上限、`NFR-008` 的回基线，
+    /// 以及 `B-035` 的**区分实验**（`rounds=2`：开 N 张 → 全关 → 再开 N 张）。
+    /// 用合成画面是有意的：这里裁的是"文档 + 位图 + 窗口"的常驻成本，与屏幕内容无关，
+    /// 也就不必等 `T-090` 的签名/授权（cdhash 一变就采不到）。会在你屏幕上短暂开 N 张贴图。
+    func probeMemory(count: Int, w: Int, h: Int, holdMs: Int, rounds: Int = 1) {
+        MainActor.assumeIsolated {
+            func report(_ line: String) {
+                MSLog.info(.pin, "probe-memory \(line)")
+                let url = URL(fileURLWithPath: "/tmp/macshot-probe-memory.txt")
+                if let fh = try? FileHandle(forWritingTo: url) { fh.seekToEndOfFile(); fh.write(Data((line + "\n").utf8)); try? fh.close() }
+                else { try? (line + "\n").write(to: url, atomically: true, encoding: .utf8) }
+            }
+            func read(_ keyPath: KeyPath<task_vm_info_data_t, UInt64>) -> Double {
+                var info = task_vm_info_data_t()
+                var size = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+                let kr = withUnsafeMutablePointer(to: &info) {
+                    $0.withMemoryRebound(to: integer_t.self, capacity: Int(size)) {
+                        task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &size)
+                    }
+                }
+                return kr == KERN_SUCCESS ? Double(info[keyPath: keyPath]) / 1_048_576 : -1
+            }
+            // 判据用 resident_size（RSS）。phys_footprint 看不见 CoreGraphics 放在可回收区的图像数据：
+            // `E-067` 实测 10 张贴图时它报 12MB 而 RSS 报 86MB，所以只作参考行。
+            func rssMB() -> Double { read(\.resident_size) }
+            func physMB() -> Double { read(\.phys_footprint) }
+
+            let scale = 2
+            let pxW = w * scale, pxH = h * scale
+            let sourceMB = Double(pxW * pxH * 4) / 1_048_576
+
+            /// 开 `count` 张贴图，返回结束时的 RSS。夹具必须**不可压缩**：纯色 4K 缓冲会被
+            /// 内存压缩器吃掉（第一次实测"第一张 +32MB、后面每张 +0.1MB"就是那个坑），
+            /// 真截图的熵接近噪声 ⇒ 铺随机字节。
+            func openBatch(tag: String, baseline: Double) -> Double {
+                var last = baseline
+                for i in 0..<count {
+                    let ctx = CGContext(data: nil, width: pxW, height: pxH, bitsPerComponent: 8, bytesPerRow: 0,
+                                        space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                    var buf = [UInt8](repeating: 0, count: pxW * pxH * 4)
+                    for k in stride(from: 0, to: buf.count, by: 4) {
+                        buf[k] = UInt8.random(in: 0...255)
+                        buf[k + 1] = UInt8.random(in: 0...255)
+                        buf[k + 2] = UInt8.random(in: 0...255)
+                        buf[k + 3] = 255
+                    }
+                    ctx.data?.copyMemory(from: &buf, byteCount: buf.count)
+                    ctx.flush()
+                    guard let img = ctx.makeImage() else { report("FAIL 合成不出 \(tag) 第 \(i + 1) 张"); break }
+                    let rect = MSIntRect(x: 0, y: 0, width: pxW, height: pxH)
+                    let content = MSPinContent(document: MSAnnotationDocument(canvasSize: MSIntSize(width: pxW, height: pxH)),
+                                               source: img, scale: scale, sourcePixelRect: rect)
+                    let pin = pins.open(content, near: NSPoint(x: 30 + CGFloat(i % 5) * 60, y: 30 + CGFloat(i / 5) * 60),
+                                        menu: nil, onClose: { _ in })
+                    pin.center(on: NSScreen.screens.first, display: true)
+                    let now = rssMB()
+                    report("\(tag) 第 \(i + 1) 张 rss=\(String(format: "%.1f", now))MB 本次+\(String(format: "%.1f", now - last))MB 累计+\(String(format: "%.1f", now - baseline))MB")
+                    last = now
+                }
+                return last
+            }
+
+            let baseline = rssMB()
+            report("基线 rss=\(String(format: "%.1f", baseline))MB｜源 \(w)x\(h)pt @\(scale)x = \(pxW)x\(pxH)px ≈ \(String(format: "%.1f", sourceMB))MB/张")
+            let peak = openBatch(tag: "第一轮", baseline: baseline)
+            if holdMs > 600 {
+                report("保持 \(holdMs)ms，外部读数请在此期间取（pid=\(getpid())）")
+                usleep(UInt32(holdMs) * 1_000)
+            }
+            report("判据：单张增量=\(String(format: "%.1f", (peak - baseline) / Double(max(1, count))))MB "
+                   + "vs 上限 源×1.5=\(String(format: "%.1f", sourceMB * 1.5))MB｜"
+                   + "\(count) 张累计=\(String(format: "%.1f", peak - baseline))MB vs 上限 330MB")
+            report("（参考）phys_footprint 现在=\(String(format: "%.1f", physMB()))MB——不作判据，理由见 E-067")
+
+            pins.closeAll()
+            usleep(600_000)
+            let afterCloseRaw = rssMB()
+            // 分配器不会主动把空页交还系统，所以"RSS 不回基线"可能只是缓存策略。
+            // 这里显式压一次：压得回去 ⇒ 修法是把同一调用接进会话结束；压不回去 ⇒ 是真持有。
+            _ = malloc_zone_pressure_relief(nil, 0)
+            usleep(200_000)
+            let afterClose = rssMB()
+            report("压力释放后 rss=\(String(format: "%.1f", afterClose))MB（释放前 \(String(format: "%.1f", afterCloseRaw))MB，基线 \(String(format: "%.1f", baseline))MB）")
+            let drift = afterClose - baseline
+            report("关全部贴图后 rss=\(String(format: "%.1f", afterClose))MB 残留+\(String(format: "%.1f", drift))MB "
+                   + "（NFR-008 口径=RSS：±10% 线是 \(String(format: "%.1f", baseline * 0.1))MB ⇒ \(drift <= baseline * 0.1 ? "绿" : "破线")）")
+
+            if rounds >= 2 {
+                // `B-035` 的区分实验：第二轮几乎不涨 ⇒ 残留是可复用的分配器大块缓存；
+                // 第二轮再涨同样多 ⇒ 是真泄漏，NFR-008 的破线就得当 bug 修。
+                let base2 = rssMB()
+                let peak2 = openBatch(tag: "第二轮", baseline: base2)
+                // 比的是**峰值对峰值**，不是增量：增量会因为第一轮留下的缓存被复用而虚高，
+                // 真泄漏的特征是"每一轮的峰值都往上抬一层"。
+                report("区分实验：第一轮峰值=\(String(format: "%.1f", peak))MB 第二轮峰值=\(String(format: "%.1f", peak2))MB "
+                       + "差=\(String(format: "%.1f", peak2 - peak))MB ⇒ \(peak2 - peak < 8.0 ? "峰值不随批次抬升 ⇒ 分配器缓存，不是泄漏" : "峰值继续抬升 ⇒ 真持有，按 bug 修")")
+                pins.closeAll()
+                usleep(600_000)
+                report("第二轮关掉后 rss=\(String(format: "%.1f", rssMB()))MB")
+            }
+            exit(0)
+        }
+    }
+
+    /// `--probe-hotkey <set|show|restore>`：热键**跨进程**的持久化取证。
+    /// `set` 改绑 → 进程退出；`show` 是**下一次启动**读盘并重新注册；`restore` 把键位还回 `F1`。
+    /// 三次启动连起来就是 `V-037④` 的机制部分；物理按键那半只能人手（`B-032`）。
+    /// `--probe-memory <张数> [宽pt] [高pt]`：`NFR-005` 的两个上限与 `NFR-008` 的回基线，一次跑完出读数。
+    /// 用合成画面是有意的：这里要量的是"文档 + 位图 + 窗口"的常驻成本，与屏幕内容无关，
+    /// 也就不必等 `T-090` 的签名/授权（cdhash 一变就采不到）。默认 `10 张 3840×2160pt`。
+    /// 会在你屏幕上短暂开 N 张贴图，跑完自动关。
     func probeMemory(count: Int, w: Int, h: Int, holdMs: Int) {
         MainActor.assumeIsolated {
                     func report(_ line: String) {

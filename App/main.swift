@@ -96,13 +96,13 @@ if CommandLine.arguments.contains("--probe-clipboard") {
 if let i = CommandLine.arguments.firstIndex(of: "--probe-memory") {
     let args = CommandLine.arguments
     func arg(_ k: Int, _ d: Int) -> Int { args.count > i + k ? (Int(args[i + k]) ?? d) : d }
-    let count = arg(1, 10), w = arg(2, 1920), h = arg(3, 1080), hold = arg(4, 600)
+    let count = arg(1, 10), w = arg(2, 1920), h = arg(3, 1080), hold = arg(4, 600), rounds = arg(5, 1)
     let app = NSApplication.shared
     let delegate = MainActor.assumeIsolated { MSAppDelegate(autoSnip: false) }
     app.delegate = delegate
     app.setActivationPolicy(.regular)
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-        MainActor.assumeIsolated { delegate.probeMemory(count: count, w: w, h: h, holdMs: hold) }
+        MainActor.assumeIsolated { delegate.probeMemory(count: count, w: w, h: h, holdMs: hold, rounds: rounds) }
     }
     app.run()
 }

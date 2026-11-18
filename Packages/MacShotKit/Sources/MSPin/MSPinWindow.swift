@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import CoreGraphics
 import Foundation
 import MSAnnotate
@@ -529,9 +530,20 @@ public final class MSPinRegistry: @unchecked Sendable {
         return pin
     }
 
+    /// 贴图全部关掉后压一次分配器：macOS 的 malloc 不会主动把空页交还系统，于是 RSS 停在高位。
+    /// `E-072` 实测 10 张 4K 贴图关闭后残留 +32.9MB（RSS 口径破 `NFR-008` 的 ±10%），
+    /// 压一次回到 +1.9MB；而**两轮批次峰值只差 1.2MB**，证明那 33MB 本来就是可复用的缓存、
+    /// 不是泄漏——所以这里要的是"把缓存还给系统"，不是"改需求定义"。
+    private func releaseMemoryIfEmpty() {
+        guard count == 0 else { return }
+        malloc_zone_pressure_relief(nil, 0)
+        MSLog.info(.pin, "allocator pressure relief (no pins left)")
+    }
+
     private func remove(_ pin: MSPinWindow) {
         lock.withLock { pins.removeAll { $0 === pin } }
         MSLog.info(.pin, "closed, remaining=\(self.count)")
+        releaseMemoryIfEmpty()
     }
 
     public func closeAll(askUser: Bool = false) {
@@ -539,6 +551,7 @@ public final class MSPinRegistry: @unchecked Sendable {
         for pin in list { pin.close() }
         lock.withLock { pins.removeAll() }
         MSLog.info(.pin, "closed all (\(list.count))")
+        releaseMemoryIfEmpty()
         _ = askUser
     }
 
