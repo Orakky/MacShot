@@ -16,10 +16,11 @@
 | 路径 | 内容 | 真源地位 | 状态 |
 |---|---|---|---|
 | `AGENTS.md` | agent 入口：纪律、命令、领活、禁做 | 纪律摘要（正文 `protocol/agent-playbook.md`） | 已落 |
-| `charter.md` | 范围/术语/命名/ID/D-01…D-04/Q-01…Q-15 | **最高** | 已落，§6 待签字 |
+| `charter.md` | 范围/术语/命名/ID/D-01…D-04/Q-01…Q-15 | **最高** | 已落；§6 的 16 条已于 11-17 全部签下（记录在 §6b） |
 | `README.md`（本文件） | 文档地图、冲突消解序、当前阶段 | 索引 | 已落 |
 | `requirements/vision.md` | 定位、3 场景、G-01…G-05 成功指标、反定位 | 愿景 | 已落，待裁决 |
 | `requirements/requirements.md` | FR P0（条数见 §0）/ P1 / P2 / 不做 | 功能需求 | 已落，逐条待转 accepted |
+| `reference/known-limitations.md` | 发布说明取材地：功能边界 / 形态取舍 / 还没证完的缺口，逐条指向真源 ID | 引用（不新增决定） | 已落（11-17，`M-6` 准出④） |
 | `requirements/nfr.md` | NFR-001…036（全部"目标值待实测"） | 非功能需求 | 已落，§9 待签字 |
 | `adr/README.md` | ADR 索引 + 状态（4 accepted / 12 proposed）+ 待补占位 | 决策状态 | 已落 |
 | `adr/ADR-001…016-*.md` | 16 条决策正文（含否决方案与翻案决策门） | 决策正文 | 已落，proposed 待签 |

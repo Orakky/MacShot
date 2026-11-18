@@ -12,7 +12,7 @@ VERSION   := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionStri
 # 没有身份时自动退回 ad-hoc（`-`），构建与门禁不会因为环境缺身份而变红。
 SIGN_IDENTITY := $(shell security find-identity -v -p codesigning 2>/dev/null | grep -q "MacShot Dev" && echo "MacShot Dev" || echo "-")
 
-.PHONY: doctor contrast build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-clipboard probe-pin probe-settings probe-hotkey probe-freeze icon appicon
+.PHONY: doctor contrast verify-dmg build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-clipboard probe-pin probe-settings probe-hotkey probe-freeze icon appicon
 
 doctor:
 	@echo "  签名身份 = $(SIGN_IDENTITY)（有 MacShot Dev 则 DR=identifier+leaf，重建不掉授权）"
@@ -117,13 +117,25 @@ sign: build
 	codesign --force --sign "$(SIGN_IDENTITY)" --timestamp=none "$(PRODUCT)"
 	codesign -dv "$(PRODUCT)" 2>&1 | grep -E 'Signature|Identifier' || true
 
+verify-dmg: dmg
+	@sh scripts/verify-dmg.sh
+
 dmg: release icon
 	@mkdir -p build
 	@rm -f build/MacShot-$(VERSION).dmg
-	@sh scripts/inject-brand.sh "$(RELEASE)"
-	hdiutil create -volname MacShot -srcfolder "$(RELEASE)" \
+	@MACSHOT_SIGN_IDENTITY="$(SIGN_IDENTITY)" sh scripts/inject-brand.sh "$(RELEASE)"
+	# 以前 `-srcfolder "$(RELEASE)"` 直接把 .app 当源，卷根只有 MacShot.app：
+	# 没有 /Applications 软链 ⇒ 全新用户没法"拖一下装好"，而 Makefile 注释一直写着"含软链接"（假陈述）。
+	# 也没有卷标图标 ⇒ 挂载后是个通用文件夹图标（A-12 的病根）。
+	@rm -rf build/dmg-staging; mkdir -p build/dmg-staging
+	@cp -R "$(RELEASE)" build/dmg-staging/MacShot.app
+	@ln -s /Applications build/dmg-staging/Applications
+	@cp build/macshot.icns build/dmg-staging/.VolumeIcon.icns
+	@SetFile -a C build/dmg-staging
+	hdiutil create -volname MacShot -srcfolder build/dmg-staging \
 	  -ov -format UDZO build/MacShot-$(VERSION).dmg
-	@echo "→ build/MacShot-$(VERSION).dmg"
+	@rm -rf build/dmg-staging
+	@echo "→ build/MacShot-$(VERSION).dmg（含 /Applications 软链 + 卷标图标，签名身份=$(SIGN_IDENTITY)）"
 
 install: appicon
 	@rm -rf "$(HOME)/Applications/MacShot.app"

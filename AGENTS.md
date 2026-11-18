@@ -25,10 +25,11 @@ macOS 原生截图 → 标注 → 贴图置顶 → 剪贴板 工具（形态参�
 make doctor            # 环境自检：Xcode / SDK / 证书 / 构建号 / 权限 / 未验证项计数
 make build             # xcodebuild 无头构建 .app
 make test              # swift test（Packages/MacShotKit，无需 Xcode GUI）
-make run               # 构建并 open 启动（诊断用；会换 cdhash，见 Q-18=B）
+make run               # 构建并 open 启动（11-17 起签名身份稳定，重建不再掉授权；旧 Q-18=B 的坑见 E-070）
 make run-term          # 构建后直接 exec 产物二进制 —— 日常入口（借终端的屏幕录制授权，不弹框）
 make release           # Release 配置构建
-make dmg               # 产出 build/MacShot-<version>.dmg（ad-hoc 签名）
+make verify-dmg        # 挂上 DMG 逐条核验：卷根 .app、/Applications 软链、卷标图标、签名身份
+make dmg               # 产出 build/MacShot-<version>.dmg（11-17 起用本地自签身份，不再是 ad-hoc）
 make install           # 装到 /Applications 或 ~/Applications（去 quarantine）
 make contrast          # NFR-024 对比度校验（11 组配对；不达 WCAG 2.2 就退出 1，目前 9/11，见 B-039）
 make check             # 本地门禁：build + test + 风格/依赖方向/文档一致性
