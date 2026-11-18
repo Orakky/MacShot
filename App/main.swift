@@ -67,6 +67,19 @@ if let i = CommandLine.arguments.firstIndex(of: "--dump-chrome") {
     MainActor.assumeIsolated { MSChromeDump.run(to: out, loupe: CommandLine.arguments.contains("loupe")) }
 }
 
+// --probe-settings：真建设置窗并自绘成 PNG，给"加了控件"这件事一双眼睛。
+if let i = CommandLine.arguments.firstIndex(of: "--probe-settings") {
+    let ms = CommandLine.arguments.count > i + 1 ? (Int(CommandLine.arguments[i + 1]) ?? 1_200) : 1_200
+    let app = NSApplication.shared
+    let delegate = MainActor.assumeIsolated { MSAppDelegate(autoSnip: false) }
+    app.delegate = delegate
+    app.setActivationPolicy(.regular)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        MainActor.assumeIsolated { delegate.probeSettings(thenExitAfter: ms) }
+    }
+    app.run()
+}
+
 // --probe-clipboard：合成图真写系统剪贴板并读回类型集合，给 Q-04"只写 PNG"出判据。
 if CommandLine.arguments.contains("--probe-clipboard") {
     let app = NSApplication.shared

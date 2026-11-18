@@ -12,7 +12,7 @@ VERSION   := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionStri
 # 没有身份时自动退回 ad-hoc（`-`），构建与门禁不会因为环境缺身份而变红。
 SIGN_IDENTITY := $(shell security find-identity -v -p codesigning 2>/dev/null | grep -q "MacShot Dev" && echo "MacShot Dev" || echo "-")
 
-.PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-clipboard probe-pin probe-hotkey probe-freeze icon appicon
+.PHONY: doctor build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-clipboard probe-pin probe-settings probe-hotkey probe-freeze icon appicon
 
 doctor:
 	@echo "  签名身份 = $(SIGN_IDENTITY)（有 MacShot Dev 则 DR=identifier+leaf，重建不掉授权）"
@@ -71,6 +71,14 @@ probe-memory: appicon
 	sleep 16; PID=$$(pgrep -x MacShot | head -1); \
 	echo "   外部裁判 pid=$$PID：ps 报 rss=$$(( $$(ps -o rss= -p $$PID) / 1024 ))MB"; \
 	sleep 8; echo "→ 探针读数："; cat /tmp/macshot-probe-memory.txt 2>/dev/null | sed 's/^/   /'
+
+# FR-SET-002 逐项对照的读数通道：真建设置窗，递归打印控件清单
+# 注意：这个窗的离屏 PNG 画不出文字（label 是 layer-backed），所以判据是清单不是图
+probe-settings: appicon
+	@rm -f /tmp/macshot-probe-settings.txt
+	@pkill -x MacShot 2>/dev/null; sleep 1; \
+	open -n "$(PRODUCT)" --args --probe-settings 700; sleep 5; \
+	echo "→ 设置窗控件清单："; cat /tmp/macshot-probe-settings.txt 2>/dev/null | sed 's/^/   /'
 
 # V-037④ 的机制半：改绑 → 退出 → 再启动读回 → 还原，三次独立启动都算一次取证
 probe-hotkey: appicon

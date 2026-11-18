@@ -284,6 +284,8 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
                 window.overlayDelegate = self
                 // 设置里的默认样式必须在这里进视图：A-11 的判据是"改了真的生效"，不是"存下来了"。
                 window.overlayView.applyDefaults(self.preferences.current.annotationStyle())
+                self.applyChromeAppearance(window, prefs: self.preferences.current)
+                window.overlayView.autoLoupeWhileDragging = self.preferences.current.showMagnifierWhileDragging
                 self.overlay = window
                 if self.presentsOverlay { window.present() }
                 self.run(.overlayShown)
@@ -450,6 +452,30 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
     public func overlay(_ overlay: MSOverlayWindow, drawingPhaseDidChange phase: MSOverlayDrawingPhase) {
         if case .began = phase { run(.drawBegan) }
         if case .ended(let count) = phase { run(.elementCountChanged(count)) }
+    }
+
+    /// 设置窗改了明暗/放大镜开关后调用：**已经开着的遮罩立刻跟着变**，
+    /// 不用等下一次截图（`M-5` 准出①要求"即时生效（无重启）"）。
+    @MainActor
+    public func reapplyChromePreferences() {
+        let prefs = preferences.current
+        if let overlay {
+            applyChromeAppearance(overlay, prefs: prefs)
+            overlay.overlayView.autoLoupeWhileDragging = prefs.showMagnifierWhileDragging
+            overlay.overlayView.needsDisplay = true
+            MSLog.info(.settings, "chrome prefs reapplied live appearance=\(prefs.appearance.rawValue) "
+                       + "magnifier=\(prefs.showMagnifierWhileDragging)")
+        }
+    }
+
+    /// `appearance` 落地的唯一地方：把设置翻成 `NSAppearance` 挂到窗上。
+    /// 视图不自己判断明暗（那会有两套真相）；它读 `effectiveAppearance`，于是被覆盖后自动跟着变。
+    private func applyChromeAppearance(_ window: MSOverlayWindow, prefs: MSAppPreferences) {
+        switch prefs.appearance {
+        case .system: window.appearance = nil
+        case .light:  window.appearance = NSAppearance(named: .aqua)
+        case .dark:   window.appearance = NSAppearance(named: .darkAqua)
+        }
     }
 
     public func overlay(_ overlay: MSOverlayWindow, didPickColor text: String) {

@@ -35,6 +35,7 @@ make probe-chrome     # 遮罩界面离屏自绘成 build/chrome.png（不碰 TC
 make probe-clipboard  # 真写系统剪贴板再读回 types/DPI，分清"我们写的"与"系统派生的"（会覆盖剪贴板）
 make probe-memory     # 10 张贴图的内存读数（NFR-005/008）：夹具是噪声，读数用 ps/vmmap 外部复核；会短暂开 N 个窗
 make probe-hotkey     # 改绑→退出→再启动读回→还原：热键跨进程持久化取证（会临时改你的快捷键，最后还原成 F1）
+make probe-settings   # 真建设置窗并递归打印控件清单（FR-SET-002 逐项对照；离屏 PNG 画不出文字，判据是清单）
 make probe-pin        # 真贴窗 + 编辑态离屏自绘成 build/probe-pin.png，并打印 strip/imageRect 读数（B-028 形态用来看）
 make probe-freeze     # 三连拍验冻结语义 + 真剪贴板哨兵（会在你屏幕上开约 3 秒遮罩）
 make icon              # assets/branding 的 SVG → build/macshot.icns（只用系统工具）

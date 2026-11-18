@@ -179,6 +179,9 @@ public final class MSOverlayView: NSView {
     public var lineWidth: Int = 3
     public var blurRadius: Int = 14
     public var fontSize: Int = 18
+    /// 拖新选区时是否自动呼出放大镜——真源是设置里的 `showMagnifierWhileDragging`。
+    /// 以前这个开关没有任何消费者（`B-037`），所以"关掉放大镜"改什么都不发生。
+    public var autoLoupeWhileDragging = true
 
     /// internal 而非 private：`@testable` 要直接喂文档、点一次动作、再看撤销栈（`AnnotationToolTests`）。
     /// internal：`@testable` 用它直接喂文档，测试因此不必靠合成鼠标事件构造状态。
@@ -278,7 +281,7 @@ public final class MSOverlayView: NSView {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         ctx.interpolationQuality = .none
         ctx.draw(frozenFrame, in: bounds)
-        let scrim = OverlayChrome.scrimAlpha(isDark: effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
+        let scrim = OverlayChrome.scrimAlpha(isDark: chromeIsDark)   // 明暗由设置的 appearance 决定（经窗口 appearance 落地）
 
         if let sel = selection {
             ctx.saveGState()
@@ -415,7 +418,13 @@ public final class MSOverlayView: NSView {
 
     /// 放大镜该不该出现。
     public var isLoupeVisible: Bool {
-        loupeAnchor != nil && (isDraggingSelection || loupeForced)
+        loupeAnchor != nil && ((isDraggingSelection && autoLoupeWhileDragging) || loupeForced)
+    }
+
+    /// 遮罩 chrome 走深色还是浅色。窗口 `appearance` 由会话按设置覆盖后，
+    /// `effectiveAppearance` 就会跟着变，这里只读不算——两套判断会打架。
+    public var chromeIsDark: Bool {
+        effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
     }
 
     /// `C` 复制的串（空串 ⇒ 没什么可复制）。

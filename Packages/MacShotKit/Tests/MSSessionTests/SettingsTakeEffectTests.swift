@@ -135,4 +135,74 @@ struct SettingsTakeEffectTests {
                 "命名模板没生效或没写进这个目录：dir=\(dir.path) 内容=\(names)")
         try? FileManager.default.removeItem(at: dir)
     }
+    @MainActor
+    @Test("明暗设置真的换掉遮罩 chrome：dark 压得更暗、light 更亮，system 交回系统")
+    func appearanceSettingChangesTheChrome() async throws {
+        func readout(_ a: MSAppPreferences.Appearance) async throws -> (dark: Bool, alpha: CGFloat, lum: Int) {
+            var prefs = MSAppPreferences()
+            prefs.appearance = a
+            let (coord, _, _, window) = try await session(prefs: prefs)
+            select(coord, window, CGRect(x: 40, y: 40, width: 320, height: 200))
+            let view = window.overlayView
+            if a != .system {
+                // 前置对照：设置必须真落到窗上，否则下面的读数只是系统外观的成绩
+                #expect(view.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])
+                        == (a == .dark ? NSAppearance.Name.darkAqua : NSAppearance.Name.aqua),
+                        "appearance=\(a) 没落到窗口上")
+            }
+            guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
+                Issue.record("拿不到位图"); return (false, 0, 0)
+            }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            let scale = CGFloat(rep.pixelsWide) / view.bounds.width
+            let shown = try #require(rep.colorAt(x: Int(20 * scale), y: Int((view.bounds.height - 20) * scale)))
+            return (view.chromeIsDark, OverlayChrome.scrimAlpha(isDark: view.chromeIsDark),
+                    Int(((shown.redComponent + shown.greenComponent + shown.blueComponent) * 100).rounded()))
+        }
+        let dark = try await readout(.dark)
+        let light = try await readout(.light)
+        #expect(dark.dark && dark.alpha == 0.55, "深色档应 chromeIsDark=true、scrim=0.55，got=\(dark)")
+        #expect(!light.dark && light.alpha == 0.45, "浅色档应 chromeIsDark=false、scrim=0.45，got=\(light)")
+        // 像素判据（V-044）：同一处画面，深色档必须压得更暗
+        #expect(dark.lum < light.lum, "深色档并没有更暗：dark=\(dark.lum) light=\(light.lum)")
+
+        let (coord, _, _, window) = try await session(prefs: MSAppPreferences())   // 默认 .system
+        #expect(window.appearance == nil, ".system 档必须把窗口外观交回系统，got=\(String(describing: window.appearance))")
+    }
+
+    @MainActor
+    @Test("「拖拽时显示放大镜」关掉后拖框不再自动弹，但 ⌥ 仍能强制呼出")
+    func magnifierToggleGatesTheDragCase() async throws {
+        var prefs = MSAppPreferences()
+        prefs.showMagnifierWhileDragging = false
+        let (coord, _, _, window) = try await session(prefs: prefs)
+        let view = window.overlayView
+        #expect(!view.autoLoupeWhileDragging, "设置没落到视图上，这条判据就是空的")
+        select(coord, window, CGRect(x: 30, y: 30, width: 260, height: 180))
+
+        let src = CGEventSource(stateID: .combinedSessionState)
+        let realH = NSScreen.screens.first?.frame.height ?? 1080
+        func mouse(_ type: CGEventType, _ p: CGPoint, option: Bool = false) -> NSEvent {
+            let cg = CGEvent(mouseEventSource: src, mouseType: type,
+                             mouseCursorPosition: CGPoint(x: p.x, y: realH - p.y), mouseButton: .left)!
+            if option { cg.flags = CGEventFlags.maskAlternate }
+            return NSEvent(cgEvent: cg)!
+        }
+        view.mouseDown(with: mouse(.leftMouseDown, CGPoint(x: 120, y: 120)))
+        view.mouseDragged(with: mouse(.leftMouseDragged, CGPoint(x: 200, y: 80)))
+        view.mouseMoved(with: mouse(.mouseMoved, CGPoint(x: 200, y: 80)))
+        #expect(!view.isLoupeVisible, "开关关了还自动弹放大镜 ⇒ 这个设置等于没做")
+
+        view.mouseMoved(with: mouse(.mouseMoved, CGPoint(x: 200, y: 80), option: true))
+        #expect(view.isLoupeVisible, "⌥ 强制是另一条路，不该被这个开关关掉")
+        view.mouseUp(with: mouse(.leftMouseUp, CGPoint(x: 200, y: 80)))
+
+        // 对照：默认档开着，拖框必须自动弹——否则上面那条"不弹"什么也没证明
+        let (coord2, _, _, window2) = try await session(prefs: MSAppPreferences())
+        let view2 = window2.overlayView
+        select(coord2, window2, CGRect(x: 30, y: 30, width: 260, height: 180))
+        view2.mouseDown(with: mouse(.leftMouseDown, CGPoint(x: 120, y: 120)))
+        view2.mouseMoved(with: mouse(.mouseMoved, CGPoint(x: 200, y: 80)))
+        #expect(view2.autoLoupeWhileDragging && view2.isLoupeVisible, "默认档拖框应自动出现放大镜")
+    }
 }

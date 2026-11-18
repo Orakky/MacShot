@@ -1,5 +1,6 @@
 import AppKit
 import Darwin
+import ServiceManagement
 import MSAnnotate
 import MSCapture
 import MSCore
@@ -201,6 +202,56 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// `--probe-pin <ms>`：真采集 → 真贴窗 → 立刻进编辑态，把窗口留在屏上 ms 毫秒。
     /// `B-028` 换了形态之后必须用眼睛看一次：工具带应当长在图片**下方**，画面不被盖。
     /// 截图由 `make probe-pin` 用 `screencapture -l<windowNumber>` 完成，日志行把 strip/frame 一并打出来。
+    /// `--probe-settings`：把设置窗真建出来、排好版，再自绘成 PNG。
+    /// 加控件这件事必须用眼睛过一遍：`FR-SET-002` 承诺的项如果挤成一团或被窗口裁掉，
+    /// 代码上是"绿"的，用户看到的是残缺窗口。
+    func probeSettings(thenExitAfter ms: Int) {
+        MainActor.assumeIsolated {
+            openSettings()
+            guard let window = settingsWindow else {
+                try? "FAIL 设置窗没建起来\n".write(toFile: "/tmp/macshot-probe-settings.txt", atomically: true, encoding: .utf8)
+                exit(6)
+            }
+            // 必须真开一次窗并走一遍绘制周期：detached 的 contentView 自绘出来只有控件轮廓、
+            // 没有文字（第一版探针就这么"绿"着骗过我一次）。
+            window.makeKeyAndOrderFront(nil)
+            window.setFrame(NSRect(x: 200, y: 200, width: window.frame.width, height: window.frame.height), display: true)
+            window.displayIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.35))
+            let content = window.contentView!
+            let size = content.fittingSize.height > 1 ? content.fittingSize.height : content.bounds.height
+            // 判据是**结构清单**而不是截图：这个窗的 label 是 layer-backed，离屏自绘只出控件轮廓、
+            // 不出文字（试了两次都一样），所以"眼睛"通道在这里不可信。能机器判的就机器判：
+            // 承诺项在不在、标签文案对不对。排版好不好看仍需人眼（`B-038`）。
+            func inventory(_ view: NSView, depth: Int = 0) -> [String] {
+                var out: [String] = []
+                let title = (view as? NSButton)?.title
+                    ?? (view as? NSTextField)?.stringValue
+                    ?? ((view as? NSSegmentedControl).map { sc in
+                           (0..<sc.segmentCount).map { sc.label(forSegment: $0) ?? "?" }.joined(separator: "/")
+                       } ?? "")
+                let kind = String(describing: type(of: view))
+                if depth > 0 || !title.isEmpty {
+                    out.append(String(repeating: "  ", count: min(depth, 4)) + kind + (title.isEmpty ? "" : " 「\(title)」"))
+                }
+                for sub in view.subviews { out.append(contentsOf: inventory(sub, depth: depth + 1)) }
+                return out
+            }
+            let lines = ["settings frame=\(window.frame) fitting=\(String(format: "%.0f", size))"] + inventory(content)
+            let line = lines.joined(separator: "\n")
+            try? (line + "\n").write(toFile: "/tmp/macshot-probe-settings.txt", atomically: true, encoding: .utf8)
+            for l in lines { MSLog.info(.settings, "probe-settings \(l)") }
+            if let rep = content.bitmapImageRepForCachingDisplay(in: content.bounds) {
+                content.cacheDisplay(in: content.bounds, to: rep)
+                if let data = rep.representation(using: .png, properties: [:]) {
+                    try? data.write(to: URL(fileURLWithPath: "/tmp/macshot-probe-settings.png"))
+                }
+            }
+            usleep(UInt32(max(0, ms)) * 1_000)
+            exit(0)
+        }
+    }
+
     /// `--probe-clipboard`：把合成图真写进系统剪贴板，再**读回来**报类型集合、DPI 与 TIFF 是否还在。
     /// `Q-04` 的"只写 PNG"必须由 NSPasteboard 自己回答，不能只看我对代码的印象（判据 `E-062`）。
     func probeClipboard() {
@@ -570,7 +621,8 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openSettings() {
         if let w = settingsWindow { w.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return }
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 300),
+        // 窗口高度 300 → 460：11-17 补了明暗/放大镜/格式/质量四组控件，300pt 会把最后一行裁掉。
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 460),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "设置"
         window.isReleasedWhenClosed = false
@@ -612,6 +664,38 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         tpl.widthAnchor.constraint(equalToConstant: 300).isActive = true
         stack.addArrangedSubview(labeledRow("命名模板", tpl))
 
+        stack.addArrangedSubview(label("外观与放大镜", weight: .semibold))
+        let appearance = NSSegmentedControl(labels: ["跟随系统", "浅色", "深色"], trackingMode: .selectOne,
+                                            target: self, action: #selector(appearanceChanged(_:)))
+        appearance.selectedSegment = Int(MSAppPreferences.Appearance.allCases
+            .firstIndex(of: settings.current.appearance) ?? 0)
+        stack.addArrangedSubview(labeledRow("明暗", appearance))
+        let magnifier = NSButton(checkboxWithTitle: "拖拽选区时自动显示放大镜（⌥ 始终可强制）",
+                                 target: self, action: #selector(magnifierChanged(_:)))
+        magnifier.state = settings.current.showMagnifierWhileDragging ? .on : .off
+        stack.addArrangedSubview(magnifier)
+
+        stack.addArrangedSubview(label("导出格式", weight: .semibold))
+        let format = NSSegmentedControl(labels: ["PNG", "JPEG"], trackingMode: .selectOne,
+                                        target: self, action: #selector(formatChanged(_:)))
+        format.selectedSegment = settings.current.export.format == .jpeg ? 1 : 0
+        stack.addArrangedSubview(labeledRow("格式", format))
+        let quality = NSSlider(value: settings.current.export.jpegQuality, minValue: 0.5, maxValue: 1.0,
+                               target: self, action: #selector(qualityChanged(_:)))
+        quality.widthAnchor.constraint(equalToConstant: 180).isActive = true
+        quality.isEnabled = settings.current.export.format == .jpeg
+        qualitySlider = quality
+        formatControl = format
+        stack.addArrangedSubview(labeledRow("JPEG 质量", quality))
+
+        stack.addArrangedSubview(label("启动", weight: .semibold))
+        // `FR-SET-002` 承诺的最后一项。默认**关**：注册登录项是改用户系统状态的动作，
+        // 不该由一个"打开设置窗"的手势顺手发生。
+        let autostart = NSButton(checkboxWithTitle: "开机时自动启动 MacShot",
+                                 target: self, action: #selector(autostartChanged(_:)))
+        autostart.state = Self.loginItemEnabled ? .on : .off
+        stack.addArrangedSubview(autostart)
+
         stack.addArrangedSubview(label("屏幕录制权限：\(PermissionProbe.screenRecording() == .granted ? "已授予" : "未授予")",
                                        color: .secondaryLabelColor))
 
@@ -635,6 +719,58 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         settings.update { $0.hotKeys = defaults }
         hotKeyEditor?.restoreTitles(from: settings.current)
         showToast("热键已恢复默认")
+    }
+
+    /// 质量滑块只在 JPEG 档可用（PNG 是无损的，给个能拖的滑块等于骗人）
+    private weak var qualitySlider: NSSlider?
+    private weak var formatControl: NSSegmentedControl?
+
+    /// 读当前登录项状态。`SMAppService` 的状态是"注册过没有"，不是"这次开机有没有跑起来"——
+    /// 后者要真重启电脑才能证，判据里不许混为一谈。
+    private static var loginItemEnabled: Bool {
+        if #available(macOS 13.0, *) { return SMAppService.mainApp.status == .enabled }
+        return false
+    }
+
+    @objc private func autostartChanged(_ sender: NSButton) {
+        guard #available(macOS 13.0, *) else { showToast("这台系统的自启接口不可用"); return }
+        let on = sender.state == .on
+        do {
+            if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+            showToast("开机自启 → \(on ? "已注册（下次登录生效）" : "已取消")")
+            MSLog.info(.settings, "login item \(on ? "register" : "unregister") status=\(SMAppService.mainApp.status.rawValue)")
+        } catch {
+            sender.state = on ? .off : .on      // 系统没答应就别把勾留着骗人
+            showToast("开机自启设置失败：\(error.localizedDescription)")
+            MSLog.error(.settings, "login item toggle failed: \(error)")
+        }
+    }
+
+    @objc private func appearanceChanged(_ sender: NSSegmentedControl) {
+        guard let value = MSAppPreferences.Appearance.allCases[safe: sender.selectedSegment] else { return }
+        settings.update { $0.appearance = value }
+        coordinator.reapplyChromePreferences()
+        showToast("明暗 → \(sender.label(forSegment: sender.selectedSegment))")
+    }
+
+    @objc private func magnifierChanged(_ sender: NSButton) {
+        let on = sender.state == .on
+        settings.update { $0.showMagnifierWhileDragging = on }
+        coordinator.reapplyChromePreferences()
+        showToast("拖拽时自动放大镜 → \(on ? "开" : "关")")
+    }
+
+    @objc private func formatChanged(_ sender: NSSegmentedControl) {
+        let value: MSImageFormat = sender.selectedSegment == 1 ? .jpeg : .png
+        settings.update { $0.export.format = value }
+        qualitySlider?.isEnabled = (value == .jpeg)
+        showToast("导出格式 → \(value.fileExtension)")
+    }
+
+    @objc private func qualityChanged(_ sender: NSSlider) {
+        let q = Double(sender.doubleValue)
+        settings.update { $0.export.jpegQuality = q }
+        showToast("JPEG 质量 → \(String(format: "%.0f%%", q * 100))")
     }
 
     @objc private func commitChanged(_ sender: NSSegmentedControl) {
