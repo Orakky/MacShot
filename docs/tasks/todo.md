@@ -8,13 +8,13 @@
 | ID | 内容 | 需要谁 | 判据（怎么算完） | 状态 |
 |---|---|---|---|---|
 | T-001 | 签 Q-01（最低 macOS 14）→ ADR-003 转 accepted | 用户 | **已签 2026-11-16＝macOS 14**；同批签下 ADR-007/008/010 | 已办 |
-| T-002 | 签 Q-02（默认热键）→ ADR-010 accepted + `keymap.md` 定稿 | 用户 | 三行默认值无 `待裁决` 标记；`MSSettings` 默认表与之一致 | 待裁决 |
-| T-003 | 签 Q-03（9 件工具，含橡皮擦）+ Q-12（D-04 知情确认） | 用户 | `annotate-model.md` §4 表去掉 `待 Q-03`；`requirements.md#FR-ANN-002` 状态转 accepted | 待裁决 |
-| T-004 | 签 Q-04（剪贴板表示）+ Q-05（提交动作语义） | 用户 | ADR-014 的实测矩阵填法被认可；`export-clipboard.md` §5 定稿 | 待裁决 |
-| T-005 | 签 Q-06（P0 不落盘）+ Q-07（放大镜档位）+ Q-09（跨屏） | 用户 | `vision.md` G-04 与 NFR-005 措辞随之定稿 | 待裁决 |
-| T-006 | 签 Q-11（改选区清空标注）+ Q-13（关闭二态）+ Q-10（`.idea/` 入库与否） | 用户 | 同上 | 待裁决 |
-| T-007 | 签剩余架构 ADR：**002 / 009 / 011 / 012 / 013 / 014 / 015 / 016**（003/007/008/010 已于 11-16 签下） | 用户 | `docs/adr/README.md` 无 `proposed` 行 | 待裁决（009 与 013 已按你要求补"展开说明"） |
-| T-008 | NFR §9 的 4 个取舍确认（回退线 / 键盘不闭环 / VoiceOver / macOS 26） | 用户 | `nfr.md` §9 全部转为决定或降级为 P1 说明 | 待裁决 |
+| T-002 | 签 Q-02（默认热键）→ ADR-010 accepted + `keymap.md` 定稿 | 用户 | 三行默认值无 `待裁决` 标记；`MSSettings` 默认表与之一致 | 已办（11-17 签下 Q-02＝默认热键维持，`ADR-010` accepted；`keymap.md` 已定稿） |
+| T-003 | 签 Q-03（9 件工具，含橡皮擦）+ Q-12（D-04 知情确认） | 用户 | `annotate-model.md` §4 表去掉 `待 Q-03`；`requirements.md#FR-ANN-002` 状态转 accepted | 已办（11-17 签下 Q-03＝9 件全进 P0、Q-12＝坚持 D-04；`annotate-model.md` §4 已去标记） |
+| T-004 | 签 Q-04（剪贴板表示）+ Q-05（提交动作语义） | 用户 | ADR-014 的实测矩阵填法被认可；`export-clipboard.md` §5 定稿 | 已办（11-17 签下 Q-04＝仅 PNG、Q-05＝四出口且贴出带复制；`ADR-014`/`ADR-011` accepted） |
+| T-005 | 签 Q-06（P0 不落盘）+ Q-07（放大镜档位）+ Q-09（跨屏） | 用户 | `vision.md` G-04 与 NFR-005 措辞随之定稿 | 已办（11-17 签下 Q-06＝不落盘不提示、Q-07＝放大镜进 P0、Q-09＝跨屏下一期） |
+| T-006 | 签 Q-11（改选区清空标注）+ Q-13（关闭二态）+ Q-10（`.idea/` 入库与否） | 用户 | 同上 | 已办（11-17 签下 Q-11＝清空并提示、Q-13、Q-10＝`.idea/` 不入库） |
+| T-007 | 签剩余架构 ADR：**002 / 009 / 011 / 012 / 013 / 014 / 015 / 016**（003/007/008/010 已于 11-16 签下） | 用户 | `docs/adr/README.md` 无 `proposed` 行 | 已办（`adr/README`：accepted 16 / proposed 0，11-17 全签） |
+| T-008 | NFR §9 的 4 个取舍确认（回退线 / 键盘不闭环 / VoiceOver / macOS 26） | 用户 | `nfr.md` §9 全部转为决定或降级为 P1 说明 | 已办（11-17 签下：回退线作为触发线、键盘不闭环接受、VoiceOver 与 macOS 26 记 §9） |
 | T-009 | 决定是否要可视化原型稿（HTML/图片）作为 `screens.md` 的对照物 | 用户 | 你已选"要"（2026-11-16）→ 交付见 `T-060`/E-014 | 已办 |
 
 ## 第 1 档：M-0 工程骨架（T-001…T-009 全绿后 open）
@@ -77,6 +77,7 @@
 | T-099 | **会话加"不呈现窗"测试入口**，让端到端判据不弹全屏窗 | B-029（11-17 裁） | `Sources/MSSession/`、`Tests/MSSessionTests/` | ① 走通 `Effect → 分发器 → onToast` 的自动化断言 ② 测试期间屏幕上**不出现**遮罩（这条本身要用日志或窗口计数证明，不能只靠"我觉得没弹"）③ 生产路径行为不变：`make probe-freeze` 仍绿 | **已办**（E-058；顺带抓到 `selectionDidChange` 是空函数这条死线） |
 | T-100 | **设置生效与补齐**（11-17 点名）：`appearance`/`showMagnifierWhileDragging` 接上消费者并进窗口，删 `confirmBeforeDiscardingUnexportedPins`（`Q-06` 已裁），补 `FR-SET-002` 承诺的格式/质量/明暗/自启控件 | B-037 | `Sources/MSSettings/`（schema 3）、`Sources/MSOverlay/`、`Sources/MSSession/`、`App/`（设置窗 + `--probe-settings`）、`Tests/MSSessionTests/SettingsTakeEffectTests.swift` | ① 明暗：`.dark` 的 `scrim=0.55`、`.light=0.45`，且同一处画面深色档**量出来更暗**；`.system` ⇒ `window.appearance == nil` ② 放大镜开关：关掉后拖框不自动弹、`⌥` 仍弹，默认档对照必须自动弹 ③ 结构清单证明五组控件与文案都在（`--probe-settings`）④ 开着遮罩改设置当场跟着变（`reapplyChromePreferences`） | **done**（E-071；套件 140 → 142。排版观感与自启注册动作仍需人 ⇒ `B-038`） |
 | T-105 | **NFR-008 在 RSS 口径下收口**：区分实验 + 把残留还给系统 | B-035 | `Sources/MSPin/MSPinWindow.swift`（`releaseMemoryIfEmpty`）、`App/MSAppDelegate.swift`（`--probe-memory` 两轮）、`Makefile`、`docs/requirements/nfr.md` | ① 两轮批次峰值差 < 8MB ⇒ 判为缓存不是泄漏 ② 关全部贴图后 RSS 回基线 ±10% ③ 探针里显式再压一次应当变成空操作（产品已压）| **done**（E-072：峰值差 1.2–1.9MB；关闭后 55.1MB vs 基线 58.2MB = −5.1% 绿。`B-034` 重绘成本仍开） |
+| T-106 | **需求逐条复审**：`requirements.md` 里还有 32 行状态列是裸 `待裁决`（FR-CAP/SESS/PIN/ANN/EXP/SET 各域都有），它们不是 Q 决策，而是"这条要不要、优先级对不对、验收判据够不够"的逐条旗子 | 用户 | 每条要么转 `已裁`、要么改判 P1/P2、要么明确写"接受现状"；`check-docs.py` 的 P0 计数随之稳定 | open（我可以先出一份带建议档的清单给你圈，不用你逐条想） |
 
 ## 已知"提前做也没用"的项（防顺手实现）
 

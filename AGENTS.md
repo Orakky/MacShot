@@ -6,11 +6,14 @@ macOS 原生截图 → 标注 → 贴图置顶 → 剪贴板 工具（形态参�
 
 用户 2026-11-16 放行开发：**未签决策按 `docs/charter.md` §6 顶部的临时默认档实现**，不再是"没签就不能写"。现状：
 
-- 已裁决：D-01 首版只做四大件 / D-02 本机 ad-hoc 签名 / D-03 Xcode + SPM / D-04 贴图携带可编辑标注层（见 `docs/charter.md` §1）。
-- 未裁决：`docs/charter.md` §6 的 Q-01…Q-15，与 `docs/adr/README.md` 中状态为 `proposed` 的行。
-- 正式代码在 `App/` + `Packages/MacShotKit/` + `MacShot.xcodeproj`（10 模块 + 47 条单测）。`stash@{0}` 那份旧骨架已 `apply` 并按 accepted ADR 改写完毕（`modules.md` §12 的 3 处不符都处理了），**不要再 pop 第二次**。
+- 已裁决：D-01 首版只做四大件 / D-02 本机签名（11-17 由 ad-hoc 改为**本地自签 `MacShot Dev`**，Q-18=A，理由见 `E-070`） / D-03 Xcode + SPM / D-04 贴图携带可编辑标注层（见 `docs/charter.md` §1）。
+- **11-17 已全部裁决**：`docs/adr/README.md` = accepted 16 / proposed 0，`charter.md` §6b 是签字记录；
+  §6 那张"临时默认"表只作历史保留，冲突时以 §6b 为准。**还剩两类真口子**：
+  ① `requirements.md` 里 32 行状态列是裸 `待裁决`（逐条需求复审，登记为 `T-106`）；
+  ② `blocked.md` 里标"需用户"的条目（`B-033/B-034/B-036/B-038` 等，多数卡在同一个 TCC 前置上）。
+- 正式代码在 `App/` + `Packages/MacShotKit/` + `MacShot.xcodeproj`（10 模块 + 142 条单测，`make check` 绿）。`stash@{0}` 那份旧骨架已 `apply` 并按 accepted ADR 改写完毕（`modules.md` §12 的 3 处不符都处理了），**不要再 pop 第二次**。
 
-改任何被临时默认档覆盖的行为前，先看 §6 表并问用户；改了就去更新那张表（文档与代码同批提交，NFR-036）。
+改任何曾被临时默认档覆盖的行为前，先看 §6b 的签字记录（§6 只是历史）；**改判决要用户点头**，agent 不许自己翻案（NFR-036：文档与代码同批提交）。
 
 ## 1. 上岗顺序
 
