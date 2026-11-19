@@ -65,8 +65,11 @@ public final class CarbonHotKeyService: MSHotKeyServing, @unchecked Sendable {
     @discardableResult
     public func register(_ combo: MSKeyCombo, id: MSHotKeyID, handler: @escaping @Sendable () -> Void) -> MSRegistrationResult {
         installHandlerIfNeeded()
-        CarbonHotKeyService.setHandler(handler, for: id.rawValue)
+        // 顺序就是这次的 bug 本体：`unregister` 会 `forgetHandlers([id])`，而回调表是**静态共享**的。
+        // 先 setHandler 再 unregister，等于把刚挂上去的那条擦掉 ⇒ Carbon 注册成功、事件也确实派发进来，
+        // 但 `dispatch(id:)` 查不到回调就静默返回——用户看到的正是"注册成功却按了没反应"（`E-089`）。
         unregister(id)
+        CarbonHotKeyService.setHandler(handler, for: id.rawValue)
         var ref: EventHotKeyRef?
         let hotKeyID = EventHotKeyID(signature: Self.signature, id: id.rawValue)
         let status = RegisterEventHotKey(UInt32(combo.keyCode), combo.carbonModifiers, hotKeyID,
@@ -98,8 +101,12 @@ public final class CarbonHotKeyService: MSHotKeyServing, @unchecked Sendable {
 
     public func unregisterAll() {
         var all: [EventHotKeyRef] = []
-        queue.sync { all = Array(refs.values); refs.removeAll(); taken.removeAll() }
+        var ids: [UInt32] = []
+        queue.sync { all = Array(refs.values); ids = Array(refs.keys); refs.removeAll(); taken.removeAll() }
         all.forEach { UnregisterEventHotKey($0) }
+        // 与 `unregister(_:)` 对齐：拆了注册就把回调一起擦掉。少这一步会留下"注册已拆、回调还在表里"
+        // 的不对称状态——真机上没人派发所以看不出来，但静态表里多一条永远不该被跑的闭包。
+        CarbonHotKeyService.forgetHandlers(ids: ids)
     }
 
     /// Rebind with rollback: register the new set, and if any id fails, restore `previous`
@@ -136,7 +143,8 @@ public final class CarbonHotKeyService: MSHotKeyServing, @unchecked Sendable {
         lock.lock(); ids.forEach { handlers[$0] = nil }; lock.unlock()
     }
 
-    private static func dispatch(id: UInt32) {
+    /// internal：测试要能模拟"Carbon 回调进来了"，否则只能真按键盘，判据永远差一手。
+    static func dispatch(id: UInt32) {
         lock.lock(); let handler = handlers[id]; lock.unlock()
         guard let handler else { return }
         DispatchQueue.main.async(execute: handler)

@@ -135,6 +135,9 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func register(_ id: MSHotKeyID, _ combo: MSKeyCombo) -> MSRegistrationResult {
         hotKeys.unregister(id)
         return hotKeys.register(combo, id: id) { [weak self] in
+            // 这行只有**真按键**会打：`session` 那条 `hotkey snip` 菜单点击也走，用它当"热键通了"
+            // 的证据会误判——11-19 排查 ⌃⌘N 就是这么被带偏过一次，别再拿它当通道。
+            MSLog.info(.hotkey, "fired id=\(id.rawValue) combo=\(combo.display)")
             Task { @MainActor in self?.coordinator.handle(id) }
         }
     }
