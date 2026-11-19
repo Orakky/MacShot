@@ -43,7 +43,9 @@ manifest_url="https://github.com/$repo/releases/latest/download/latest.json"
 # 只有"确认没有"才允许挪 ref；查询失败必须当危险处理（宁可停下，也不猜远端是空的）。
 remote_has_ref() {
   lr=0
-  out=$(git ls-remote --exit-code --$1 origin "$2" 2>/dev/null) || lr=$?
+  # GIT_TERMINAL_PROMPT=0：无 TTY 时 git 会去要凭据、直接 rc=128（实测），那会被下面当成"查询失败"而拦住挪 tag。
+  # 加了这个变量后同一个查询稳定返回 2＝"确认远端没有"，与"查不到"才是两件事。
+  out=$(GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/true git ls-remote --exit-code --$1 origin "$2" 2>/dev/null) || lr=$?
   if [ "$lr" -eq 0 ]; then return 0; fi
   if [ "$lr" -eq 2 ]; then return 1; fi
   echo "✗ 查不到远端有没有 $2（git ls-remote rc=$lr）；不敢假定它是空的"
