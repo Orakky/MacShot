@@ -17,7 +17,7 @@
 | ADR-007 | 采集后端：`SCScreenshotManager` 单帧主路（不做实时流） | **accepted**（2026-11-16；兜底是否保留待确认） | 权限模型、单屏/多屏、性能、弃用风险 | `docs/architecture/capture-pipeline.md` |
 | ADR-008 | 遮罩实现：整屏冻结快照 + 全屏透明窗（不做实时流） | **accepted**（2026-11-16） | "先冻结后选区"的语义、延迟、内存上限 | `docs/architecture/overlay-and-selection.md` |
 | ADR-009 | 标注文档编码与版本：带 `schemaVersion` 的 JSON（M1 出口冻结） | **accepted**（11-17 冻结 v1，清单见 annotate-model §3b） | `.macshot` 格式、迁移策略、diff 可读性 | `docs/architecture/annotate-model.md` |
-| ADR-010 | 全局热键：Carbon `RegisterEventHotKey`；辅助功能权限策略放开 | **accepted**（2026-11-16） | 权限、可靠性、可发现性、未来替代路径 | `docs/architecture/hotkey-and-permissions.md` |
+| ADR-010 | 全局热键：Carbon `RegisterEventHotKey`；（**11-19 订正**：本行"辅助功能权限策略放开"是旧措辞——实际策略自 Q-16=A 起就是**不申请辅助功能/输入监控**，11-19 权限收缩把唯一残留的全局按键监听也摘了，现档见 `NFR-037` 与 `ADR-023` 之外的 `permissions-tcc.md` §3c） | **accepted**（2026-11-16） | 权限、可靠性、可发现性、未来替代路径 | `docs/architecture/hotkey-and-permissions.md` |
 | ADR-011 | 撤销栈：命令式 + 拖拽合并（一次拖拽 = 一条记录） | **accepted**（11-17 签） | MSAnnotate 历史模型与内存 | `docs/architecture/annotate-model.md` |
 | ADR-012 | 模块切分与依赖方向（10 模块，见章程 §4） | **accepted**（11-17 签） | 新增代码放哪、谁可以 import 谁 | `docs/architecture/modules.md` |
 | ADR-013 | 坐标系规约：逻辑=AppKit 全局 y 向上；像素=显示器本地 y 向下 | **accepted**（11-17 签） | 全部几何函数签名；违反即 bug | `docs/architecture/capture-pipeline.md` |
@@ -34,4 +34,5 @@
 | ADR-019 | 贴图层（level）具体数值与与系统 HUD/全屏视频的关系 | FR-PIN-001 实跑发现不满足时 |
 | ADR-020 | 开机自启（`SMAppService`）与 ad-hoc 签名的兼容性 | FR-SET-011 开工前 |
 | ADR-021 | 高斯模糊实现路径：`CIFilter` vs 手写可分离核（一致性/性能/版本差异） | `ADR-009` accepted 后、M-4 开工前（`annotate-model.md` §5.4） |
+| ADR-023 | **手动检查更新 + GitHub Releases 作为软件源**（清单形状、SHA-256 必校验、无自动检查、发布脚本闭环自检） | **accepted**（11-19 用户指令） | `FR-UPD-001`、`NFR-030` 的修订、`UI-010`、`V-064~V-066`、`scripts/publish-release.sh` |
 | ADR-022 | **实时录制**（录屏/GIF）是否解禁与其资源模型 —— 需要 `SCStream` 常驻、编码、体积、音频权限 | **11-17 Q-17 已裁＝下一期**：本行保持占位、只登记不设计（技术前提已订正：录制走 `SCStream` + 屏幕录制权限，与辅助功能无关） |

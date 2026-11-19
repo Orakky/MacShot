@@ -12,7 +12,7 @@ VERSION   := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionStri
 # 没有身份时自动退回 ad-hoc（`-`），构建与门禁不会因为环境缺身份而变红。
 SIGN_IDENTITY := $(shell security find-identity -v -p codesigning 2>/dev/null | grep -q "MacShot Dev" && echo "MacShot Dev" || echo "-")
 
-.PHONY: doctor permissions contrast verify-dmg usage-report build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-clipboard probe-pin probe-pin-real probe-loupe-real probe-settings probe-hotkey probe-freeze icon appicon
+.PHONY: doctor permissions contrast verify-dmg usage-report build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-clipboard probe-pin probe-pin-real probe-loupe-real probe-settings probe-hotkey probe-freeze probe-update release-bundle icon appicon
 
 doctor:
 	@echo "  签名身份 = $(SIGN_IDENTITY)（有 MacShot Dev 则 DR=identifier+leaf，重建不掉授权）"
@@ -180,6 +180,12 @@ install: dmg
 
 # 权限面门禁（V-063）：功能刚需之外的权限一条都不许出现。带产物路径时连签进包里的
 # entitlements 一起查，所以放在 appicon 之后。
+release-bundle: ## 一键打包并准备发布到 GitHub Releases（ARGS=--dry-run 不上传，见 ADR-023）
+	@bash scripts/publish-release.sh $(ARGS)
+
+probe-update: ## 检查更新的离线端到端探针（file:// 假源，含"篡改必须拒绝"这一支，V-065）
+	@bash scripts/probe-update.sh
+
 permissions:
 	@sh scripts/check-permissions.sh "$(PRODUCT)"
 

@@ -29,6 +29,16 @@ for pair in \
 done
 [ $fail -eq 0 ] && ok "源码：没有全局按键监听 / 事件 tap / 辅助功能 / 相机麦克风 / Apple Events / 连续采集"
 
+# ①b 出网点必须只有一个，且默认源是 HTTPS（NFR-030 修订 / ADR-023）
+netfiles=$(printf '%s\n' $src | xargs grep -ln "URLSession" 2>/dev/null || true)
+case "$(printf '%s\n' $netfiles | tr '\n' ',')" in
+  "$root/App/MSUpdater.swift,"|"") ok "出网点：只有 App/MSUpdater.swift（手动检查更新，无自动轮询）" ;;
+  *) bad "出网点不止一处或名字不对：$(printf '%s\n' $netfiles | sed "s|$root/||g" | tr '\n' ' ')" ;;
+esac
+if grep -q 'http://' "$root/App/MSUpdater.swift" 2>/dev/null && ! grep -q 'MACSHOT_UPDATE_URL' "$root/App/MSUpdater.swift"; then
+  bad "更新器里出现明文 http 且没有环境变量覆盖机制"
+fi
+
 # ② Info.plist：没有用途声明＝没有多余的申请意图
 plist="$root/Config/Info.plist"
 usage=$(/usr/libexec/PlistBuddy -c Print "$plist" 2>/dev/null | grep -c "UsageDescription" || true)

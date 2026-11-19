@@ -78,6 +78,20 @@ if let i = CommandLine.arguments.firstIndex(of: "--dump-chrome") {
                                                 draft: CommandLine.arguments.contains("draft")) }
 }
 
+// --probe-update <清单 URL>：把「检查更新」整条链离线跑一遍（file:// 源），
+// 含**篡改校验和必须拒绝**这一支。不弹 UI，只写 /tmp/macshot-probe-update.txt。
+if let i = CommandLine.arguments.firstIndex(of: "--probe-update") {
+    let app = NSApplication.shared
+    let delegate = MainActor.assumeIsolated { MSAppDelegate(autoSnip: false) }
+    app.delegate = delegate
+    app.setActivationPolicy(.accessory)
+    let url = CommandLine.arguments.count > i + 1 ? CommandLine.arguments[i + 1] : ""
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+        MainActor.assumeIsolated { delegate.probeUpdate(manifestURL: url) }
+    }
+    app.run()
+}
+
 // --probe-settings：真建设置窗并自绘成 PNG，给"加了控件"这件事一双眼睛。
 if let i = CommandLine.arguments.firstIndex(of: "--probe-settings") {
     let ms = CommandLine.arguments.count > i + 1 ? (Int(CommandLine.arguments[i + 1]) ?? 1_200) : 1_200

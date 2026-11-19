@@ -70,6 +70,7 @@ xattr -l /Applications/MacShot.app                                # 期望无 co
 | 连续屏幕采集（录屏） | 没人需要 | `Q-17` 已裁下一期；代码无 `CGDisplayStream` | 不使用 |
 | 调试 attach（`get-task-allow`） | 没人需要 | 已从 `Config/MacShot.entitlements` 删除，产物侧由门禁实测 | 已移除 |
 | 桌面窗口清单 | 没人需要 | `SCShareableContent.excludingDesktopWindows` 由 `false` 改 `true`：我们只读 `content.displays`，从不读 `content.windows` | 已收窄 |
+| 网络（仅出网一次） | 手动检查更新 | `App/MSUpdater.swift` 里 GET 公开清单 + 下载用户点过的资产；**没有**定时器、没有启动检查、没有遥测。默认源是 HTTPS 公开路径，不需要 token。门禁双查：`check-style.sh` 认文件、`check-permissions.sh` 认出网点唯一 | 11-19 修订（`ADR-023`），其余联网仍禁 |
 | App Sandbox | 有意**不开** | `ADR-004`：跨 Space 贴图、任意导出目录、`tccutil` 排障都要它让路。这是有记录的取舍，不是漏配 | 维持 |
 
 自查一条命令（源码 + Info.plist + 签进产物的 entitlements 三处一起看）：

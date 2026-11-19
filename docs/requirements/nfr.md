@@ -72,7 +72,7 @@
 |---|---|
 | NFR-028 | P0 不落盘任何截图内容（Q-06 推荐 A）；唯一写盘时机是用户显式保存 |
 | NFR-029 | 日志只含几何、耗时、标识符，**不含像素内容、不含文件内容**；`MSLog` 用 `.public` 的字段需在 code review 时逐个确认（`ADR-015` 无 lint，靠门禁脚本 + 评审清单） |
-| NFR-030 | 不联网、无遥测、无更新检查（`requirements.md` §5 明确不做）；`check-style.sh` 加一条：出现 `URLSession`/`NCConnection` 即失败 |
+| NFR-030 | **修订于 11-19（`ADR-023`）**：不遥测、不统计、不后台联网；唯一的出网路径是**用户手点的「检查更新…」**（`FR-UPD-001`）。原条文"出现 `URLSession` 即失败"改成"**只许出现在 `App/MSUpdater.swift`**"，由 `check-style.sh` 与 `check-permissions.sh` 各查一遍（两处都查是因为门禁只改一处的话，另一处会以为还守着） |
 | NFR-031 | 剪贴板不残留临时文件；不使用 `fileURL` 表示（`ADR-014`） |
 | NFR-032 | 截图内容不出本机：不接第三方 OCR/云服务；如 P2 引入需单独 ADR + 明示同意 |
 | NFR-037 | **最小权限**：产品运行时依赖的隐私域只有**屏幕录制**一项（登录项由用户主动勾选，不是隐私权限）。不申请也不使用：辅助功能、输入监控、相机、麦克风、Apple Events 自动化、连续屏幕采集。entitlements 为**空表**（`get-task-allow` 于 11-19 删除：那是"允许别的进程 attach 我"的调试权限，没有功能刚需却进了发布包）。判据 `V-063`，门禁 `scripts/check-permissions.sh` 已接进 `make check` |

@@ -42,8 +42,14 @@
 1. `make doctor` —— 版本/签名/权限基线。
 2. `xcodebuild -list -project MacShot.xcodeproj` —— scheme 是否解析到（本地包未被解析时会缺）。
 3. 单独 `swift build --package-path Packages/MacShotKit` —— 把"包错"和"工程错"分开。
-4. 清 `build/Derived`（同步文件夹组的纳管列表偶发需要重建）。
+4. 清 `build/Derived`（同步文件夹组的纳管列表偶发需要重建）。**但 `make install`/`release-bundle` 依赖它**——整目录删掉会让同一条链把整个 App 重建两遍，只想强制重签时删 `MacShot.app/Contents/_CodeSignature` 就够。
 5. 记下 Xcode 版本并对照 `adr/ADR-001` 的"风险"条（升级后首次构建要跑全量 `make check`）。
+
+## 3b. 并发与签名互锁（11-19 实测，别再犯）
+
+- 同时跑两个会签名的目标（例：前一个 `make check` 还没结束又起 `make dmg`）⇒ **两个 `codesign` 抢同一个 `build/Derived` 互锁 27 分钟**。现象是"命令挂着不动"，最容易误判成"钥匙串在等用户点授权"。
+- 卡住先分清是谁：**`ps -axo pid,etime,command | grep codesign` 有两条以上 ⇒ 是自己撞自己**，`kill` 掉多余的那条即可，不要动钥匙串、也不要当成 TCC 问题去排查。
+- 因此 `scripts/probe-update.sh` 这类"启动真 app 再等它打印"的探针**必须带超时**（现为每轮 20s / 全程 90s，`exit 8` 报 watchdog）。上一版没有，挂住的时候屏幕日志是空的，看起来完全像"还在跑"。
 
 ## 4. 实测记录
 

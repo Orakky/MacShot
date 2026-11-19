@@ -179,7 +179,9 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(perm)
         permissionMenuItem = perm
         menu.addItem(withTitle: "设置…", action: #selector(openSettings), keyEquivalent: ",").target = self
-        menu.addItem(withTitle: "关于 MacShot", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "关于 MacShot", action: #selector(showAbout), keyEquivalent: "").target = self
+        // 只有手动这一条：没有定时任务、没有启动时检查、没有后台轮询（ADR-023）
+        menu.addItem(withTitle: "检查更新…", action: #selector(checkForUpdates), keyEquivalent: "").target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "退出 MacShot", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.delegate = self
@@ -874,6 +876,72 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     // MARK: - settings (UI-005, first pass: the values that change behaviour today)
+
+    /// 关于面板。**作者信息写在这里**（用户 11-19 要求）：系统默认面板只有名字与版本号，
+    /// 不塞 credits 就没人知道这是谁写的。仓库地址取自 git remote，不是手编的。
+    @objc private func showAbout() {
+        let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0"
+        let credits = NSAttributedString(string: "作者：Orakky\nhttps://github.com/Orakky/MacShot", attributes: [
+            .font: NSFont.systemFont(ofSize: 11),
+            .foregroundColor: NSColor.secondaryLabelColor,
+            .link: URL(string: "https://github.com/Orakky/MacShot")!,
+        ])
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .applicationVersion: version,
+            .credits: credits,
+        ])
+        NSApp.activate(ignoringOtherApps: true)
+        MSLog.info(.app, "about shown version=\(version)")
+    }
+
+    /// `--probe-update <url>`：不发 UI，直接把检查→下载→校验跑完并写读数。
+    /// 判据要的正是"没有屏幕也能判"这一段（`V-065`）。
+    func probeUpdate(manifestURL: String) {
+        func report(_ line: String) {
+            MSLog.info(.app, "probe-update \(line)")
+            let url = URL(fileURLWithPath: "/tmp/macshot-probe-update.txt")
+            if let h = try? FileHandle(forWritingTo: url) { h.seekToEndOfFile(); h.write(Data((line + "\n").utf8)); try? h.close() }
+            else { try? (line + "\n").write(to: url, atomically: true, encoding: .utf8) }
+        }
+        // watchdog：任何一步卡住都必须在 20 秒内给出读数并退非零。
+        // 上一版没有它，探针挂住 ⇒ 脚本"还在跑"看起来像"快好了"，实际谁都不知道卡在哪。
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
+            report("FAIL 超时（20s 没跑完）"); exit(8)
+        }
+        guard let url = URL(string: manifestURL) else { report("FAIL 清单 URL 空"); exit(6) }
+        report("源=\(url.absoluteString) 本机版本=\(MSUpdater.currentVersion())")
+        Task { @MainActor in
+            let outcome = await MSUpdater.check(url: url)
+            report("结论=\(MSUpdater.describe(outcome))")
+            if case .available(_, _, let asset, _) = outcome {
+                let dir = URL(fileURLWithPath: NSTemporaryDirectory().appending("macshot-update-\(UUID().uuidString)"), isDirectory: true)
+                let file = await MSUpdater.download(asset, into: dir)
+                let exists = file.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
+                report("下载=\(exists ? "落盘 \(file?.lastPathComponent ?? "")" : "没有落盘")")
+                let leftovers = ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []).count
+                // 文案跟着结论走：通过时 1 个文件是对的，失败时必须是 0。
+                // 上一版两种情况都印"校验失败时必须为 0"，把一次**通过**读成了失败——读数不该让人猜。
+                report("临时目录文件数=\(leftovers)（\(exists ? "校验通过：应当是 1" : "校验失败：应当是 0，不许留可疑文件")）")
+                if exists, let file {
+                    let digest = (try? MSUpdater.sha256(of: file)) ?? "?"
+                    report("本地重算 sha256=\(digest.prefix(16))… 清单=\(asset.sha256.prefix(16))… 一致=\(digest == asset.sha256)")
+                }
+                try? FileManager.default.removeItem(at: dir)
+            }
+            exit(0)
+        }
+    }
+
+    @objc private func checkForUpdates() {
+        Task { @MainActor in
+            // 下载位置＝导出默认目录（同一个 `export.directory`，不另开一个设置项）
+            let directory = URL(fileURLWithPath: (settings.current.export.directory as NSString).expandingTildeInPath,
+                                isDirectory: true)
+            let outcome = await MSUpdater.check()
+            MSLog.info(.app, "update check result=\(MSUpdater.describe(outcome))")
+            await MSUpdater.present(outcome, directory: directory, over: nil)
+        }
+    }
 
     @objc private func openSettings() {
         if let w = settingsWindow { w.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return }

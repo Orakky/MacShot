@@ -12,6 +12,7 @@ macOS 原生截图 → 标注 → 贴图置顶 → 剪贴板 工具（形态参�
 - **11-18 同日再落两条用户改判/缺陷**：③ 工具条"贴出/复制/保存/取消"以前只是画上去的文字、没有命中区（点＝点空白）⇒ `BarAction` + `actionBoxes` 让绘制与命中同一份几何，判据 `V-055`；④ `Q-11` 临时默认"改选区＝全清不可撤销"作废 ⇒ 现档"屏幕位置还在选区里的原地保留、跑出去的才清、一条撤销记录"，判据 `V-056`（`V-048` 标 superseded）。见 §6b 后三行、`E-084`/`E-085`。
 - **11-18 又加了一条视觉承诺**：贴图边缘**光晕悬浮感**（`MSPinGlow`：留白 10pt + 三层软环 + 1pt 高光，最后画且奇偶裁剪到留白），`FR-PIN-013` 的 P0 先切一片，开关仍 P1；判据 `V-057`、规格 `UI-003b`、记录 `E-086`。
 - **11-19 还有一条文案改判**：贴图右键菜单**不再显示组合键**（`复制 / 保存 / 关闭贴图`，键仍由 `MSPinView.keyDown` 实现，`keyEquivalent` 本来就是空串），判据 `V-061`、记录 `E-091`。
+- **11-19 加了「手动检查更新」**（用户指令，`ADR-023`）：只有点菜单「检查更新…」才出网，默认源＝GitHub Releases 的公开 `latest.json`（不用 API ⇒ 免 token、免速率限制）。**`NFR-030` 的"绝不联网"因此改成"唯一出网点是 `App/MSUpdater.swift`"**，`check-style.sh` 与 `check-permissions.sh` 各查一遍（只改一处，另一处会以为还守着）。发布侧 `scripts/publish-release.sh` 最后一步是**回头核对远端清单和本地产物一致**——没跑过这一步之前，"更新源配好了"这句话没有依据（本机没有 `gh` 也没设 token ⇒ 只证到 `--dry-run`）。
 - **11-19 权限收缩**（用户指令：只留功能刚需）：运行时隐私域**只剩屏幕录制**；摘掉遮罩的全局 `Esc` 监听（要输入监控/辅助功能）、entitlements 清空（删 `get-task-allow`）、`SCShareableContent` 不再枚举桌面窗口；新增 `make permissions` 门禁接进 `check`。条目 `NFR-037`、判据 `V-063`、清单 `permissions-tcc.md` §3c、记录 `E-093`。
 - **11-19 两条**：① 热键"注册成功却按了没反应"根因＝`register()` 先 `setHandler` 再 `unregister` 把**静态**回调表擦掉（`E-089`，`V-059`）——我上一轮写进台账的"⌘+单字母冲突"是误诊，已改正；② 保存/导出默认目录按用户改判换成 **`~/Downloads`**（schema 4→5，同批带"认值不认版本"的迁移，`E-090`/`V-060`）。**规矩：改任何默认值，必须同批改"读旧文件的规则"，否则只对全新用户生效。**
 - **11-17 已全部裁决**：`docs/adr/README.md` = accepted 16 / proposed 0，`charter.md` §6b 是签字记录；
@@ -40,6 +41,8 @@ make verify-dmg       # 挂上 DMG 逐条核验：卷根 .app、/Applications �
 make dmg              # 产出 build/MacShot-<version>.dmg（11-17 起用本地自签身份，不再是 ad-hoc）
 make install          # 先 make dmg，再装 DMG 里那份 **Release**；覆盖已有安装（去 quarantine）
 make contrast         # NFR-024 对比度校验（11 组配对；不达 WCAG 2.2 就退出 1，目前 9/11，见 B-039）
+make release-bundle   # 一键打包 + 生成 latest.json；--dry-run 不上传，真发布要 gh 或 GITHUB_TOKEN
+make probe-update     # file:// 假源跑完整条检查更新，含"篡改校验和必须拒绝"这一支
 make permissions      # 权限面门禁（V-063）：源码 / Info.plist / 签进产物的 entitlements 三处一起查
 make check            # 本地门禁：build + test + 风格/依赖方向/文档一致性/权限面
 make clean            # 清 build 与 Derived

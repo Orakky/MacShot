@@ -27,10 +27,12 @@ ban() {  # ban <说明> <grep -E 模式> [排除文件 glob]
 ban "禁用 try!"                     'try!'
 ban "禁用 as!"                      ' as! '
 ban "禁用 fatalError（除显式契约点）" 'fatalError\(' 'init\?\(coder'
-ban "禁止网络/遥测（NFR-030）"        'URLSession|NCConnection|CLLocationManager'
+# 11-19 修订（ADR-023）：网络不是绝对禁止，而是**只许出现在更新器一个文件里**，
+# 且只有用户点「检查更新…」才走。别处冒出来就是遥测/自动检查的回潮。
+ban "网络只许在 App/MSUpdater.swift（NFR-030 修订 / ADR-023）" 'URLSession|NCConnection|CLLocationManager' 'App/MSUpdater\.swift'
 ban "分发器禁止空转 default（B-018 事故形状）" 'default:[[:space:]]*break'
 ban "禁止造全局单例（系统 API 除外）"  '(NSApp|Self|[A-Z][A-Za-z]*)\.shared' \
-  '(App/|ButtonBox|sharedHandler|NSWorkspace|NSApplication|NSColor|NSFont|NSScreen|NSPasteboard|NSUIElement|Logger|NSDocumentController)'
+  '(App/|ButtonBox|sharedHandler|NSWorkspace|NSApplication|NSColor|NSFont|NSScreen|NSPasteboard|NSUIElement|Logger|NSDocumentController|URLSession)'
 
 # 中文文案最终应收敛到 MSStrings（ADR-016 尚未实现）→ 目前只报告不拦
 zh=$(python3 - "$SRC" <<'PYEOF'
