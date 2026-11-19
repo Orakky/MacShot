@@ -235,15 +235,44 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                        } ?? "")
                 let kind = String(describing: type(of: view))
                 if depth > 0 || !title.isEmpty {
-                    out.append(String(repeating: "  ", count: min(depth, 4)) + kind + (title.isEmpty ? "" : " 「\(title)」"))
+                    // 坐标一起打：B-038 的"排版没验过"里，能机器判的那半就是"有没有被裁"。
+                    let f = view.convert(view.bounds, to: nil)
+                    let place = title.isEmpty ? "" : String(format: "  @y=%.0f..%.0f", f.minY, f.maxY)
+                    out.append(String(repeating: "  ", count: min(depth, 4)) + kind
+                               + (title.isEmpty ? "" : " 「\(title)」") + place)
                 }
                 for sub in view.subviews { out.append(contentsOf: inventory(sub, depth: depth + 1)) }
                 return out
             }
-            let lines = ["settings frame=\(window.frame) fitting=\(String(format: "%.0f", size))"] + inventory(content)
+            // 裁切判据：栈的自然高度超过内容区高度 ⇒ 最底下那几条（含「开机时自动启动」）画在窗外。
+            let stackHeight = (content.subviews.compactMap { $0 as? NSStackView }.first?.fittingSize.height) ?? -1
+            let clipped = stackHeight > content.bounds.height + 0.5
+            let loginStatus: String
+            // 不写码表（`String(describing:)` 只会给 `SMAppServiceStatus(rawValue: 3)`，读不出含义；
+            // 凭记忆配 0/1/2/3 更是造数）。用 case 比对，让编译器告诉我 3 是哪个。
+            if #available(macOS 13.0, *) {
+                let st = SMAppService.mainApp.status
+                let name: String
+                switch st {
+                case .enabled: name = "enabled（已注册，下次登录自启）"
+                case .requiresApproval: name = "requiresApproval（已注册但要在系统设置「登录项」里批准）"
+                case .notRegistered: name = "notRegistered（没注册）"
+                default: name = "notFound 或本机不支持"
+                }
+                // case 表也现场打出来：判据里不许出现"我记得 3 是什么"这种数
+                loginStatus = "\(name)  rawValue=\(st.rawValue) | 本机 case 表 enabled=\(SMAppService.Status.enabled.rawValue)"
+                    + " requiresApproval=\(SMAppService.Status.requiresApproval.rawValue)"
+                    + " notRegistered=\(SMAppService.Status.notRegistered.rawValue) notFound=\(SMAppService.Status.notFound.rawValue)"
+            } else { loginStatus = "此系统低于 macOS 13" }
+            let lines = ["settings frame=\(window.frame) fitting=\(String(format: "%.0f", size))",
+                         "内容高=\(String(format: "%.0f", content.bounds.height)) 栈自然高=\(String(format: "%.0f", stackHeight)) 裁切=\(clipped ? "有 ⇒ 有控件画在窗外" : "无")",
+                         "登录项状态=\(loginStatus)（只读，探针不改系统；notRegistered / enabled / requiresApproval / notFound）"] + inventory(content)
             let line = lines.joined(separator: "\n")
             try? (line + "\n").write(toFile: "/tmp/macshot-probe-settings.txt", atomically: true, encoding: .utf8)
             for l in lines { MSLog.info(.settings, "probe-settings \(l)") }
+            if clipped {
+                MSLog.error(.settings, "probe-settings 控件被裁：栈高 \(String(format: "%.0f", stackHeight)) > 内容高 \(String(format: "%.0f", content.bounds.height))")
+            }
             if let rep = content.bitmapImageRepForCachingDisplay(in: content.bounds) {
                 content.cacheDisplay(in: content.bounds, to: rep)
                 if let data = rep.representation(using: .png, properties: [:]) {
@@ -251,7 +280,7 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
             }
             usleep(UInt32(max(0, ms)) * 1_000)
-            exit(0)
+            exit(clipped ? 7 : 0)      // 7 ⇒ 有控件画在窗外，`make probe-settings` 直接红
         }
     }
 
@@ -848,7 +877,9 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func openSettings() {
         if let w = settingsWindow { w.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return }
-        // 窗口高度 300 → 460：11-17 补了明暗/放大镜/格式/质量四组控件，300pt 会把最后一行裁掉。
+        // 高度**不再手写常量**：11-17 那次写死 300、补控件后改 460，11-19 又长到 573 ⇒
+        // 「开机时自动启动」和权限行被画到窗外，用户在设置里根本找不到这个开关。
+        // 现在按栈的 fittingSize 算，见下面 setContentSize。
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 460),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "设置"
@@ -932,8 +963,12 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             stack.topAnchor.constraint(equalTo: host.topAnchor, constant: 16),
             stack.leadingAnchor.constraint(equalTo: host.leadingAnchor, constant: 18),
             stack.trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: -18),
+            // 底边必须一起钉：只钉上/左/右时窗高是死的，栈长过窗就往下溢出到窗外。
+            stack.bottomAnchor.constraint(equalTo: host.bottomAnchor, constant: -16),
         ])
         window.contentView = host
+        window.layoutIfNeeded()
+        window.setContentSize(NSSize(width: 460, height: max(320, stack.fittingSize.height + 32)))
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
