@@ -98,7 +98,6 @@ public final class MSOverlayWindow: NSWindow {
     public override var canBecomeMain: Bool { false }
 
     private var keyMonitor: Any?
-    private var escapeWatch: Any?
 
     /// 顺序很关键：先 activate，再 makeKey，再把焦点交给视图。
     /// app 未激活时设 key window 不生效，`keyDown` 就不会进来——11-16 那次"Esc 完全没反应"
@@ -110,7 +109,6 @@ public final class MSOverlayWindow: NSWindow {
         makeFirstResponder(overlayView)
         installKeyMonitor()
         overlayView.needsDisplay = true
-        installEscapeWatch()
         claimKey(attempt: 0)
     }
 
@@ -133,20 +131,6 @@ public final class MSOverlayWindow: NSWindow {
         }
     }
 
-    /// 最后一道保险：全局监听 `Esc`。它不消费事件，只在遮罩确实开着时收窗；
-    /// 没有输入监控权限时不会触发，因此鼠标出路（✕ / 右键）仍是主兜底。
-    private func installEscapeWatch() {
-        guard escapeWatch == nil else { return }
-        escapeWatch = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, event.keyCode == 53 else { return }
-            Task { @MainActor in
-                guard self.isVisible, self.overlayView.window != nil else { return }
-                MSLog.info(.capture, "global Esc watched → cancel")
-                self.overlayView.cancelViaEscape()
-            }
-        }
-    }
-
     /// 遮罩是否还摊在屏幕上（不叫 isVisible：那是 NSWindow 自己的属性名）。
 
     /// 本地监视器：responder 链断了也还能收到键，`Esc`/`Enter` 至少留一条通路。
@@ -163,8 +147,10 @@ public final class MSOverlayWindow: NSWindow {
     public func teardown() {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
-        if let escapeWatch { NSEvent.removeMonitor(escapeWatch) }
-        escapeWatch = nil
+        // 这里原来还拆一个**全局** keyDown 监视器（`escapeWatch`）。11-19 权限收缩时整条摘掉：
+        // 它需要输入监控级权限、监听全系统按键，而没给权限时它根本不响——一条"看起来是保险、
+        // 实际靠权限运气"的路径不该算逃生阀。真出路有五条：本地 keyMonitor 的 Esc、responder
+        // 链的 Esc、✕ 按钮、右键取消、再按一次热键（`V-063②` 数着）。
     }
 
     private var displayFrame: NSRect { frame }

@@ -38,7 +38,9 @@ public struct ScreenCaptureKitCapturer: ScreenCapturing {
 
     public func freeze(display: MSDisplay) async throws -> MSCaptureFrame {
         let started = ContinuousClock.now
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        // 只要 displays，从不读 `content.windows` ⇒ 桌面窗口不枚举（`excludingDesktopWindows(true)`）。
+        // 少一次全窗口清单的采集，也少一条"顺手看见了别的窗口的标题"的口子。
+        let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
         guard let scDisplay = content.displays.first(where: { $0.displayID == display.id }) else {
             throw MSCaptureError.displayNotFound(display.id)
         }

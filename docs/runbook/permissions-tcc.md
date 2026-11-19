@@ -59,6 +59,27 @@ xattr -l /Applications/MacShot.app                                # 期望无 co
 - 缓解 3：若实测确认"每次重装都要重新授权"，把它写进发布说明与 `troubleshooting.md`，并在引导窗文案里提前说（用户预期管理比技术绕法便宜）。
 - 根治：需要 Developer ID 证书（B-010，需外部条件，届时补 ADR）。
 
+## 3c. 权限最小化清单（NFR-037 / `V-063`，11-19 用户要求"收缩到功能刚需"）
+
+| 隐私域 / 权限 | 谁需要 | 产品里怎么用 | 状态 |
+|---|---|---|---|
+| 屏幕录制（TCC `kTCCServiceScreenCapture`） | 截图本身 | `SCScreenshotManager.captureImage` 单帧；`CGPreflightScreenCaptureAccess` 只读状态，`CGRequestScreenCaptureAccess` 只在真被拒后由用户点「去开启」触发 | **唯一刚需** |
+| 输入监控 / 辅助功能 | 没人需要 | 原遮罩里有一道"全局监听 `Esc`"的保险（`addGlobalMonitorForEvents(.keyDown)`），要这两项权限，**没给时它本来也不响** ⇒ 11-19 整条摘掉；键盘出路改由本地监视器 + responder 链承担，鼠标出路（✕ / 右键）与"再按一次热键"不变 | 已移除 |
+| 相机 / 麦克风 | 没人需要 | 采集走 `SCScreenshotManager`（静帧），`SCStreamConfiguration` 从不设音频；代码里无 `requestAccess(for:)`、无 `AVCaptureDevice` | 不使用 |
+| Apple Events 自动化 | 没人需要 | 交回焦点用 `NSRunningApplication.activate`，不发消息给别的 app | 不使用 |
+| 连续屏幕采集（录屏） | 没人需要 | `Q-17` 已裁下一期；代码无 `CGDisplayStream` | 不使用 |
+| 调试 attach（`get-task-allow`） | 没人需要 | 已从 `Config/MacShot.entitlements` 删除，产物侧由门禁实测 | 已移除 |
+| 桌面窗口清单 | 没人需要 | `SCShareableContent.excludingDesktopWindows` 由 `false` 改 `true`：我们只读 `content.displays`，从不读 `content.windows` | 已收窄 |
+| App Sandbox | 有意**不开** | `ADR-004`：跨 Space 贴图、任意导出目录、`tccutil` 排障都要它让路。这是有记录的取舍，不是漏配 | 维持 |
+
+自查一条命令（源码 + Info.plist + 签进产物的 entitlements 三处一起看）：
+
+```sh
+make permissions        # = sh scripts/check-permissions.sh build/Derived/.../MacShot.app
+```
+
+---
+
 ## 3b. 授权到底认谁：`designated requirement`（11-17 实测，`E-070`）
 
 | 签名方式 | `codesign -d -r-` 的 DR | 后果 |

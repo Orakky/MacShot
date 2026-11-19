@@ -2,9 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- App Sandbox intentionally absent: ADR-004. Adding it would restrict cross-Space pins,
-	     arbitrary export directories and the tccutil-based troubleshooting flow. -->
-	<key>com.apple.security.get-task-allow</key>
-	<true/>
+	<!-- 11-19 权限收缩：这里现在是**空表**。 -->
+	<!-- App Sandbox 有意不开：ADR-004（跨 Space 贴图、任意导出目录、tccutil 排障都要它让路）。 -->
+	<!-- `com.apple.security.get-task-allow` 已删：那是"允许别的进程调试/attach 我"的调试期权限，
+	     没有任何功能刚需，却被打进了发布包（DMG 里那份也带着）。判据 scripts/check-permissions.sh ③。 -->
 </dict>
 </plist>

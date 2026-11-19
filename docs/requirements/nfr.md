@@ -75,6 +75,7 @@
 | NFR-030 | 不联网、无遥测、无更新检查（`requirements.md` §5 明确不做）；`check-style.sh` 加一条：出现 `URLSession`/`NCConnection` 即失败 |
 | NFR-031 | 剪贴板不残留临时文件；不使用 `fileURL` 表示（`ADR-014`） |
 | NFR-032 | 截图内容不出本机：不接第三方 OCR/云服务；如 P2 引入需单独 ADR + 明示同意 |
+| NFR-037 | **最小权限**：产品运行时依赖的隐私域只有**屏幕录制**一项（登录项由用户主动勾选，不是隐私权限）。不申请也不使用：辅助功能、输入监控、相机、麦克风、Apple Events 自动化、连续屏幕采集。entitlements 为**空表**（`get-task-allow` 于 11-19 删除：那是"允许别的进程 attach 我"的调试权限，没有功能刚需却进了发布包）。判据 `V-063`，门禁 `scripts/check-permissions.sh` 已接进 `make check` |
 
 ## 8. 可维护性
 
