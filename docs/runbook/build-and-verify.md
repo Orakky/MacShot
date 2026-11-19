@@ -94,6 +94,10 @@
 
 **老线热修**：切到 `release/v0.1.x` 改，版本升到 `0.1.2`，同批产生 `v0.1.2` + `release/v0.1.2`。注意 GitHub 的 `latest` 别名按**创建时间**解析、不按版本号：发一个更老版本号的热修会把 `latest` 抢过去。客户端 `decide` 是 `latest <= now ⇒ upToDate`，**不会误降级安装**，但新版本用户会看不到真正最新的清单——所以热修也要把版本号往上抬。
 
+**代推（用户 11-19 授权）的形状**：CLI 拿不到凭据（IDEA 的 push 命令带 `-c credential.helper=`，token 只在 IDE 里，我不去把它抠出来），所以 push 走 IDEA 的 UI：分支弹窗 → 搜分支名 → 子菜单 `Push…` → 对话框里核对 ref 行（`New` ＝新建而非覆盖）再点 Push。两条铁律：**① 菜单项不许靠"按次数 Down"定位**（实测会漂——我有一次回车落在 `Rename…` 上，立刻 Escape，事后 `git branch --list` 复核分支名未变），要**逐次读选中行文字、命中才按键**；**② 成没成只认 `git ls-remote` 的判定**：IDEA 不弹错不等于推上去，本机到 GitHub 的 HTTPS 会整段失败（`Error in the HTTP2 framing layer` / `curl 28`）。
+
+**tag 推出去之后**：`remote_has_ref` 会返回"远端已有"，`--retag` 对这轮永久失效 ⇒ 该版本后续修订只能升版本号重发（`V-067` ③ 的例外窗口只在"远端还没有"时开着）。
+
 **重复跑是幂等的**：tag/分支已存在且就指向 HEAD ⇒ 只报"已存在"。
 
 **发布前返工**（tag 已经打好了、但还得再改一版代码/文档）：`make release-bundle ARGS="--dry-run --retag"`。它先把包与清单重算一遍，再把 `v<版本>` 与 `release/v<版本>` 一起挪到新 HEAD——**挪之前必须 `git ls-remote` 确认远端没有这个 tag**，查询失败也算危险、一律不挪。已经发布过就**不许**再挪：那会让别人手里已下载的链接与清单指向不同代码，只能升版本号重发一轮（`V-067` ③）。
