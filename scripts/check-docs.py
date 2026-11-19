@@ -76,6 +76,40 @@ for p2 in docs:
                     fail.append(f"{p2.relative_to(root)}: 「{phrase}」停在 11-18 改判前的措辞（行首 {line[:40]}…）")
                 i = line.find(phrase, i + len(phrase))
 
+# 6) 台账表格形状（11-19 实测：一次错误替换把 E-095 的行尾和"还没证的"那格一起吃掉，还复制出第二个 E-095；
+#    而同一个表里另有 9 行早就是少列的旧伤——两类必须分开对待：形状**超出表头**是当场缺陷，少列是历史欠账，要数出来而不是假装看不见）。
+SEP = re.compile(r"(?<!\\)\|")
+# 必需列数：verification.md 的「跑法 / 读数」两列是后来加的，老行不留这两列**是合法的**，
+# 所以按必需列判少列，别把 48 行历史行误报成缺陷（把可选列算进去就等于制造一个永远不会清的红灯）。
+REQUIRED = {"docs/tasks/done.md": 3, "docs/protocol/verification.md": 5}
+KNOWN_SHORT = {"docs/tasks/done.md": 9}      # 少列的历史行数：修掉一行就要把这个数改小（T-126）
+for rel, header in (("docs/tasks/done.md", "| ID | 条目 | 证据 |"),
+                    ("docs/protocol/verification.md",
+                     "| ID | 类别 | 对应 | 观察对象 | 通过条件 | 跑法 | 读数 / 已知缺口 |")):
+    text = (root / rel).read_text(encoding="utf-8")
+    if header not in text:
+        fail.append(f"{rel}: 表头与门禁假设不一致（找不到 {header!r}）——表格形状改了要同批改这里")
+        continue
+    ncol = len(header.strip().strip("|").split("|"))
+    seen = []
+    short = 0
+    for line in text.splitlines():
+        if not line.startswith("| E-") and not line.startswith("| V-"):
+            continue
+        cols = len(SEP.findall(line)) - 1
+        ident = line.split("|")[1].strip()
+        seen.append(ident)
+        if cols > ncol:
+            fail.append(f"{rel}: {ident} 有 {cols} 列，比表头的 {ncol} 列多 ⇒ 单元里有未转义的裸竖线（写 `\|`）")
+        elif cols < REQUIRED[rel]:
+            short += 1
+    dup = sorted({i for i in seen if seen.count(i) > 1})
+    if dup:
+        fail.append(f"{rel}: ID 重复 {dup} —— 台账重复行会让人读到两份互相矛盾的结论")
+    expect = KNOWN_SHORT.get(rel, 0)
+    if short != expect:
+        fail.append(f"{rel}: 少列的行数={short}，门禁登记的是 {expect} ⇒ 修好了就把数字改小，别让它悄悄漂移（T-126）")
+
 # 5) 命令三处一致：AGENTS.md §2 的标题自己声称"与 runbook 一致"，那就必须真一致。
 #    11-19 实测有 12 个 target 只在 AGENTS §2 出现、runbook §1 表里根本没有行（其中两个还是我这一轮新加的，
 #    写完以为落盘了——文件会退回旧状态，靠人记是记不住的，所以做成门禁）。
