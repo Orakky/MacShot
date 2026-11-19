@@ -606,13 +606,19 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
         frontAppBeforeSession = nil
     }
 
-    private func pinMenu() -> NSMenu {
+    /// 贴图右键菜单。**标题里不写组合键**（用户 11-19：只保留鼠标点击实现的功能）——
+    /// 这些键本来也不是菜单给的：`keyEquivalent` 一直是空串，组合键是硬写进标题的装饰文字，
+    /// 于是"看起来能用"和"实际由谁实现"分了两处。真正的按键路径在 `MSPinView.keyDown`
+    /// （⌘C/⌘S/⌘W/E/⌘Z/⌘0），摘掉装饰不会让任何键失效。
+    static func makePinMenu() -> NSMenu {
         let menu = NSMenu()
-        menu.addItem(withTitle: "复制  ⌘C", action: #selector(MSPinView.menuCopy(_:)), keyEquivalent: "")
-        menu.addItem(withTitle: "保存  ⌘S", action: #selector(MSPinView.menuQuickSave(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "复制", action: #selector(MSPinView.menuCopy(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "保存", action: #selector(MSPinView.menuQuickSave(_:)), keyEquivalent: "")
         menu.addItem(.separator())
-        menu.addItem(withTitle: "关闭贴图  ⌘W", action: #selector(MSPinView.menuClose(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "关闭贴图", action: #selector(MSPinView.menuClose(_:)), keyEquivalent: "")
         for item in menu.items { item.target = nil }   // first responder chain
         return menu
     }
+
+    private func pinMenu() -> NSMenu { Self.makePinMenu() }
 }
