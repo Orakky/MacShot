@@ -43,12 +43,16 @@ manifest_url="https://github.com/$repo/releases/latest/download/latest.json"
 # 只有"确认没有"才允许挪 ref；查询失败必须当危险处理（宁可停下，也不猜远端是空的）。
 remote_has_ref() {
   lr=0
-  # GIT_TERMINAL_PROMPT=0：无 TTY 时 git 会去要凭据、直接 rc=128（实测），那会被下面当成"查询失败"而拦住挪 tag。
-  # 加了这个变量后同一个查询稳定返回 2＝"确认远端没有"，与"查不到"才是两件事。
-  out=$(GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/true git ls-remote --exit-code --$1 origin "$2" 2>/dev/null) || lr=$?
+  # 这两个变量只保证一件事：不会卡在"要我输入 GitHub 凭据"上（无 TTY 时那是死路）。
+  # 注意它们**不是**上次 rc=128 的原因——`sh -x` 打出真因是 github.com:443 间歇连不上（一次 75s 超时）。
+  # 所以失败时必须把 git 的 stderr 原样带出来：`2`=确认没有、`0`=远端已有、其它=真查不到，三者不能混成一个"网络问题"。
+  lr=0
+  err=/tmp/macshot-lsremote.err
+  out=$(GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/true git ls-remote --exit-code --$1 origin "$2" 2>"$err") || lr=$?
   if [ "$lr" -eq 0 ]; then return 0; fi
   if [ "$lr" -eq 2 ]; then return 1; fi
-  echo "✗ 查不到远端有没有 $2（git ls-remote rc=$lr）；不敢假定它是空的"
+  echo "✗ 查不到远端有没有 $2：git ls-remote rc=$lr，不敢假定它是空的"
+  echo "   git 原话：$(head -2 "$err" | tr '\n' ' ')"
   exit 2
 }
 
