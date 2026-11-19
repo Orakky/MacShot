@@ -95,7 +95,7 @@
 | T-121 | **开机自启实测回填**（`B-041`）：用户勾一次或授权可逆探针，把 `SMAppService` 的真实结果写进台账 | 用户 | ① 日志有 `login item register status=…` ② 注册成功后 `status=enabled` ③ 若抛错，错误文本进 `B-041` 且勾自动退回 ④ 真重启后进程自动起来（这条只能人工，不许推断） | 待用户 |
 | T-122 | **权限收缩到功能刚需**（用户 11-19 指令） | agent | ① `make permissions` 绿且能红（塞回全局监听 / 加用途声明两条反证）② 产物 entitlements 实测为空表 ③ 屏幕录制授权在删 `get-task-allow` 后仍有效（真壳读数）④ 遮罩五条出路仍在（`V-055`/`V-043` 那批 + 本地监视器）| **done**（E-093） |
 | T-123 | **手动检查更新**（用户 11-19，`ADR-023`） | agent | ① 纯逻辑离线单测 6 条（`V-064`）② `make probe-update` 两支：正常源通过、篡改源必须拒绝且零残留（`V-065`）③ 出网白名单双门禁 ④ 关于面板带作者 | **done**（E-094） |
-| T-124 | **一键发布到 GitHub Releases 当更新源**（用户 11-19） | agent + 用户 | ① `--dry-run` 离线跑完（已证）② 仓库地址从 `git remote` 解析，不写死 ③ 真上传后 `--verify-only` 必须绿：远端清单 sha256/bytes 与本地产物一致 + 资产不 404 ④ 没有 gh 也没有 token ⇒ `exit 3` 打印手工两步，不猜 | **待用户**（本机无 `gh`、无 `GITHUB_TOKEN`；`V-066` 的远端那格还空着） |
+| T-124 | **一键发布到 GitHub Releases 当更新源**（用户 11-19） | agent + 用户 | ① `--dry-run` 离线跑完（已证）② 仓库地址从 `git remote` 解析，不写死 ③ 真上传后 `--verify-only` 必须绿：远端清单 sha256/bytes 与本地产物一致 + 资产不 404 ④ 没有 gh 也没有 token ⇒ `exit 3` 打印手工两步，不猜 | **done**（11-19 用户放行代推：main/tag/分支经 IDEA 上远端，Release 已发布且 `--verify-only` 绿，`E-097`） |
 | T-125 | **发布线纪律**（用户 2026-11-19 裁决：`main` 开发，每次发版自动产生 tag + 发布分支，代码推该分支） | agent | ① `publish-release.sh` 构建前断言 `git status --porcelain` 为空 ② tag/分支名从 plist 版本号推出 ③ 同批创建且指向同一 commit、重复跑幂等、指向别处就 `exit 2` 不覆盖 ④ 脚本不执行 push ⑤ `V-067` + runbook §3c + `AGENTS.md` §3.12 ⑥ 顺带把 `make X` 三处一致做成门禁 | **done**（E-095；远端那一格待 push） |
 | T-126 | `done.md` 里 **9 行少一列**（E-073…E-080、E-092：条目与证据之间的竖线在早前某次替换里丢了） | agent | 逐行找到自然边界补竖线（不猜统一位置）、补完整批 `make check` + 目检渲染；同时把 `check-docs.py` 的 `KNOWN_SHORT` 从 9 改小 | 待办（今天查出的既有损伤，不在本次范围，按纪律另登记） |
 

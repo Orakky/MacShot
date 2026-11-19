@@ -240,8 +240,22 @@ if ! net_get L "$manifest_url"; then
   exit 1
 fi
 remote=$NET_OUT
-remote_sha=$(printf '%s' "$remote" | sed -n 's/.*"sha256":"\([0-9a-f]*\)".*/\1/p' | head -1)
-remote_bytes=$(printf '%s' "$remote" | sed -n 's/.*"bytes":\([0-9]*\).*/\1/p' | head -1)
+remote_sha=$(printf '%s' "$remote" | sed -n 's/.*"sha256": *"\([0-9a-f]*\)".*/\1/p' | head -1)
+remote_bytes=$(printf '%s' "$remote" | sed -n 's/.*"bytes": *\([0-9]*\).*/\1/p' | head -1)
+remote_version=$(printf '%s' "$remote" | sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' | head -1)
+# 解析失败与源不符是两件事：空值必须当场说"是脚本读不懂"，别让它冒充"清单校验不过"。
+case "$remote_sha" in
+  ????) ;;
+  *) if [ "${#remote_sha}" -ne 64 ]; then
+       echo "✗ 脚本从清单里解析不出 sha256（长度=${#remote_sha}）——这是 publish-release.sh 的解析问题，不是源的问题；远端原文前 200 字节："
+       printf '%s\n' "$remote" | head -c 200; echo
+       exit 1
+     fi ;;
+esac
+if [ -z "$remote_bytes" ] || [ -z "$remote_version" ]; then
+  echo "✗ 清单解析不出 bytes 或 version（脚本的问题，不是源的问题）：bytes=$remote_bytes version=$remote_version"
+  exit 1
+fi
 local_sha=$(shasum -a 256 "$dmg" | awk '{print $1}')
 local_bytes=$(stat -f %z "$dmg")
 [ "$remote_sha" = "$local_sha" ] || { echo "✗ 清单校验和与本地产物不符：远端 $remote_sha 本地 $local_sha"; exit 1; }
@@ -253,4 +267,4 @@ if ! net_get IL "$asset_url"; then
   esac
   exit 1
 fi
-echo "✔ 源可用：version=$(printf '%s' "$remote" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p' | head -1) sha256 与字节数都对得上，资产可下载"
+echo "✔ 源可用：version=$remote_version sha256 与字节数都对得上，资产可下载"
