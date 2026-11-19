@@ -121,6 +121,20 @@ if [ "$mode" != "verify" ]; then
   ]
 }
 EOF
+  # 配对自检：清单必须描述**此刻盘上这一份包**。上面实测过一次被打断的跑法
+  # （`make release-bundle | grep | tail` ⇒ 子 make/hdiutil 收到 SIGPIPE，脚本停在写清单之前，
+  #  盘上留着上一轮的过期清单：bytes 恰好相同、sha256 完全不同，肉眼看不出来）。
+  # 不查就等于把"客户端下载后校验必不过"留到用户屏幕上才发现。
+  now_sha=$(shasum -a 256 "$dmg" | awk '{print $1}')
+  now_bytes=$(stat -f %z "$dmg")
+  m_sha=$(sed -n 's/.*"sha256": *"\([0-9a-f]*\)".*/\1/p' "$out/latest.json" | head -1)
+  m_bytes=$(sed -n 's/.*"bytes": *\([0-9]*\).*/\1/p' "$out/latest.json" | head -1)
+  if [ "$m_sha" != "$now_sha" ] || [ "$m_bytes" != "$now_bytes" ]; then
+    echo "✗ 清单与盘上这份包不对配：清单 \${m_sha%\${m_sha#????????}}…/\$m_bytes 实际 \${now_sha%\${now_sha#????????}}…/\$now_bytes"
+    echo "   ⇒ 这一轮没跑完（多半是被管道截断）。重跑：sh scripts/publish-release.sh --dry-run"
+    exit 1
+  fi
+  echo "→ 配对自检 ✔ 清单里的 sha256 与 bytes == 盘上这份包"
   echo "→ 清单 $out/latest.json"
   echo "   version=$version bytes=$bytes sha256=${sha%"${sha#????????}"}…"
   echo "   asset=$asset_url"

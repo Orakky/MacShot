@@ -62,6 +62,7 @@
 
 - 同时跑两个会签名的目标（例：前一个 `make check` 还没结束又起 `make dmg`）⇒ **两个 `codesign` 抢同一个 `build/Derived` 互锁 27 分钟**。现象是"命令挂着不动"，最容易误判成"钥匙串在等用户点授权"。
 - 卡住先分清是谁：**`ps -axo pid,etime,command | grep codesign` 有两条以上 ⇒ 是自己撞自己**，`kill` 掉多余的那条即可，不要动钥匙串、也不要当成 TCC 问题去排查。
+- **别用管道截断 `make dmg` / `make release-bundle` 的输出**（11-19 实测）：`make release-bundle ARGS=… | grep … | tail -8` 会让子 make 与 `hdiutil` 收到 SIGPIPE，脚本**停在写清单之前**，盘上留下上一轮的过期清单——那次两份文件 bytes 恰好相同（1787336）、sha256 完全不同，肉眼和 `ls` 都看不出来。要截输出就 `> /tmp/x.txt 2>&1` 再读文件。脚本现在写完清单立刻**复算配对**（sha256 与 bytes 两项都从盘上重读比对，不对就 `exit 1`），三条反证：篡改 sha ⇒ 红；只改 bytes（sha 对）⇒ 红；还原 ⇒ 绿。
 - 因此 `scripts/probe-update.sh` 这类"启动真 app 再等它打印"的探针**必须带超时**（现为每轮 20s / 全程 90s，`exit 8` 报 watchdog）。上一版没有，挂住的时候屏幕日志是空的，看起来完全像"还在跑"。
 
 ## 3c. 发布一个版本的完整一轮（git 路线，用户 2026-11-19 裁决）
