@@ -80,7 +80,7 @@ scripts/reset-tcc.sh   # 重置屏幕录制授权（排查黑图）
 10. 不引入第三方依赖，除非 ADR-015 被 accepted 且写明来源（本机当前**没有 brew**）。
 
 11. **分发器不许 `default:` 空转**（effect/command/intent 的 switch 必须穷举）。2026-11-16 的遮罩卡死事故就是 `default: break` 吞掉了 `closeOverlay`；`check-style.sh` 已拦。全屏模态必须有 ≥2 条退出路径。
-12. **发布线：包必须来自 tag 所指的那个 commit**（用户 2026-11-19 裁决）。`main` 日常开发；发版时 `v<版本号>` tag 与 `release/v<版本号>` 分支同批产生，该版本后续修订推该分支。`scripts/publish-release.sh` 先断言 `git status --porcelain` 为空才构建（DMG 不可复现 ⇒ 脏树的包与 tag 对不上，清单里的 sha256 就成了无法核对的空话），再从 plist 推出 tag/分支名并创建。**`git push` 仍由用户在终端执行**（§3.7 不变）。判据 `V-067`，路线 `runbook/build-and-verify.md` §3c。
+12. **发布线：包必须来自 tag 所指的那个 commit**（用户 2026-11-19 裁决）。`main` 日常开发；发版时 `v<版本号>` tag 与 `release/v<版本号>` 分支同批产生，该版本后续修订推该分支。`scripts/publish-release.sh` 先断言 `git status --porcelain` 为空才构建（DMG 不可复现 ⇒ 脏树的包与 tag 对不上，清单里的 sha256 就成了无法核对的空话），再从 plist 推出 tag/分支名并创建。**`git push` 仍由用户在终端执行**（§3.7 不变）。判据 `V-067`，路线 `runbook/build-and-verify.md` §3c。**发布之后不许再构建这一版的包**：`make dmg`/`install`/`release-bundle`（非 `--verify-only`）都会重新压缩换 sha256，而远端清单钉的是发布那一刻的字节 ⇒ 客户端校验必不过；要出新包只能升 `Config/Info.plist` 的版本号重走一轮。
 
 ## 4. 领活与并行
 
