@@ -6,7 +6,7 @@
 # 所以脚本最后一步是**回头自检这两条**，不是"上传完就宣称成功"。
 #
 # 用法：
-#   sh scripts/publish-release.sh --dry-run          # 只打包与自检，不上传（本机默认走这条）
+#   sh scripts/publish-release.sh --dry-run          # 建 tag/发布分支 + 打包 + 自检，不上传（本机默认走这条）
 #   sh scripts/publish-release.sh -m "更新说明"       # 有 gh 或 GITHUB_TOKEN 时才真上传
 #   sh scripts/publish-release.sh --verify-only      # 只验远端 latest.json 与本地产物是否一致
 set -eu
@@ -36,6 +36,32 @@ case "$repo" in */*) ;; *) echo "✗ 解析不出 owner/repo（remote=\"$remote\
 tag="v$version"
 asset_url="https://github.com/$repo/releases/download/$tag/MacShot-$version.dmg"
 manifest_url="https://github.com/$repo/releases/latest/download/latest.json"
+
+branch="release/v$version"
+
+# ── 发布线（AGENTS.md §3.12 / V-067）：tag 与 release 分支都从 plist 的版本号推出来 ──
+# 为什么先卡干净树：DMG 不是逐字节可复现的，"这个包里是哪一版代码"唯一的凭据就是 tag→commit。
+# 脏树打出来的包，清单里的 sha256 就成了无法核对的空话，所以宁可不动。
+if [ "$mode" != "verify" ]; then
+  dirty=$(git status --porcelain 2>/dev/null || true)
+  [ -z "$dirty" ] || { printf '✗ 工作树不干净：包与 tag 会对不上。先提交或还原这些改动：\n%s\n' "$dirty"; exit 2; }
+  head=$(git rev-parse HEAD)
+  if git rev-parse -q --verify "refs/tags/$tag" >/dev/null 2>&1; then
+    at=$(git rev-list -n 1 "$tag")
+    [ "$at" = "$head" ] || { echo "✗ tag $tag 已存在但指向 $(printf '%.7s' "$at")，HEAD 是 $(printf '%.7s' "$head")；不猜哪个算数"; exit 2; }
+    echo "→ tag $tag 已存在且就指向当前 HEAD"
+  else
+    git tag -a "$tag" -m "MacShot $version" "$head"
+    echo "→ 已打 tag $tag @ $(printf '%.7s' "$head")"
+  fi
+  if git rev-parse -q --verify "refs/heads/$branch" >/dev/null 2>&1; then
+    echo "→ 发布分支 $branch 已存在（不重置它：老线上追加提交请手动切过去）"
+  else
+    git branch "$branch" "$tag"
+    echo "→ 已建发布分支 $branch @ $tag"
+  fi
+  echo "→ 推送（按纪律由你在终端执行）：git push origin main $tag $branch"
+fi
 
 if [ "$mode" != "verify" ]; then
   echo "→ 构建 Release 与 DMG"

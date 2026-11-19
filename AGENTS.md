@@ -12,6 +12,7 @@ macOS 原生截图 → 标注 → 贴图置顶 → 剪贴板 工具（形态参�
 - **11-18 同日再落两条用户改判/缺陷**：③ 工具条"贴出/复制/保存/取消"以前只是画上去的文字、没有命中区（点＝点空白）⇒ `BarAction` + `actionBoxes` 让绘制与命中同一份几何，判据 `V-055`；④ `Q-11` 临时默认"改选区＝全清不可撤销"作废 ⇒ 现档"屏幕位置还在选区里的原地保留、跑出去的才清、一条撤销记录"，判据 `V-056`（`V-048` 标 superseded）。见 §6b 后三行、`E-084`/`E-085`。
 - **11-18 又加了一条视觉承诺**：贴图边缘**光晕悬浮感**（`MSPinGlow`：留白 10pt + 三层软环 + 1pt 高光，最后画且奇偶裁剪到留白），`FR-PIN-013` 的 P0 先切一片，开关仍 P1；判据 `V-057`、规格 `UI-003b`、记录 `E-086`。
 - **11-19 还有一条文案改判**：贴图右键菜单**不再显示组合键**（`复制 / 保存 / 关闭贴图`，键仍由 `MSPinView.keyDown` 实现，`keyEquivalent` 本来就是空串），判据 `V-061`、记录 `E-091`。
+- **11-19 发布线纪律（用户裁决）**：`main` 保持日常开发；每次发版/升版本都要有 `v<版本号>` tag **和** `release/v<版本号>` 分支，该版本后续修订往对应分支推。名字从 `Config/Info.plist` 的版本号推出，由 `scripts/publish-release.sh` 自动创建，不手写、不代推。判据 `V-067`，路线 `runbook/build-and-verify.md` §3c。
 - **11-19 加了「手动检查更新」**（用户指令，`ADR-023`）：只有点菜单「检查更新…」才出网，默认源＝GitHub Releases 的公开 `latest.json`（不用 API ⇒ 免 token、免速率限制）。**`NFR-030` 的"绝不联网"因此改成"唯一出网点是 `App/MSUpdater.swift`"**，`check-style.sh` 与 `check-permissions.sh` 各查一遍（只改一处，另一处会以为还守着）。发布侧 `scripts/publish-release.sh` 最后一步是**回头核对远端清单和本地产物一致**——没跑过这一步之前，"更新源配好了"这句话没有依据（本机没有 `gh` 也没设 token ⇒ 只证到 `--dry-run`）。
 - **11-19 权限收缩**（用户指令：只留功能刚需）：运行时隐私域**只剩屏幕录制**；摘掉遮罩的全局 `Esc` 监听（要输入监控/辅助功能）、entitlements 清空（删 `get-task-allow`）、`SCShareableContent` 不再枚举桌面窗口；新增 `make permissions` 门禁接进 `check`。条目 `NFR-037`、判据 `V-063`、清单 `permissions-tcc.md` §3c、记录 `E-093`。
 - **11-19 两条**：① 热键"注册成功却按了没反应"根因＝`register()` 先 `setHandler` 再 `unregister` 把**静态**回调表擦掉（`E-089`，`V-059`）——我上一轮写进台账的"⌘+单字母冲突"是误诊，已改正；② 保存/导出默认目录按用户改判换成 **`~/Downloads`**（schema 4→5，同批带"认值不认版本"的迁移，`E-090`/`V-060`）。**规矩：改任何默认值，必须同批改"读旧文件的规则"，否则只对全新用户生效。**
@@ -41,12 +42,13 @@ make verify-dmg       # 挂上 DMG 逐条核验：卷根 .app、/Applications �
 make dmg              # 产出 build/MacShot-<version>.dmg（11-17 起用本地自签身份，不再是 ad-hoc）
 make install          # 先 make dmg，再装 DMG 里那份 **Release**；覆盖已有安装（去 quarantine）
 make contrast         # NFR-024 对比度校验（11 组配对；不达 WCAG 2.2 就退出 1，目前 9/11，见 B-039）
-make release-bundle   # 一键打包 + 生成 latest.json；--dry-run 不上传，真发布要 gh 或 GITHUB_TOKEN
+make release-bundle   # 建 tag 与发布分支 + 打包 + 生成 latest.json；--dry-run 不上传，真发布要 gh 或 GITHUB_TOKEN
 make probe-update     # file:// 假源跑完整条检查更新，含"篡改校验和必须拒绝"这一支
 make permissions      # 权限面门禁（V-063）：源码 / Info.plist / 签进产物的 entitlements 三处一起查
 make check            # 本地门禁：build + test + 风格/依赖方向/文档一致性/权限面
 make clean            # 清 build 与 Derived
 make probe            # 采一帧并打印尺寸/耗时/权限（V-001/V-019 取证）
+make probe-permission # 只读屏幕录制授权状态（V-063 的前置读数；不改权限）
 make probe-menu       # 打印状态栏菜单行与"权限行是否真挂在菜单上"（常驻读数行的取证）
 make probe-chrome     # 遮罩界面离屏自绘成 build/chrome.png（不碰 TCC，用来看）；`loupe` 参数连放大镜一起出图，`draft` 参数按**真落盘偏好**拖一个矩形给你看标注中途那一帧
 make probe-clipboard  # 真写系统剪贴板再读回 types/DPI，分清"我们写的"与"系统派生的"（会覆盖剪贴板）
@@ -74,7 +76,9 @@ scripts/reset-tcc.sh   # 重置屏幕录制授权（排查黑图）
 8. 交付产物（`build/`、DMG、截图素材、`.idea/`）默认不入库。
 9. 遇到与文档矛盾的实现约束 → 记进 `docs/tasks/blocked.md` 并问用户，不自行改设计。
 10. 不引入第三方依赖，除非 ADR-015 被 accepted 且写明来源（本机当前**没有 brew**）。
+
 11. **分发器不许 `default:` 空转**（effect/command/intent 的 switch 必须穷举）。2026-11-16 的遮罩卡死事故就是 `default: break` 吞掉了 `closeOverlay`；`check-style.sh` 已拦。全屏模态必须有 ≥2 条退出路径。
+12. **发布线：包必须来自 tag 所指的那个 commit**（用户 2026-11-19 裁决）。`main` 日常开发；发版时 `v<版本号>` tag 与 `release/v<版本号>` 分支同批产生，该版本后续修订推该分支。`scripts/publish-release.sh` 先断言 `git status --porcelain` 为空才构建（DMG 不可复现 ⇒ 脏树的包与 tag 对不上，清单里的 sha256 就成了无法核对的空话），再从 plist 推出 tag/分支名并创建。**`git push` 仍由用户在终端执行**（§3.7 不变）。判据 `V-067`，路线 `runbook/build-and-verify.md` §3c。
 
 ## 4. 领活与并行
 

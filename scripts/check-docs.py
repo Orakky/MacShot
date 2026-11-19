@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""文档一致性门禁（V-031）。
+"""文档一致性门禁（V-031 / V-067 的命令面由 §2 表承担）。
 
 三件事，宁可少而准：
 1. `docs/…#ID` 形式的引用必须能解析（文件存在 + 文中出现该 ID）。引用解析失败 = agent 会照旧文档干活。
 2. requirements.md §1 的每条 P0 必须有四大件归属（ADR-006 的准入纪律）。
 3. 统计数字只许出现在 requirements.md §0（本次审查就是因为别处抄了数字才出错）。
+5. `make X` 三处一致：AGENTS.md §2 列出的每条命令必须在 Makefile 里是 target、且在 runbook §1 表里有行；反向也一样。
 4. 改判过的**默认档**必须代码与规格同边，且旧措辞不许残留在活文档里（11-18 放大镜那条就是这么漏的：
    代码翻了默认值、五份文档还写着"自动弹出"，`--snip-then-loupe` 的判据也会跟着失真）。
 """
@@ -75,6 +76,25 @@ for p2 in docs:
                     fail.append(f"{p2.relative_to(root)}: 「{phrase}」停在 11-18 改判前的措辞（行首 {line[:40]}…）")
                 i = line.find(phrase, i + len(phrase))
 
+# 5) 命令三处一致：AGENTS.md §2 的标题自己声称"与 runbook 一致"，那就必须真一致。
+#    11-19 实测有 12 个 target 只在 AGENTS §2 出现、runbook §1 表里根本没有行（其中两个还是我这一轮新加的，
+#    写完以为落盘了——文件会退回旧状态，靠人记是记不住的，所以做成门禁）。
+ag = (root / "AGENTS.md").read_text(encoding="utf-8")
+mkb = (root / "Makefile").read_text(encoding="utf-8")
+runbook = (root / "docs/runbook/build-and-verify.md").read_text(encoding="utf-8")
+agents_cmds = set(re.findall(r"^make ([a-z][a-z0-9-]*)", ag.split("```sh")[1].split("```")[0], re.M)) \
+    if "```sh" in ag else set()
+targets = set(re.findall(r"^([a-z][a-z0-9-]*):(?!=)", mkb, re.M))
+rb_rows = set(re.findall(r"^\| `make ([a-z][a-z0-9-]*)`", runbook, re.M))
+for c in sorted(agents_cmds - targets):
+    fail.append(f"AGENTS §2 列了 make {c}，但 Makefile 里没有这个 target")
+for c in sorted(agents_cmds - rb_rows):
+    fail.append(f"AGENTS §2 列了 make {c}，但 runbook §1 表里没有这一行（§2 声称两边一致）")
+for c in sorted(rb_rows - agents_cmds):
+    fail.append(f"runbook §1 有 make {c}，却没登记进 AGENTS §2")
+for c in sorted(rb_rows - targets):
+    fail.append(f"runbook §1 有 make {c}，但 Makefile 里没有这个 target")
+
 if fail:
     print("✗ check-docs 失败")
     for f in fail[:20]:
@@ -82,4 +102,4 @@ if fail:
     if len(fail) > 20:
         print(f"    …共 {len(fail)} 条")
     sys.exit(1)
-print("✔ check-docs 通过（引用可解析 / P0 有归属 / 计数单源 / 放大镜默认档代码与规格同边）")
+print("✔ check-docs 通过（引用可解析 / P0 有归属 / 计数单源 / 放大镜默认档同边 / make 命令三处一致）")
