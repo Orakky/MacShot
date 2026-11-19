@@ -202,7 +202,7 @@
 │   [√] 提交同时不写入历史（P0 无历史）                        │
 │ 导出                                                        │
 │   格式 (PNG)  ·  质量 [——]（PNG 时禁用，见 gap §5）           │
-│   目录 [~/Pictures/MacShot]  更改…                          │
+│   目录 [~/Downloads]  更改…                          │
 │   命名模板 [MacShot {yyyy}-{MM}-{dd} {HH}.{mm}.{ss}]  预览：│
 │         MacShot 2026-11-16 10.30.45.png                    │
 │ 标注默认                                                    │

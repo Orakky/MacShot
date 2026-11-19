@@ -60,7 +60,7 @@ public struct NamingTemplate {
 |---|---|
 | `⌘S` | 保存面板，预填模板结果与默认目录 |
 | `⌘⇧S` | 免面板直存默认目录（FR-EXP-003） |
-| 默认目录 | `~/Pictures/MacShot/`，首次自动创建；设置可改（非沙盒，任意目录可写；不用安全书签，P1 若引入沙盒再补） |
+| 默认目录 | **`~/Downloads/`**（11-19 用户改判，原 `~/Pictures/MacShot/`），首次自动创建；设置可改。`⌘S` 的保存面板 `directoryURL` 与 `⇧⌘S` 都走同一个 `exportDirectory()`，所以改默认两处一起动。旧文件迁移＝**认值不认版本**：只有等于 `MSAppPreferences.legacyExportDirectories` 里那几条历史默认的才回落（非沙盒，任意目录可写；不用安全书签，P1 若引入沙盒再补） |
 | 重名 | 追加 `{index}`；判定用"存在即 +1"循环，连续 10 次不覆盖（判据来自 FR-EXP-003） |
 | 格式 | PNG；JPEG 质量档 P1；WebP P2（Snipaste 免费即有 WebP，差距有意保留） |
 | 目录不可用（卷卸载） | 回落到保存面板（`overview.md` §6） |

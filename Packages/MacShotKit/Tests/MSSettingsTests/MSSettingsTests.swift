@@ -11,14 +11,14 @@ struct MSDefaultPreferencesTests {
     @Test("默认值与文档表格逐字段相等（FR-SET-003）")
     func defaultsMatchDocumentation() {
         let p = MSAppPreferences()
-        #expect(p.schemaVersion == 4, "v4＝放大镜默认不自动弹（Q-07 改判）；v3＝删掉 confirmBeforeDiscardingUnexportedPins（Q-06 已裁退出即抛弃，前提作废）；v2＝剪贴板只写 PNG")
+        #expect(p.schemaVersion == 5, "v5＝导出默认目录改到 ~/Downloads；v4＝放大镜默认不自动弹（Q-07 改判）；v3＝删掉 confirmBeforeDiscardingUnexportedPins（Q-06 已裁退出即抛弃，前提作废）；v2＝剪贴板只写 PNG")
         #expect(p.hotKeys.snip == .f1, "F1 — keymap.md §1")
         #expect(p.hotKeys.pinClipboard == .f3, "F3")
         #expect(p.hotKeys.fullScreen == MSKeyCombo(keyCode: 0, command: true), "⌘A")
         #expect(p.hotKeys.snip.display == "F1" && p.hotKeys.pinClipboard.display == "F3",
                 "回归：曾经把 keyCode 当 F 序号传，F1 静默注册成 A 键")
         #expect(p.commitBehavior == .pin, "Q-05 temporary default: pin first")
-        #expect(p.export.directory == "~/Pictures/MacShot")
+        #expect(p.export.directory == "~/Downloads", "11-19 用户改判：保存/导出默认落在「下载」")
         #expect(p.export.namingTemplate == "MacShot {yyyy}-{MM}-{dd} {HH}.{mm}.{ss}")
         #expect(p.export.format == .png)
         // 这个字段在 v2 被删：剪贴板只写 PNG 是决定，不是可配置项（Q-04 / ADR-014）
@@ -44,6 +44,35 @@ struct MSDefaultPreferencesTests {
         try JSONEncoder.pretty.encode(explicit).write(to: file)
         #expect(MSSettingsStore(directory: dir).current.showMagnifierWhileDragging == true,
                 "迁移不能顺手把用户的显式选择也清掉")
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    @Test("导出目录的迁移必须认值：旧默认回落 ~/Downloads，用户自己填的路径一律不动，v5 显式写旧路径也尊重")
+    func exportDirectoryMigrationIsValueAware() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("macshot-dir-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent("preferences.json")
+
+        // ① 旧文件里那句 `~/Pictures/MacShot` 是被 materialize 的旧默认，不是选择 ⇒ 回落
+        var old = MSAppPreferences(schemaVersion: 4)
+        old.export.directory = "~/Pictures/MacShot"
+        try JSONEncoder.pretty.encode(old).write(to: file)
+        #expect(MSSettingsStore(directory: dir).current.export.directory == "~/Downloads",
+                "旧默认留在盘上压住新默认 ⇒ 这次改默认对老用户又是空的")
+
+        // ② 同一条旧文件里如果填的是用户自己的路径，迁移不许碰它
+        var custom = MSAppPreferences(schemaVersion: 4)
+        custom.export.directory = "~/Desktop/截图存档"
+        try JSONEncoder.pretty.encode(custom).write(to: file)
+        #expect(MSSettingsStore(directory: dir).current.export.directory == "~/Desktop/截图存档",
+                "迁移把用户自己填的路径也改了 ⇒ 这是丢用户数据，不是回落默认")
+
+        // ③ v5 之后显式选回旧路径，那是选择，必须尊重
+        var explicit = MSAppPreferences(schemaVersion: 5)
+        explicit.export.directory = "~/Pictures/MacShot"
+        try JSONEncoder.pretty.encode(explicit).write(to: file)
+        #expect(MSSettingsStore(directory: dir).current.export.directory == "~/Pictures/MacShot",
+                "v5 的文件里这句话只能是用户自己填的")
         try? FileManager.default.removeItem(at: dir)
     }
 

@@ -4,6 +4,9 @@ import MSCore
 /// All persisted preferences in one value type with a schema version. Fields are append-only:
 /// renaming or re-purposing one is a schema break, not a refactor (`FR-SET-003`, `ADR-009` style).
 public struct MSAppPreferences: Codable, Sendable, Equatable {
+    /// 5 = 导出默认目录改到 **下载**（`~/Downloads`，用户 11-19）。同 v4 的教训：光翻默认值对
+    /// 老用户无效——每次写盘都把整份结构体连默认值 materialize 落盘，所以旧文件里那句
+    /// `~/Pictures/MacShot` 也不是用户选过的路径 ⇒ 见 `legacyExportDirectories` 的定向迁移。
     /// 4 = `showMagnifierWhileDragging` 默认改 `false`（用户 2026-11-18 改判 Q-07：截图时不要
     /// 那个自动弹出的额外画面）。**默认值变了、字段没变**，所以旧文件里显式存过 `true` 的人
     /// 仍是 `true`——schema 不必升；这里升号只为了给"默认档变了"留一个可对账的记录点。
@@ -12,7 +15,12 @@ public struct MSAppPreferences: Codable, Sendable, Equatable {
     /// 2 = 剪贴板不再双写 TIFF（`Q-04`），删掉 `Export.writesPngAndTiffToPasteboard`。
     /// 读侧允许 `schemaVersion <= current`（§114），旧文件里多出来的那个键会被忽略，
     /// 所以这是一次**向前兼容**的收窄，不是迁移。
-    public static let currentSchemaVersion = 4
+    public static let currentSchemaVersion = 5
+
+    /// 历史上当过默认值、但**从未被用户主动选过**的导出目录。`schemaVersion < 5` 的文件里
+    /// 出现这些字符串＝旧默认被 materialize 下来的，迁移回落到现默认；
+    /// 用户自己填的路径（不在这个表里）一律不动。
+    public static let legacyExportDirectories = ["~/Pictures/MacShot"]
 
     public var schemaVersion: Int
 
@@ -30,7 +38,7 @@ public struct MSAppPreferences: Codable, Sendable, Equatable {
         public var namingTemplate: String
         public var format: MSImageFormat
         public var jpegQuality: Double
-        public static let standard = Export(directory: "~/Pictures/MacShot",
+        public static let standard = Export(directory: "~/Downloads",
                                             namingTemplate: "MacShot {yyyy}-{MM}-{dd} {HH}.{mm}.{ss}",
                                             format: .png, jpegQuality: 0.9)
     }
@@ -127,10 +135,20 @@ public final class MSSettingsStore: MSReadingPreferences, @unchecked Sendable {
             // `update()` 都会把整份结构体连默认值一起 materialize 落盘 ⇒ 读到的 `true` 只是旧默认。
             // 照读的话，11-18 翻过来的新默认永远到不了用户屏幕上（实测：这台机器的
             // `preferences.json` 是 schema 2、里面就写着 `showMagnifierWhileDragging: true`）。
-            if decoded.schemaVersion < MSAppPreferences.currentSchemaVersion,
+            // 钉死在 4，不能写 `< currentSchemaVersion`：schema 再往上走（v5＝导出目录）时，
+            // 那条规则会把 **v4 里用户真点过的开关**也当成旧默认擦掉。
+            if decoded.schemaVersion < 4,
                cached.showMagnifierWhileDragging != MSAppPreferences().showMagnifierWhileDragging {
                 MSLog.info(.settings, "schema \(decoded.schemaVersion) 的放大镜字段按旧默认落盘，回落到出厂默认")
                 cached.showMagnifierWhileDragging = MSAppPreferences().showMagnifierWhileDragging
+            }
+            // 导出目录的迁移必须**认值**：旧文件里既可能是被 materialize 的旧默认，也可能是
+            // 用户自己填的路径，两者不能一概而论。只有等于历史默认的那条才回落。
+            let storedDirectory = cached.export.directory
+            if decoded.schemaVersion < 5, MSAppPreferences.legacyExportDirectories.contains(storedDirectory) {
+                let shipped = MSAppPreferences().export.directory
+                MSLog.info(.settings, "schema \(decoded.schemaVersion) 的导出目录是旧默认 \(storedDirectory)，回落到 \(shipped)")
+                cached.export.directory = shipped
             }
             MSLog.info(.settings, "loaded schema=\(decoded.schemaVersion)")
         } else {

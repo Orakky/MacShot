@@ -880,7 +880,7 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         stack.addArrangedSubview(label("导出", weight: .semibold))
         let dir = NSTextField(string: settings.current.export.directory)
-        dir.placeholderString = "~/Pictures/MacShot"
+        dir.placeholderString = "~/Downloads"
         dir.target = self
         dir.action = #selector(directoryChanged(_:))
         dir.widthAnchor.constraint(equalToConstant: 300).isActive = true
