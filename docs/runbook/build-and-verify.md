@@ -76,11 +76,15 @@
 | 4 | `git push origin main v<版本> release/v<版本>` | **由你在终端执行**（`AGENTS.md` §3.7）；脚本只打印这一行，绝不代推 |
 | 5 | 网页 releases/new 选**已有** tag，上传 `build/MacShot-<版本>.dmg` 与 `build/release/latest.json` | 两个都要传（客户端按固定名 `latest.json` 取清单）；**不勾 Draft、不勾 Pre-release** ⇒ `/releases/latest/download/` 只解析非草稿非预发布，勾了客户端就永远 404 |
 | 6 | `make release-bundle ARGS=--verify-only` | 拉远端清单，`sha256`/`bytes` 与本地重算逐字段比对，再 `curl -I` 确认资产不是 404。**这一步绿之前"源配好了"没有依据**（`V-066`/`V-067`） |
+
+**自检的传输层坑（11-19 实测）**：本机 `curl -fsL https://github.com/...:443` 走默认 HTTP/2 **稳定 rc=56（接收失败）**，同一 URL 加 `--http1.1` 才是真的 `rc=22`（404，因为还没发布）。所以 `publish-release.sh` 的自检是"默认试一次，非 22 就降级 `--http1.1` 再试"，并且**降级只要拿到判定就打印一行**——否则读者会把 http1.1 的结论当成 http2 的。报错也分家：`22` 说"多半还没发布/勾了 draft"，其它 rc 说"传输层问题，不是没发布的证据"。
 | 7 | `docs/tasks/done.md` 补一条 E：版本号、tag、commit、第 6 步读数 | 未观察不写完成 |
 
 **老线热修**：切到 `release/v0.1.x` 改，版本升到 `0.1.2`，同批产生 `v0.1.2` + `release/v0.1.2`。注意 GitHub 的 `latest` 别名按**创建时间**解析、不按版本号：发一个更老版本号的热修会把 `latest` 抢过去。客户端 `decide` 是 `latest <= now ⇒ upToDate`，**不会误降级安装**，但新版本用户会看不到真正最新的清单——所以热修也要把版本号往上抬。
 
-**重复跑是幂等的**：tag/分支已存在且就指向 HEAD ⇒ 只报"已存在"；已存在但指向别处 ⇒ `exit 2` 交人裁决，脚本不覆盖、不猜。
+**重复跑是幂等的**：tag/分支已存在且就指向 HEAD ⇒ 只报"已存在"。
+
+**发布前返工**（tag 已经打好了、但还得再改一版代码/文档）：`make release-bundle ARGS="--dry-run --retag"`。它先把包与清单重算一遍，再把 `v<版本>` 与 `release/v<版本>` 一起挪到新 HEAD——**挪之前必须 `git ls-remote` 确认远端没有这个 tag**，查询失败也算危险、一律不挪。已经发布过就**不许**再挪：那会让别人手里已下载的链接与清单指向不同代码，只能升版本号重发一轮（`V-067` ③）。
 
 ## 4. 实测记录
 

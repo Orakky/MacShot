@@ -18,11 +18,13 @@ dmg="build/MacShot-$version.dmg"
 out="build/release"
 notes="MacShot $version"
 mode="publish"
+retag=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) mode="dry"; shift ;;
     --verify-only) mode="verify"; shift ;;
+    --retag) retag=1; shift ;;
     -m) notes="$2"; shift 2 ;;
     *) echo "未知参数：$1"; exit 2 ;;
   esac
@@ -37,6 +39,17 @@ tag="v$version"
 asset_url="https://github.com/$repo/releases/download/$tag/MacShot-$version.dmg"
 manifest_url="https://github.com/$repo/releases/latest/download/latest.json"
 
+# 远端有没有这个 ref：git ls-remote --exit-code 用 0=找到 / 2=确认没有 / 其它=查询本身失败。
+# 只有"确认没有"才允许挪 ref；查询失败必须当危险处理（宁可停下，也不猜远端是空的）。
+remote_has_ref() {
+  lr=0
+  out=$(git ls-remote --exit-code --$1 origin "$2" 2>/dev/null) || lr=$?
+  if [ "$lr" -eq 0 ]; then return 0; fi
+  if [ "$lr" -eq 2 ]; then return 1; fi
+  echo "✗ 查不到远端有没有 $2（git ls-remote rc=$lr）；不敢假定它是空的"
+  exit 2
+}
+
 branch="release/v$version"
 
 # ── 发布线（AGENTS.md §3.12 / V-067）：tag 与 release 分支都从 plist 的版本号推出来 ──
@@ -48,14 +61,35 @@ if [ "$mode" != "verify" ]; then
   head=$(git rev-parse HEAD)
   if git rev-parse -q --verify "refs/tags/$tag" >/dev/null 2>&1; then
     at=$(git rev-list -n 1 "$tag")
-    [ "$at" = "$head" ] || { echo "✗ tag $tag 已存在但指向 $(printf '%.7s' "$at")，HEAD 是 $(printf '%.7s' "$head")；不猜哪个算数"; exit 2; }
-    echo "→ tag $tag 已存在且就指向当前 HEAD"
+    if [ "$at" = "$head" ]; then
+      echo "→ tag $tag 已存在且就指向当前 HEAD"
+    elif [ "$retag" -eq 1 ]; then
+      # 挪 tag 的唯一前提：**远端没有这个 tag**。推出去过的 tag 是公开事实，挪它会把别人的下载链接变成谎话；
+      # 那种情况只能升版本号重发，所以这里查不到、或查的过程本身失败，一律不挪。
+      if remote_has_ref tags "refs/tags/$tag"; then
+        echo "✗ 远端已有 $tag ⇒ 那是公开事实，不挪。请升 `Config/Info.plist` 的版本号重发一轮。"; exit 2
+      fi
+      git tag -f -a "$tag" -m "MacShot $version" "$head"
+      echo "→ 已按 --retag 把 $tag 从 $(printf '%.7s' "$at") 挪到 $(printf '%.7s' "$head")（远端无此 tag，且包尚未发布）"
+    else
+      echo "✗ tag $tag 指向 $(printf '%.7s' "$at")，HEAD 是 $(printf '%.7s' "$head")：两者对不上。"
+      echo "   发布前返工 ⇒ 加 --retag（远端确认没有该 tag 才允许挪）；已经发布过 ⇒ 升版本号，不许挪。"
+      exit 2
+    fi
   else
     git tag -a "$tag" -m "MacShot $version" "$head"
     echo "→ 已打 tag $tag @ $(printf '%.7s' "$head")"
   fi
   if git rev-parse -q --verify "refs/heads/$branch" >/dev/null 2>&1; then
-    echo "→ 发布分支 $branch 已存在（不重置它：老线上追加提交请手动切过去）"
+    bhead=$(git rev-parse "$branch")
+    if [ "$bhead" = "$head" ]; then
+      echo "→ 发布分支 $branch 已存在且就在当前 HEAD"
+    elif [ "$retag" -eq 1 ] && ! remote_has_ref heads "$branch"; then
+      git branch -f "$branch" "$tag"
+      echo "→ 已按 --retag 把发布分支 $branch 挪到 $tag"
+    else
+      echo "→ 发布分支 $branch 已存在但不在当前 HEAD（不动它：老线上追加提交请手动切过去）"
+    fi
   else
     git branch "$branch" "$tag"
     echo "→ 已建发布分支 $branch @ $tag"
@@ -126,14 +160,52 @@ if [ "$mode" = "publish" ]; then
   fi
 fi
 
+# ── 取远端：本机 2026-11-19 实测，默认 HTTP/2 拉 GitHub 这个域**稳定 rc=56（接收失败）**，
+#    而同一 URL 加 --http1.1 五轮全是 rc=22（＝真的 404）。不降级就会永远报"网络问题"，
+#    真原因（还没发布 / 清单不符）根本走不到。所以传输层失败必须降级再试一次。
+#    用法：net_get <L|IL> <url>；成功返回 0 并把正文放进 NET_OUT。
+NET_RC=0
+NET_OUT=""
+net_get() {
+  NET_RC=0
+  NET_OUT=$(curl -fs$1 "$2" 2>/dev/null) || NET_RC=$?
+  if [ "$NET_RC" -eq 0 ] || [ "$NET_RC" -eq 22 ]; then return "$NET_RC"; fi
+  h1=0
+  body=$(curl -fs$1 --http1.1 "$2" 2>/dev/null) || h1=$?
+  if [ "$h1" -eq 0 ] || [ "$h1" -eq 22 ]; then
+    # 降级只要拿到**判定**（正文或 404）就说明一句：否则读者会把 http1.1 的结论当成 http2 的
+    echo "   （HTTP/2 传输失败 rc=$NET_RC ⇒ 降级 --http1.1 后才拿到判定；本机对 GitHub 的 HTTP/2 通道不稳）"
+  fi
+  if [ "$h1" -eq 0 ]; then
+    NET_OUT=$body; NET_RC=0; return 0
+  fi
+  if [ "$h1" -eq 22 ]; then NET_RC=22; return 22; fi
+  NET_RC=$h1; return "$h1"
+}
+
 # ── 闭环自检：远端清单能下载、且它写的 sha256 真的等于本地产物 ───────────────
 echo "→ 自检远端源：$manifest_url"
-remote=$(curl -fsSL "$manifest_url") || { echo "✗ 拉不到 latest.json（还没传？CDN 缓存？）"; exit 1; }
+# 报错必须分家：curl -f 下 HTTP≥400 是 rc=22（多半"还没发布"），其它 rc 是传输层/DNS/代理故障。
+# 实测踩过一次 curl (16) HTTP2 framing 瞬断，旧文案统一写"还没传？"——那会把网络故障误诊成未发布。
+if ! net_get L "$manifest_url"; then
+  case "$NET_RC" in
+    22) echo "✗ 源返回 HTTP 错误（多半是这个 tag/release 还没发布，或勾了 draft/pre-release）：$manifest_url" ;;
+    *)  echo "✗ 拉不到清单：curl rc=$NET_RC —— 传输层/DNS/代理问题，**不是「还没发布」的证据**" ;;
+  esac
+  exit 1
+fi
+remote=$NET_OUT
 remote_sha=$(printf '%s' "$remote" | sed -n 's/.*"sha256":"\([0-9a-f]*\)".*/\1/p' | head -1)
 remote_bytes=$(printf '%s' "$remote" | sed -n 's/.*"bytes":\([0-9]*\).*/\1/p' | head -1)
 local_sha=$(shasum -a 256 "$dmg" | awk '{print $1}')
 local_bytes=$(stat -f %z "$dmg")
 [ "$remote_sha" = "$local_sha" ] || { echo "✗ 清单校验和与本地产物不符：远端 $remote_sha 本地 $local_sha"; exit 1; }
 [ "$remote_bytes" = "$local_bytes" ] || { echo "✗ 清单字节数与本地不符：远端 $remote_bytes 本地 $local_bytes"; exit 1; }
-curl -fsIL "$asset_url" >/dev/null || { echo "✗ 资产链接还 404：$asset_url"; exit 1; }
+if ! net_get IL "$asset_url"; then
+  case "$NET_RC" in
+    22) echo "✗ 资产链接返回 HTTP 错误（多半没传上去，或 release 不是 latest）：$asset_url" ;;
+    *)  echo "✗ 探资产失败：curl rc=$NET_RC —— 传输层问题，不是没传的证据：$asset_url" ;;
+  esac
+  exit 1
+fi
 echo "✔ 源可用：version=$(printf '%s' "$remote" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p' | head -1) sha256 与字节数都对得上，资产可下载"
