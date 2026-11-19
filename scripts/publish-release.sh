@@ -57,7 +57,9 @@ remote_has_ref() {
   while [ "$tries" -lt 3 ]; do
     tries=$((tries + 1))
     lr=0
-    out=$(GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/true git $ver ls-remote --exit-code --$1 origin "$2" 2>"$err") || lr=$?
+    # 变量名不许撞全局：这里曾经用 `out=`，把清单目录 `out="build/release"` 擦成空串，
+  # 于是 `rm -f "$out/latest.json"` 变成 `rm -f "/latest.json"`，而 -f 连报错都不给（11-19 实测：包更新了、清单还是 18:05 那份）。
+  refs=$(GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/true git $ver ls-remote --exit-code --$1 origin "$2" 2>"$err") || lr=$?
     if [ "$lr" -eq 0 ]; then
       echo "   （远端已有 $2 —— 一次判定就够，不许挪）"
       return 0
@@ -128,10 +130,10 @@ if [ "$mode" != "verify" ]; then
   # 盘上就会留下「新包 + 旧清单」——bytes 还可能恰好相同、sha 完全不同，肉眼看不出来，传上去客户端校验必不过。
   rm -f "$out/latest.json"
   echo "→ 构建 Release 与 DMG"
-  make dmg >/dev/null
+  make dmg
   [ -f "$dmg" ] || { echo "✗ 没有 $dmg"; exit 1; }
   echo "→ 核验 DMG 结构"
-  make verify-dmg >/dev/null
+  make verify-dmg
   sha=$(shasum -a 256 "$dmg" | awk '{print $1}')
   bytes=$(stat -f %z "$dmg")
   mkdir -p "$out"

@@ -62,6 +62,8 @@
 
 - 同时跑两个会签名的目标（例：前一个 `make check` 还没结束又起 `make dmg`）⇒ **两个 `codesign` 抢同一个 `build/Derived` 互锁 27 分钟**。现象是"命令挂着不动"，最容易误判成"钥匙串在等用户点授权"。
 - 卡住先分清是谁：**`ps -axo pid,etime,command | grep codesign` 有两条以上 ⇒ 是自己撞自己**，`kill` 掉多余的那条即可，不要动钥匙串、也不要当成 TCC 问题去排查。
+- **shell 函数里不许复用全局变量名**（11-19 实测咬掉一口）：远端查询 helper 用了 `out=$(git ls-remote …)`，而脚本顶部 `out="build/release"` 是**清单目录**——查询一跑，`out` 就变成 ls-remote 的输出（成功时为空串），于是 `rm -f "$out/latest.json"` 悄悄变成 `rm -f "/latest.json"`，`-f` 连报错都不给，后面 `cat > "$out/latest.json"` 也写到别处。
+  取证方式不是读代码而是看**目录 mtime**：`build/release/` 停在 18:04、`latest.json` 停在 18:05，而 DMG 已经是 21:14 那份 ⇒ "这一轮根本没往这个目录写过东西"。改名为 `refs=` 并加注释；同时把两个子 `make` 的 `>/dev/null` 去掉——吞掉输出之后失败只剩一句 `Error 1`，等于让人重新猜一遍。
 - **别用管道截断 `make dmg` / `make release-bundle` 的输出**（11-19 实测）：`make release-bundle ARGS=… | grep … | tail -8` 会让子 make 与 `hdiutil` 收到 SIGPIPE，脚本**停在写清单之前**，盘上留下上一轮的过期清单——那次两份文件 bytes 恰好相同（1787336）、sha256 完全不同，肉眼和 `ls` 都看不出来。要截输出就 `> /tmp/x.txt 2>&1` 再读文件。脚本现在写完清单立刻**复算配对**（sha256 与 bytes 两项都从盘上重读比对，不对就 `exit 1`），三条反证：篡改 sha ⇒ 红；只改 bytes（sha 对）⇒ 红；还原 ⇒ 绿。
 - 因此 `scripts/probe-update.sh` 这类"启动真 app 再等它打印"的探针**必须带超时**（现为每轮 20s / 全程 90s，`exit 8` 报 watchdog）。上一版没有，挂住的时候屏幕日志是空的，看起来完全像"还在跑"。
 
