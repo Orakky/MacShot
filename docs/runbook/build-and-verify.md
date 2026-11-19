@@ -78,6 +78,15 @@
 | 5 | 网页 releases/new 选**已有** tag，上传 `build/MacShot-<版本>.dmg` 与 `build/release/latest.json` | 两个都要传（客户端按固定名 `latest.json` 取清单）；**不勾 Draft、不勾 Pre-release** ⇒ `/releases/latest/download/` 只解析非草稿非预发布，勾了客户端就永远 404 |
 | 6 | `make release-bundle ARGS=--verify-only` | 拉远端清单，`sha256`/`bytes` 与本地重算逐字段比对，再 `curl -I` 确认资产不是 404。**这一步绿之前"源配好了"没有依据**（`V-066`/`V-067`） |
 
+**git 侧的连通性另一回事（11-19 实测，别把两边的结论互相抄）**：同一时刻 `curl` 加 `--http1.1` 对同一个 URL **稳定**拿到判定（五轮全 `rc=22`），
+而 `git ls-remote` 默认走 HTTP/2 时**七次里只有 1 次**拿到判定（`rc=128`：Failed to connect / `RPC failed; curl 16 Error in the HTTP2 framing layer`），
+强制 `-c http.version=HTTP/1.1` 反而**四轮全 `rc=128`**（Empty reply from server）⇒ **对 git 不许默认降版本**（`GIT_HTTP1=1` 才打开），
+改成**重试三次**：任何一次 `rc=0`（远端已有该 ref）立刻停下不挪，`rc=2` 才算"确认没有"，三次都没判定就明说"查不到、不挪"。
+挪 tag 这件事的权限全押在这三档上，所以宁可停下来让人重跑，也不许把"网络没通"当成"远端是空的"。
+
+**半途跑不许留下会说谎的清单**：`--dry-run` 一开工就先 `rm -f build/release/latest.json`，再构建、再写清单、再复算配对。
+不删的话，被 SIGPIPE 打断的那一轮就是「新包 + 上一轮的旧清单」——实测两份包 bytes 只差 1、sha 完全不同，`ls -la` 看不出来。
+
 **自检的传输层坑（11-19 实测）**：本机 `curl -fsL https://github.com/...:443` 走默认 HTTP/2 **稳定 rc=56（接收失败）**，同一 URL 加 `--http1.1` 才是真的 `rc=22`（404，因为还没发布）。所以 `publish-release.sh` 的自检是"默认试一次，非 22 就降级 `--http1.1` 再试"，并且**降级只要拿到判定就打印一行**——否则读者会把 http1.1 的结论当成 http2 的。报错也分家：`22` 说"多半还没发布/勾了 draft"，其它 rc 说"传输层问题，不是没发布的证据"。
 | 7 | `docs/tasks/done.md` 补一条 E：版本号、tag、commit、第 6 步读数 | 未观察不写完成 |
 

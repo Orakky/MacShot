@@ -46,9 +46,29 @@ remote_has_ref() {
   # 这两个变量只保证一件事：不会卡在"要我输入 GitHub 凭据"上（无 TTY 时那是死路）。
   # 注意它们**不是**上次 rc=128 的原因——`sh -x` 打出真因是 github.com:443 间歇连不上（一次 75s 超时）。
   # 所以失败时必须把 git 的 stderr 原样带出来：`2`=确认没有、`0`=远端已有、其它=真查不到，三者不能混成一个"网络问题"。
+  # GIT_TERMINAL_PROMPT/GIT_ASKPASS 只为别卡在要凭据上。别指望强制 HTTP/1.1：
+  # 11-19 实测 git 侧 `-c http.version=HTTP/1.1` 四轮全 rc=128（Empty reply / 连不上），比默认更差，
+  # 而 curl 侧同一个 URL 加 --http1.1 是稳定拿到判定——两条路不一样，别互相抄。要试就 GIT_HTTP1=1 显式打开。
+  ver=""
+  [ "${GIT_HTTP1:-}" = "1" ] && ver="-c http.version=HTTP/1.1"
   lr=0
+  tries=0
   err=/tmp/macshot-lsremote.err
-  out=$(GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/true git ls-remote --exit-code --$1 origin "$2" 2>"$err") || lr=$?
+  while [ "$tries" -lt 3 ]; do
+    tries=$((tries + 1))
+    lr=0
+    out=$(GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/true git $ver ls-remote --exit-code --$1 origin "$2" 2>"$err") || lr=$?
+    if [ "$lr" -eq 0 ]; then
+      echo "   （远端已有 $2 —— 一次判定就够，不许挪）"
+      return 0
+    fi
+    if [ "$lr" -eq 2 ]; then
+      [ "$tries" -gt 1 ] && echo "   （第 $tries 次查询才拿到判定；本机到 GitHub 的 HTTPS 间歇失败）"
+      return 1
+    fi
+    echo "   （第 $tries 次查询没拿到判定：rc=$lr $(head -1 "$err" | cut -c1-70)）"
+    sleep 3
+  done
   if [ "$lr" -eq 0 ]; then return 0; fi
   if [ "$lr" -eq 2 ]; then return 1; fi
   echo "✗ 查不到远端有没有 $2：git ls-remote rc=$lr，不敢假定它是空的"
@@ -104,6 +124,9 @@ if [ "$mode" != "verify" ]; then
 fi
 
 if [ "$mode" != "verify" ]; then
+  # 先作废上一轮的清单：这一轮若在写新清单之前被打断（实测被管道 SIGPIPE 打断过一次），
+  # 盘上就会留下「新包 + 旧清单」——bytes 还可能恰好相同、sha 完全不同，肉眼看不出来，传上去客户端校验必不过。
+  rm -f "$out/latest.json"
   echo "→ 构建 Release 与 DMG"
   make dmg >/dev/null
   [ -f "$dmg" ] || { echo "✗ 没有 $dmg"; exit 1; }
