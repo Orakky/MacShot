@@ -93,6 +93,14 @@
 **自检的传输层坑（11-19 实测）**：本机 `curl -fsL https://github.com/...:443` 走默认 HTTP/2 **稳定 rc=56（接收失败）**，同一 URL 加 `--http1.1` 才是真的 `rc=22`（404，因为还没发布）。所以 `publish-release.sh` 的自检是"默认试一次，非 22 就降级 `--http1.1` 再试"，并且**降级只要拿到判定就打印一行**——否则读者会把 http1.1 的结论当成 http2 的。报错也分家：`22` 说"多半还没发布/勾了 draft"，其它 rc 说"传输层问题，不是没发布的证据"。
 | 7 | `docs/tasks/done.md` 补一条 E：版本号、tag、commit、第 6 步读数 | 未观察不写完成 |
 
+**代推实跑形状（11-20 0.1.1 轮，`E-111`）**——四条都是当场量出来的，不是推测：
+1. IDEA 的 Push 对话框会把 `main`、`release/v0.1.1`、`v0.1.1` 三组**全标成 `main → origin : main`**，勾了 `Push tags:` 也只推 branch+tag ⇒ 发布分支要**先 `git switch release/v<版本>` 再推一次**（tag 与分支都指向同一个 commit，切过去工作树零变化，推完切回来）；判据始终是 `git ls-remote` 的三行，不是对话框关掉没关掉。
+2. IDEA 侧传输两型失败：`Error in the HTTP2 framing layer` 与 `Failed to connect to github.com port 443 after 75029 ms`，而**同一时刻** CLI `curl` 直连和走本机代理（`127.0.0.1:7897`）对 `github.com` 与 `github.githubassets.com` 都是 `200` ⇒ 这是那条通道的间歇故障，重试即可，别据此说「网不通」，也别把 curl 的处方抄给 git（`AGENTS.md` §3.12 同一条纪律）。
+3. CLI 与 IDEA 内置终端都推不动的**真正原因是没有凭据**（`could not read Username for https://github.com`；`credential.helper osxkeychain` 在系统级 gitconfig 里，但钥匙串那份只归 IDEA）。处方：用 IDEA 推；**不许**为此改 git config、不许抠 IDE 存的凭据、不许让我代输用户名口令。
+4. 网页发布的两个坑：① 说明框工具栏的回形针（`Attach files`）把文件传成**正文** `https://github.com/user-attachments/files/…` 链接，资产必须走下面的 `Attach binaries by dropping them here or selecting them` 区（本项目已踩两次，第二次靠 `setValue` 整段重写说明才清干净）；② 发布前当场断言四项档位：`Tag: v<版本>`、`Existing tag`、`Pre-release Value=0`、`Latest Value=1`——`/releases/latest/download/latest.json` 只解析非草稿非预发布，勾错一个客户端就永远 404。
+**Chrome 某个标签页会把 GitHub 整页渲染成全白**（标题对、正文空、`⌘R`/`⇧⌘R` 都救不回来），开一个新标签页导航过去就正常——先怀疑标签页，再怀疑网络或扩展。
+**装已发布那一份包**：`hdiutil attach build/MacShot-<版本>.dmg` + `ditto /Volumes/MacShot/MacShot.app /Applications/` + `hdiutil detach`，**不要**跑 `make dmg`/`make install`（那会重新压缩换 sha256，远端清单就变成谎话）。装完核 `CFBundleShortVersionString` 与 `Authority=MacShot Dev`。
+
 **老线热修**：切到 `release/v0.1.x` 改，版本升到 `0.1.2`，同批产生 `v0.1.2` + `release/v0.1.2`。注意 GitHub 的 `latest` 别名按**创建时间**解析、不按版本号：发一个更老版本号的热修会把 `latest` 抢过去。客户端 `decide` 是 `latest <= now ⇒ upToDate`，**不会误降级安装**，但新版本用户会看不到真正最新的清单——所以热修也要把版本号往上抬。
 
 **发布之后不许再构建这一版的包**（11-19 实测过代价）：`make dmg` / `make install` / `make release-bundle`（非 `--verify-only`）都会重新压缩 DMG 并换 sha256，而远端 `latest.json` 钉的是**发布那一刻**的字节。一旦重建，客户端下载回来校验必不过（表现是"下载没成功"，文件被删）。要出新的就升 `Config/Info.plist` 的版本号重走一轮；只想装本机最新版就用 `--verify-only` 之外**别碰构建类目标**，需要覆盖安装时先升版本号。
