@@ -26,7 +26,9 @@ tbd=$(grep -rn "待实测" docs 2>/dev/null | wc -l | tr -d ' ')
 note "代码内 UNVERIFIED" "$unv"
 note "文档内 待实测" "$tbd"
 
-proposed=$(grep -c "proposed" docs/adr/README.md || true)
+# 只数**状态列**：以前这里是 grep -c "proposed"，把表头说明文字里那句"状态 proposed 不得落地"也算进去，
+# 于是 16 条全签完之后仍然打印"proposed 4"——一个假红灯，读的人只能猜（11-20 实测）。
+proposed=$(grep -cE '^\| ADR-[0-9]+.*\*\*proposed\*\*' docs/adr/README.md || true)
 note "ADR proposed" "$proposed（>0 表示仍有未签决策，见 docs/adr/README.md）"
 
 if [ "$fail" -eq 0 ]; then echo "✔ doctor 通过"; else echo "✗ doctor 失败"; exit 1; fi
