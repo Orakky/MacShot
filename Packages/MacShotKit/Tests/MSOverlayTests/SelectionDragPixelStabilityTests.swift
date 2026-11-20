@@ -70,7 +70,7 @@ struct SelectionDragPixelStabilityTests {
     // 水平方向补偿正常，垂直方向等于没补 ⇒ 箭头跟着视窗跑。这条已复现到可判定的形状，
     // 但修复还没做，所以先 .disabled 挂着，避免把红的判据混进 `make check` 装作绿（`T-128`）。
     @MainActor
-    @Test("按住选区空白处拖动：箭头在屏幕上的包围盒必须逐帧完全相同（不许 ±1px 抖）", .disabled("判据已复现为红，修复未落地：见 T-128 / E-102"))
+    @Test("按住选区空白处拖动：箭头在屏幕上的包围盒必须逐帧完全相同（不许 ±1px 抖）", .disabled("判据已复现为红，修复未落地：见 T-128 / E-103"))
     func arrowDoesNotJitterWhileWindowMoves() throws {
         let selA = CGRect(x: 10, y: 10, width: 300, height: 180)
         let view = try makeView(elements: [arrowAtTopLeft()], selection: selA)
@@ -80,6 +80,7 @@ struct SelectionDragPixelStabilityTests {
         // 按住选区**右下角空白处**（箭头在左上角 ⇒ 命不中元素 ⇒ dragMode = .move）
         let grab = CGPoint(x: selA.maxX - 12, y: selA.maxY - 12)
         view.mouseDown(with: mouse(.leftMouseDown, grab))
+        #expect(view.dragModeForProbe == "move", "抓取点必须走「移动视窗」支路，实测 dragMode=\(view.dragModeForProbe)")
         // 元组不能 Hashable，用字符串键当"这一帧的位置"指纹
         func key(_ b: (count: Int, minX: Int, minY: Int, maxX: Int, maxY: Int)) -> String {
             "\(b.minX),\(b.minY),\(b.maxX),\(b.maxY)"

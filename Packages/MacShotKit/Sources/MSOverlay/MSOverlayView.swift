@@ -471,6 +471,19 @@ public final class MSOverlayView: NSView {
     /// 探针读数用：拖拽中的草稿是什么种类（不把可变引用递出去）。
     public var draftKindForProbe: MSAnnotationKind? { draft?.kind }
 
+    /// 探针/测试用：这次拖拽到底走了哪条支路（移动视窗 / 拖角改尺寸 / 拖元素）。
+    /// 上一轮判据不成立就有这个因素——抓取点离角 12pt 可能命中的是把手。
+    public var dragModeForProbe: String {
+        switch dragMode {
+        case .newSize: return "newSize"
+        case .move: return "move"
+        case .resize: return "resize"
+        case .moveElement: return "moveElement"
+        case .draw: return "draw"
+        case nil: return "nil"
+        }
+    }
+
     /// 探针读数用：已提交元素数（拖拽中该是 0，屏幕上的墨来自草稿）。
     public var committedElementCount: Int { document?.elements.count ?? -1 }
 
