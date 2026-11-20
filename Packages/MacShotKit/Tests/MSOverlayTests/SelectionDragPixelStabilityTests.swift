@@ -140,6 +140,50 @@ struct SelectionDragPixelStabilityTests {
         }
     }
 
+    /// 三段直接量，不再从画面反推：① 文档里的画布 y ② 烘出来的图里箭头的 y ③ 画到位图后的 y。
+    /// 三段各自符合期望而第三段不对 ⇒ 缺陷在 `ctx.draw(composite, in: sel)`；
+    /// 第二段就不对 ⇒ 缺陷在烘焙（翻转基准/画布尺寸）。
+    @MainActor
+    @Test("诊断：画布 y / 烘焙 y / 位图 y 三段并排（scale 1）", .disabled("诊断打印，不是判据：它证明数据与烘焙两侧都正确，漂在绘制段"))
+    func threeStageDiagnostic() throws {
+        let ctx = CGContext(data: nil, width: 400, height: 250, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(MSColorRGBA.rgb(190, 190, 190).cgColor)
+        ctx.fill(CGRect(x: 0, y: 0, width: 400, height: 250))
+        let frozen = ctx.makeImage()!
+        let oneX = MSDisplay(id: 1, logicalFrame: CGRect(x: 0, y: 0, width: 400, height: 250),
+                             visibleFrame: CGRect(x: 0, y: 0, width: 400, height: 250), scale: 1, isMain: true, localizedName: "1x")
+        let renderer = MSAnnotationRenderer()
+        for dy in [0.0, 2.5, 5.0, 7.5] {
+            let sel = CGRect(x: 13.5, y: 12.5 + dy, width: 300, height: 180)
+            let v = MSOverlayView(display: oneX, frozenFrame: frozen)
+            v.setSelection(CGRect(x: 13.5, y: 12.5, width: 300, height: 180))
+            var doc = v.document!
+            doc.elements.append(arrowAtTopLeft())
+            v.document = doc
+            v.setSelection(sel)                       // 走 retarget
+            let canvasY = v.document?.elements.first?.points.first?.y ?? -1
+            let pixel = oneX.pixelRect(forLogical: sel)
+            let cropped = pixel.flatMap { frozen.cropping(to: $0.cgRect) }
+            let baked = v.document.flatMap { renderer.render($0, source: cropped, intent: .preview) }
+            let bakedY = baked.map { greenTop($0) } ?? -1
+            let cropTopBitmap = Int((250 - sel.maxY).rounded())
+            print("dy=\(dy) 选区maxY=\(sel.maxY) 画布y=\(canvasY) 裁切高=\(pixel?.height ?? -1) 烘焙内y=\(bakedY) 预测位图y=\(cropTopBitmap + bakedY) 预测用画布y=\(cropTopBitmap + Int(canvasY))")
+        }
+    }
+
+    private func greenTop(_ image: CGImage) -> Int {
+        let rep = NSBitmapImageRep(cgImage: image)
+        for y in 0..<rep.pixelsHigh {
+            for x in 0..<rep.pixelsWide {
+                guard let c = rep.colorAt(x: x, y: y) else { continue }
+                if c.greenComponent * 255 > 180 && c.redComponent * 255 < 110 && c.blueComponent * 255 < 110 { return y }
+            }
+        }
+        return -1
+    }
+
     @MainActor
     private func snapshot(_ view: MSOverlayView) throws -> NSBitmapImageRep {
         view.needsDisplay = true
