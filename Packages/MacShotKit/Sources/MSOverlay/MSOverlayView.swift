@@ -921,11 +921,14 @@ public final class MSOverlayView: NSView {
             guard let sel = selection, let id = selectedID else { return }
             let dp = MSIntPoint.canvasPoint(of: p, in: sel, scale: display.scale)
             let dx = dp.x - grab.x, dy = dp.y - grab.y
-            guard var doc = document, let idx = doc.elements.firstIndex(where: { $0.id == id }) else { return }
-            var moved = doc.elements[idx]
-            moved.points = moved.points.map { MSIntPoint(x: $0.x + dx, y: $0.y + dy) }
+            guard var doc = document, doc.elements.contains(where: { $0.id == id }) else { return }
+            // 位移是「按下点→当前点」的**总量**，必须加在 recorder 起点那份元素上。
+            // 加在上一帧已搬过的元素上＝每帧再把全量加一遍 ⇒ 二次增长，
+            // 用户 11-20 看到的「一拖就瞬间飘出选区消失」就是这个（判据 `V-071`：
+            // 逐帧 206→212→220，且拖回按下点回不到原位）。
+            let moved = recorder.elementBefore.translated(by: CGSize(width: CGFloat(dx), height: CGFloat(dy)))
             recorder.update(moved)
-            doc.elements[idx] = moved
+            doc.elements = doc.elements.map { $0.id == moved.id ? moved : $0 }
             document = doc
             cachedComposite = nil
             dragMode = .moveElement(recorder: recorder, grab: grab)

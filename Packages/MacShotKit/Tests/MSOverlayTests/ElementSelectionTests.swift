@@ -103,6 +103,36 @@ struct ElementSelectionTests {
         #expect(!secondUndo, "100 次拖动只留了一条记录")
     }
 
+    /// 用户 11-20 报告：**选中元素后一开始拖，它就瞬间飘出选区消失**。
+    /// 形状是"每帧把累计位移再加一遍到已搬过的元素上"（二次增长），不是坐标换算错。
+    /// 所以判据不看"移动了多少"，只看两条恒等式：① 每一帧的位置 == 起点 + 该帧的总位移；
+    /// ② 拖回按下点必须**一个像素不差**回到原位。累加式实现两条都过不了。
+    @MainActor
+    @Test("拖动元素：位移是「按下点→当前点」的总量，逐帧不许二次增长")
+    func elementDragIsNotCompounding() throws {
+        let e = filledRect(MSIntPoint(x: 200, y: 200), MSIntPoint(x: 320, y: 320), z: 0)
+        let view = try makeView(elements: [e])
+        let start = viewPoint(view, canvas: MSIntPoint(x: 260, y: 260))
+        view.mouseDown(with: mouse(.leftMouseDown, start))
+        #expect(view.selectedID == e.id, "按下即选中")
+        #expect(view.dragModeForProbe == "moveElement", "必须走元素拖动支路，实测 \(view.dragModeForProbe)")
+        let grab = view.docPoint(start, in: view.selection!)
+        let base = try #require(e.points.first)
+
+        for step in 1...4 {
+            let pt = CGPoint(x: start.x + Double(step), y: start.y - Double(step))
+            view.mouseDragged(with: mouse(.leftMouseDragged, pt))
+            let dp = view.docPoint(pt, in: view.selection!)
+            let want = MSIntPoint(x: base.x + (dp.x - grab.x), y: base.y + (dp.y - grab.y))
+            let got = view.document?.elements.first?.points.first
+            #expect(got == want, "第 \(step) 帧：期望 起点+总位移 \(want)，实测 \(got ?? MSIntPoint(x: -1, y: -1))（每帧再加一遍全量就是二次增长）")
+        }
+
+        view.mouseDragged(with: mouse(.leftMouseDragged, start))
+        let back = view.document?.elements.first?.points ?? []
+        #expect(back == e.points, "拖回按下点必须回到原位，实测 \(back) ≠ 原 \(e.points ?? []) ⇒ 元素已经飘走，观感就是「一拖就消失」")
+    }
+
     @MainActor
     @Test("点空白取消选择；Delete 删的是选中元素而不是最上层")
     func clickEmptyClearsAndDeleteTargetsSelection() throws {
