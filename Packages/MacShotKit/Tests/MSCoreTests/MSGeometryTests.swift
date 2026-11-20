@@ -19,11 +19,15 @@ struct MSIntGeometryTests {
                 #expect(abs(moved.x - direct.x) <= 1 && abs(moved.y - direct.y) <= 1,
                         "scale=\(scale) 屏幕点 \(p)：平移量算完是 \(moved)，直接换算是 \(direct) ⇒ 标注会漂")
             }
+            // 逆运算现在必须回到**吸附后**的位移（这就是系统真正采用的那条量），
+            // 同时离鼠标要的浮点位移不许超过半个设备像素——两件事分开断，合成一条就谁也判不出谁。
             let back = MSIntPoint.selectionDelta(fromDocument: d, scale: scale)
-            #expect(abs(back.width - (new.minX - old.minX)) < 0.001,
-                    "逆运算对不上（x）：\(back.width) vs \(new.minX - old.minX)")
-            #expect(abs(back.height - (new.maxY - old.maxY)) < 0.001,
-                    "逆运算对不上（y）：\(back.height) vs \(new.maxY - old.maxY) ⇒ y 方向翻多了或翻少了")
+            let so = MSIntPoint.snappedToPixelGrid(old, scale: scale), sn = MSIntPoint.snappedToPixelGrid(new, scale: scale)
+            let half = 0.5 / scale
+            #expect(back.width == sn.minX - so.minX, "逆运算回不到吸附后的位移（x）：\(back.width) vs \(sn.minX - so.minX)")
+            #expect(back.height == sn.maxY - so.maxY, "逆运算回不到吸附后的位移（y）：\(back.height) vs \(sn.maxY - so.maxY) ⇒ y 方向翻多了或翻少了")
+            #expect(abs(back.width - (new.minX - old.minX)) <= half && abs(back.height - (new.maxY - old.maxY)) <= half,
+                    "吸附后的位移偏离浮点位移超过半个设备像素：\(back) vs 浮点 \(new.minX - old.minX)/\(new.maxY - old.maxY)")
         }
     }
 
@@ -212,6 +216,30 @@ struct CanvasViewRoundTripTests {
         #expect(MSIntPoint.canvasPoint(of: CGPoint(x: 100, y: 500), in: selection, scale: 2) == MSIntPoint(x: 0, y: 0))
         #expect(MSIntPoint.canvasPoint(of: CGPoint(x: 300, y: 350), in: selection, scale: 2) == MSIntPoint(x: 400, y: 300))
     }
+    /// `V-070` 的算术面：元素的画布平移量与取样矩形的边差必须来自**同一张设备网格**，
+    /// 否则"标注的设备行 = 选区设备顶 + 画布 y"就不是恒等式，拖动时每帧差 1px（观感＝框不动、边缘闪）。
+    /// 这里故意用全小数起点/小数步长——整数坐标下两条路恒等，测不出东西（反证 B 用同一个夹具跑出红）。
+    @Test("documentDelta 必须等于设备矩形的边差（整数、零二次取整）")
+    func documentDeltaMatchesDeviceRectEdges() {
+        for scale in [CGFloat(1), 2] {
+            let display = MSDisplay(id: 1, logicalFrame: CGRect(x: 0, y: 0, width: 800, height: 500),
+                                    visibleFrame: CGRect(x: 0, y: 0, width: 800, height: 500),
+                                    scale: scale, isMain: true, localizedName: "t")
+            let old = CGRect(x: 13.4, y: 21.7, width: 300.4, height: 180.6)
+            for step in 1...9 {
+                let new = old.offsetBy(dx: CGFloat(step) * 0.37, dy: CGFloat(step) * 0.23)
+                let d = MSIntPoint.documentDelta(selectionOld: old, to: new, scale: scale)
+                guard let a = display.pixelRect(forLogical: old), let b = display.pixelRect(forLogical: new) else {
+                    Issue.record("scale=\(scale) 夹具选区必须落在屏内"); return
+                }
+                #expect(d.width == d.width.rounded() && d.height == d.height.rounded(),
+                        "scale=\(scale) 帧\(step)：平移量不是整数设备像素 \(d) ⇒ `translated(by:)` 还要再取整一次，逐帧各算一遍就会抖")
+                #expect(d.width == CGFloat(a.minX - b.minX) && d.height == CGFloat(a.minY - b.minY),
+                        "scale=\(scale) 帧\(step)：平移量 \(d) ≠ 取样矩形边差 (\(a.minX - b.minX), \(a.minY - b.minY)) ⇒ 底图与标注不同网格")
+            }
+        }
+    }
+
     @Test("纯平移：两轴都必须给出满额的设备像素位移（否则标注会跟着视窗跑）")
     func pureTranslationGivesFullDeviceDelta() {
         let old = CGRect(x: 100, y: 100, width: 300, height: 180)

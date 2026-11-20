@@ -197,6 +197,7 @@ AppKit 实现（`NSAttributedString`）放 `App/` 或 `MSSession` 的适配层�
 - 触发点：遮罩内拖动把手、方向键微调、切换全屏/重复上次区域（一切 `setSelection` 且 `previous != rect`）。
 - 换算只有一个入口：`MSCore.MSIntPoint.documentDelta(selectionOld:to:scale:)`（`canvasPoint` 的差分形式，
   `ADR-013`）。元素锚点加这个量 ⇒ 屏幕位置不动；逆函数 `selectionDelta` 存在只为让单测能量出"两个方向互为逆运算"。
+- **这条量必须落在设备网格上**：`documentDelta` 先把两个选区各自吸到 `snappedToPixelGrid` 再取边差，画布尺寸直接取 `pixelRect` 的尺寸（不再 `round(尺寸 × scale)` 各算一遍）。三条量同源之后「标注设备行 = 取样设备顶 + 画布 y」才是恒等式；分头取整时它每帧能差 1px，观感是「框不动、里面闪」（`V-070`、`E-110`）。
 - 去留判据：元素外接框（`MSAnnotationGeometry.bounds`）与新画布矩形**相交即保留**，不相交才清。
   压线的元素保留下来、导出时被画布裁掉——这是有意的，不做"按比例缩放"（那是 `FR-ANN-012` 原案的 P1 形态，用户没要）。
 - 撤销：`remove` + `replace` 合成一条 `composite`，`⌘Z` 一次连位置带条数一起还回。

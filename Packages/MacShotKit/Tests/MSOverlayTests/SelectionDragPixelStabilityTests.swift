@@ -6,15 +6,20 @@ import MSTestSupport
 import Testing
 @testable import MSOverlay
 
-/// 用户 11-20 的描述把问题钉死了：**加一个箭头标注，按住拖动选区视窗，箭头有"跟着移动"的闪烁感。**
-/// 上一轮我写的测试容差给了 ±2 设备像素，正好把 ±1px 的抖动放过去了（所以"反证打不出来"）。
-/// 这条判据不留容差：拖动过程中，箭头在**屏幕上的包围盒必须逐帧完全相同**——
-/// 选区在动、标注不许动（`V-056` 的原地保留，加上"不许抖"）。
+/// 用户 11-20 的两条描述合起来把问题钉死了：① 加一个箭头标注，按住拖动选区视窗，箭头有
+/// "跟着移动"的闪烁感；② 我给出"位置 vs 边缘"二选一时，答的是**边缘在闪、位置不动**。
+///
+/// "位置不动、边缘闪"只有一种形状能同时成立：**同一帧里两份几何各算了一遍**——
+/// 画布尺寸按 `round(宽 × scale)` 算，取样按"两条边各自 round 再相减"算。
+/// 两者差 1 像素时，`render` 把 301px 的底图塞进 300px 的画布（再按选区放大画回屏幕），
+/// 于是背景逐帧非整数重采样、标注却按整数画 ⇒ 框不动、里面的画面与箭头边缘在跳。
+/// 小数原点每帧都在移动 ⇒ 差值在 0/1 之间反复 ⇒ 观感就是"抖"。
+///
+/// 所以这条判据**不留容差**，也不看耗时：
+/// ① 取样尺寸 == 画布尺寸（逐帧，零容差）；
+/// ② 箭头的设备行 `选区设备顶 + 画布 y` 逐帧完全相同（这是"屏幕位置不动"的定义本身）；
+/// ③ 截图位图里箭头绿色包围盒逐帧完全相同（端到端，覆盖绘制段）。
 struct SelectionDragPixelStabilityTests {
-    // 用户的屏实测是 **scale 1.0**（KG251Q 1920x1080@x1.0），夹具却是 scale 2
-    // ⇒ 漂移到底是产品缺陷还是夹具的分辨率不匹配，必须两种 scale 各跑一遍才敢说。
-    private static let display = MSTestCard.display          // 400×250 逻辑点，scale 2
-
     private func mouse(_ type: CGEventType, _ p: CGPoint) -> NSEvent {
         let src = CGEventSource(stateID: .combinedSessionState)
         let realHeight = NSScreen.screens.first?.frame.height ?? 1080
@@ -23,165 +28,44 @@ struct SelectionDragPixelStabilityTests {
         return NSEvent(cgEvent: cg)!
     }
 
+    /// scale 1 —— 与用户实屏一致（KG251Q 1920×1080@x1.0）。夹具分辨率必须等于被测屏，
+    /// 否则量级对不上（上一轮判据不敢开口的原因之一）。
+    private static let oneX = MSDisplay(id: 1, logicalFrame: CGRect(x: 0, y: 0, width: 800, height: 500),
+                                        visibleFrame: CGRect(x: 0, y: 0, width: 800, height: 500),
+                                        scale: 1, isMain: true, localizedName: "1x")
+
+    /// 背景要是**有周期的条纹**：底图被非整数重采样时，条纹间距会变，像素级量得出来；
+    /// 纯灰底（上一版夹具）对重采样完全不敏感，所以那条判据当时只能量到"位置"。
     @MainActor
-    private func makeView(elements: [MSAnnotationElement], selection: CGRect) throws -> MSOverlayView {
+    private func stripedFrame() -> CGImage {
         let ctx = CGContext(data: nil, width: 800, height: 500, bitsPerComponent: 8, bytesPerRow: 0,
                             space: CGColorSpace(name: CGColorSpace.sRGB)!,
                             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-        ctx.setFillColor(MSColorRGBA.rgb(190, 190, 190).cgColor)
-        ctx.fill(CGRect(x: 0, y: 0, width: 800, height: 500))
-        let view = MSOverlayView(display: Self.display, frozenFrame: ctx.makeImage()!)
-        view.setSelection(selection)
-        if !elements.isEmpty {
-            var doc = try #require(view.document, "setSelection 之后文档应已按真实像素建好")
-            for e in elements { doc.elements.append(e) }
-            view.document = doc
+        for x in 0..<800 {
+            let v: UInt8 = (x / 3) % 2 == 0 ? 90 : 191
+            ctx.setFillColor(MSColorRGBA.rgb(v, v, v).cgColor)
+            ctx.fill(CGRect(x: CGFloat(x), y: 0, width: 1, height: 500))
         }
-        view.tool = .select
-        return view
+        return ctx.makeImage()!
     }
 
-    /// 一个箭头，放在选区的**左上角区域**，这样按住选区右下角拖就是"移动视窗"而不是"拖元素"。
-    private func arrowAtTopLeft() -> MSAnnotationElement {
+    /// 界面里不存在的纯绿，且必须与工具条/把手/高亮的蓝都不同色（撞色就会把 chrome 量进包围盒）。
+    private func arrow() -> MSAnnotationElement {
         var style = MSAnnotationStyle.standard
-        // 夹具色必须与界面 chrome 不撞：上一版用 #E83347（工具条选中色就是这个红），
-        // 于是"包围盒"把跟着选区一起走的工具条/把手也算进去（量出来宽 300+px，比箭头本身大得多）——
-        // 测的其实是 chrome，不是箭头。换成界面里不存在的纯绿。
         style.stroke = .rgba(0, 255, 0, 1)
         return MSAnnotationElement(kind: .arrow, points: [MSIntPoint(x: 40, y: 40), MSIntPoint(x: 150, y: 110)],
                                    style: style, z: 0)
     }
 
-    /// 直接按**箭头的红色**找像素，而不是与底图做差：选区在动 ⇒ 底图每帧都不同，
-    /// 做差会把"背景移动"也算成差异，包围盒就没法比了（上一版判据不成立也有这个因素）。
     @MainActor
-    private func arrowBox(_ rep: NSBitmapImageRep) -> (count: Int, minX: Int, minY: Int, maxX: Int, maxY: Int) {
-        var count = 0, minX = rep.pixelsWide, minY = rep.pixelsHigh, maxX = -1, maxY = -1
-        for y in 0..<rep.pixelsHigh {
-            for x in 0..<rep.pixelsWide {
-                guard let c = rep.colorAt(x: x, y: y) else { continue }
-                let r = c.redComponent * 255, g = c.greenComponent * 255, bl = c.blueComponent * 255
-                // 箭头笔色 #E83347；抗锯齿边缘允许半程衰减
-                if g > 180 && r < 110 && bl < 110 {
-                    count += 1
-                    minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
-                }
-            }
-        }
-        return (count, minX, minY, maxX, maxY)
-    }
-
-    // 判据**当前是红的**（实测逐帧 minY 30→27→25→22→20→17，minX 恒 29）：
-    // 水平方向补偿正常，垂直方向等于没补 ⇒ 箭头跟着视窗跑。这条已复现到可判定的形状，
-    // 但修复还没做，所以先 .disabled 挂着，避免把红的判据混进 `make check` 装作绿（`T-128`）。
-    @MainActor
-    @Test("按住选区空白处拖动：箭头在屏幕上的包围盒必须逐帧完全相同（不许 ±1px 抖）", .disabled("夹具与真机量级不一致（真机日志已给出两段根因：canvasH 振荡、绘制目标小数行）。裁判是真机，见 T-128 / E-109"))
-    func arrowDoesNotJitterWhileWindowMoves() throws {
-        let selA = CGRect(x: 10, y: 10, width: 300, height: 180)
-        let view = try makeView(elements: [arrowAtTopLeft()], selection: selA)
-        let first = arrowBox(try snapshot(view))
-        #expect(first.count > 30, "起始帧必须有箭头（实测 \(first.count)）")
-
-        // 按住选区**右下角空白处**（箭头在左上角 ⇒ 命不中元素 ⇒ dragMode = .move）
-        let grab = CGPoint(x: selA.maxX - 12, y: selA.maxY - 12)
-        view.mouseDown(with: mouse(.leftMouseDown, grab))
-        #expect(view.dragModeForProbe == "move", "抓取点必须走「移动视窗」支路，实测 dragMode=\(view.dragModeForProbe)")
-        // 元组不能 Hashable，用字符串键当"这一帧的位置"指纹
-        func key(_ b: (count: Int, minX: Int, minY: Int, maxX: Int, maxY: Int)) -> String {
-            "\(b.minX),\(b.minY),\(b.maxX),\(b.maxY)"
-        }
-        var boxes: [String] = [key(first)]
-        for step in 1...5 {
-            let p = CGPoint(x: grab.x + CGFloat(step) * 3.5, y: grab.y + CGFloat(step) * 2.5)
-            view.mouseDragged(with: mouse(.leftMouseDragged, p))
-            let b = arrowBox(try snapshot(view))
-            #expect(b.count > 30, "第 \(step) 帧箭头消失了（\(b.count) 个采样点）")
-            boxes.append(key(b))
-            // 分开"数据错"与"画错"：文档里箭头的画布坐标 + 当时的选区，与实测包围盒并排打出来。
-            // 若文档坐标随帧变化符合"屏幕位置不变"的期望而包围盒仍漂 ⇒ 缺陷在绘制映射；
-            // 若文档坐标本身就跟着视窗走 ⇒ 缺陷在 retarget 的数据侧。
-            let pts = (view.document?.elements.first?.points ?? []).map { "\($0.x),\($0.y)" }.joined(separator: " ")
-            let selNow = view.selection.map { "\($0.minX),\($0.minY),\($0.width),\($0.height)" } ?? "nil"
-            print("帧\(step) 文档点=[\(pts)] 选区=\(selNow) 实测盒=\(key(b))")
-        }
-        let distinct = Set(boxes)
-        let positions = distinct.sorted().joined(separator: " | ")
-        Issue.record("逐帧位置 \(boxes.joined(separator: " -> "))")
-        #expect(distinct.count == 1, "箭头跟着视窗抖了：逐帧出现 \(distinct.count) 种位置 \(positions)，这就是用户说的「拖动视窗时箭头有点移动」")
-    }
-
-    @MainActor
-    @Test("scale 1（与用户实屏一致）时同样逐帧量：区分产品缺陷与夹具分辨率")
-    func measurementAtScaleOne() throws {
-        let selA = CGRect(x: 10, y: 10, width: 300, height: 180)
-        let view = try makeView(elements: [arrowAtTopLeft()], selection: selA)
-        _ = view
-        // 这里只打印，不断言：先看 scale 1 下漂移是否还在
-        let ctx = CGContext(data: nil, width: 800, height: 500, bitsPerComponent: 8, bytesPerRow: 0,
-                            space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-        ctx.setFillColor(MSColorRGBA.rgb(190, 190, 190).cgColor)
-        ctx.fill(CGRect(x: 0, y: 0, width: 800, height: 500))
-        let oneX = MSDisplay(id: 1, logicalFrame: CGRect(x: 0, y: 0, width: 400, height: 250),
-                             visibleFrame: CGRect(x: 0, y: 0, width: 400, height: 250), scale: 1, isMain: true, localizedName: "1x")
-        let v1 = MSOverlayView(display: oneX, frozenFrame: ctx.makeImage()!)
-        v1.setSelection(selA)
-        var doc = v1.document!
-        doc.elements.append(arrowAtTopLeft())
-        v1.document = doc
-        v1.tool = .select
-        let grab = CGPoint(x: selA.maxX - 40, y: selA.maxY - 40)
-        v1.mouseDown(with: mouse(.leftMouseDown, grab))
-        print("scale1 dragMode=\(v1.dragModeForProbe) repSize=\(try snapshot(v1).pixelsWide)x\(try snapshot(v1).pixelsHigh) bounds=\(v1.bounds.width)x\(v1.bounds.height)")
-        for step in 1...4 {
-            v1.mouseDragged(with: mouse(.leftMouseDragged, CGPoint(x: grab.x + CGFloat(step) * 3.5, y: grab.y + CGFloat(step) * 2.5)))
-            let b = arrowBox(try snapshot(v1))
-            print("scale1 帧\(step) 盒=\(b.minX),\(b.minY),\(b.maxX),\(b.maxY) 文档点=\((v1.document?.elements.first?.points ?? []).map { "\($0.x),\($0.y)" }.joined(separator: " ")) 选区=\(v1.selection.map { "\($0.minX),\($0.minY)" } ?? "")")
-        }
-    }
-
-    /// 三段直接量，不再从画面反推：① 文档里的画布 y ② 烘出来的图里箭头的 y ③ 画到位图后的 y。
-    /// 三段各自符合期望而第三段不对 ⇒ 缺陷在 `ctx.draw(composite, in: sel)`；
-    /// 第二段就不对 ⇒ 缺陷在烘焙（翻转基准/画布尺寸）。
-    @MainActor
-    @Test("诊断：画布 y / 烘焙 y / 位图 y 三段并排（scale 1）", .disabled("诊断打印，不是判据：它证明数据与烘焙两侧都正确，漂在绘制段"))
-    func threeStageDiagnostic() throws {
-        let ctx = CGContext(data: nil, width: 400, height: 250, bitsPerComponent: 8, bytesPerRow: 0,
-                            space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-        ctx.setFillColor(MSColorRGBA.rgb(190, 190, 190).cgColor)
-        ctx.fill(CGRect(x: 0, y: 0, width: 400, height: 250))
-        let frozen = ctx.makeImage()!
-        let oneX = MSDisplay(id: 1, logicalFrame: CGRect(x: 0, y: 0, width: 400, height: 250),
-                             visibleFrame: CGRect(x: 0, y: 0, width: 400, height: 250), scale: 1, isMain: true, localizedName: "1x")
-        let renderer = MSAnnotationRenderer()
-        for dy in [0.0, 2.5, 5.0, 7.5] {
-            let sel = CGRect(x: 13.5, y: 12.5 + dy, width: 300, height: 180)
-            let v = MSOverlayView(display: oneX, frozenFrame: frozen)
-            v.setSelection(CGRect(x: 13.5, y: 12.5, width: 300, height: 180))
-            var doc = v.document!
-            doc.elements.append(arrowAtTopLeft())
-            v.document = doc
-            v.setSelection(sel)                       // 走 retarget
-            let canvasY = v.document?.elements.first?.points.first?.y ?? -1
-            let pixel = oneX.pixelRect(forLogical: sel)
-            let cropped = pixel.flatMap { frozen.cropping(to: $0.cgRect) }
-            let baked = v.document.flatMap { renderer.render($0, source: cropped, intent: .preview) }
-            let bakedY = baked.map { greenTop($0) } ?? -1
-            let cropTopBitmap = Int((250 - sel.maxY).rounded())
-            print("dy=\(dy) 选区maxY=\(sel.maxY) 画布y=\(canvasY) 裁切高=\(pixel?.height ?? -1) 烘焙内y=\(bakedY) 预测位图y=\(cropTopBitmap + bakedY) 预测用画布y=\(cropTopBitmap + Int(canvasY))")
-        }
-    }
-
-    private func greenTop(_ image: CGImage) -> Int {
-        let rep = NSBitmapImageRep(cgImage: image)
-        for y in 0..<rep.pixelsHigh {
-            for x in 0..<rep.pixelsWide {
-                guard let c = rep.colorAt(x: x, y: y) else { continue }
-                if c.greenComponent * 255 > 180 && c.redComponent * 255 < 110 && c.blueComponent * 255 < 110 { return y }
-            }
-        }
-        return -1
+    private func makeView(selection: CGRect) throws -> MSOverlayView {
+        let view = MSOverlayView(display: Self.oneX, frozenFrame: stripedFrame())
+        view.setSelection(selection)
+        var doc = try #require(view.document, "setSelection 之后文档应已按真实像素建好")
+        doc.elements.append(arrow())
+        view.document = doc
+        view.tool = .select
+        return view
     }
 
     @MainActor
@@ -190,5 +74,67 @@ struct SelectionDragPixelStabilityTests {
         let rep = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
         view.cacheDisplay(in: view.bounds, to: rep)
         return rep
+    }
+
+    /// 只扫**选区设备矩形内部**：上一版在整幅位图上找绿，结果第一帧把选区外的绿色 chrome
+    /// 也量进包围盒（盒宽 380px、比箭头本身大得多）——量的就不是箭头了。
+    private func greenBox(_ rep: NSBitmapImageRep, in scan: MSIntRect) -> (count: Int, minX: Int, minY: Int, maxX: Int, maxY: Int) {
+        var count = 0, minX = rep.pixelsWide, minY = rep.pixelsHigh, maxX = -1, maxY = -1
+        for y in max(0, scan.minY)..<min(rep.pixelsHigh, scan.maxY) {
+            for x in max(0, scan.minX)..<min(rep.pixelsWide, scan.maxX) {
+                guard let c = rep.colorAt(x: x, y: y) else { continue }
+                if c.greenComponent * 255 > 180 && c.redComponent * 255 < 110 && c.blueComponent * 255 < 110 {
+                    count += 1
+                    minX = min(minX, x); maxX = max(maxX, x)
+                    minY = min(minY, y); maxY = max(maxY, y)
+                }
+            }
+        }
+        return (count, minX, minY, maxX, maxY)
+    }
+
+    /// 一次纯平移拖动，逐帧记录三段真值并当场判定。
+    /// 起点故意取**小数**（13.4 / 21.7 / 300.4 × 180.6）：整数起点会让"两条边分别取整"与
+    /// "尺寸取整"永远相等，那条判据就变成空转（11-20 反证实测：整数起点的夹具跑不出红）。
+    @MainActor
+    private func runMove(steps: Int, dx: CGFloat, dy: CGFloat,
+                         label: String) throws -> [(pair: Bool, devRow: Int, box: String, note: String)] {
+        let start = CGRect(x: 13.4, y: 21.7, width: 300.4, height: 180.6)
+        let view = try makeView(selection: start)
+        let grab = CGPoint(x: start.maxX - 12, y: start.maxY - 12)   // 右下空白 ⇒ dragMode = .move
+        view.mouseDown(with: mouse(.leftMouseDown, grab))
+        #expect(view.dragModeForProbe == "move", "抓取点必须走「移动视窗」支路，实测 \(view.dragModeForProbe)")
+        var rows: [(pair: Bool, devRow: Int, box: String, note: String)] = []
+        for step in 0...steps {
+            if step > 0 {
+                view.mouseDragged(with: mouse(.leftMouseDragged,
+                                              CGPoint(x: grab.x + CGFloat(step) * dx, y: grab.y + CGFloat(step) * dy)))
+            }
+            let sel = try #require(view.selection, "拖动过程中选区不该消失")
+            let pixel = try #require(Self.oneX.pixelRect(forLogical: sel), "选区应落在屏内")
+            let canvas = try #require(view.document?.canvasSize, "文档必须在")
+            let elemY = view.document?.elements.first?.points.first?.y ?? -1
+            let b = greenBox(try snapshot(view), in: pixel)
+            // ① 取样与画布必须是同一个矩形；② 箭头的设备行 = 选区设备顶 + 画布 y
+            rows.append((pixel.width == canvas.width && pixel.height == canvas.height,
+                         pixel.minY + elemY,
+                         b.count > 30 ? "\(b.minX),\(b.minY),\(b.maxX),\(b.maxY) c\(b.count)" : "丢失(\(b.count))",
+                         "crop=\(pixel.width)x\(pixel.height) canvas=\(canvas.width)x\(canvas.height) elemY=\(elemY)"))
+        }
+        for (i, r) in rows.enumerated() { print("【\(label)】帧\(i) pair=\(r.pair) devRow=\(r.devRow) 盒=\(r.box) | \(r.note)") }
+        return rows
+    }
+
+    @MainActor
+    @Test("纯平移选区：取样矩形必须就是画布矩形，箭头的设备行与像素包围盒逐帧零变化")
+    func pureMoveKeepsDeviceGeometryPaired() throws {
+        // 每帧位移 0.37 / 0.23 pt —— 与真机日志同一量级（当时读到 maxY 每帧 +0.23）。
+        let rows = try runMove(steps: 9, dx: 0.37, dy: 0.23, label: "平移")
+        let broken = rows.filter { !$0.pair }.count
+        #expect(broken == 0, "有 \(broken)/\(rows.count) 帧取样尺寸 ≠ 画布尺寸 ⇒ 底图被逐帧非整数重采样，这就是「框不动、边缘闪」")
+        let devRows = Set(rows.map(\.devRow))
+        #expect(devRows.count == 1, "箭头的设备行逐帧出现 \(devRows.count) 种 \(devRows.sorted()) ⇒ 相对屏幕在动，不是相对背景在动")
+        let boxes = Set(rows.map(\.box))
+        #expect(boxes.count == 1, "拖动视窗时箭头像素盒有 \(boxes.count) 种：\(boxes.sorted())")
     }
 }

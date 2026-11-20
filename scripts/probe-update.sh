@@ -7,7 +7,10 @@ cd "$root"
 app="build/Derived/Build/Products/Debug/MacShot.app"
 fake="$root/build/fake-release"
 rm -rf "$fake"; mkdir -p "$fake"
-cp "$root/build/MacShot-0.1.0.dmg" "$fake/MacShot-9.9.9.dmg" 2>/dev/null || { make dmg >/dev/null; cp "$root/build/MacShot-0.1.0.dmg" "$fake/MacShot-9.9.9.dmg"; }
+# 包名里的版本号必须从 plist 推，不许写死：写死的那份一升版本就找不到文件，
+# 而 `make dmg` 造出来的是**新版本**的包 —— 老脚本当时会静默拷错代（V-067 的同一类形状）。
+cur_ver=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Config/Info.plist)
+cp "$root/build/MacShot-$cur_ver.dmg" "$fake/MacShot-9.9.9.dmg" 2>/dev/null || { make dmg >/dev/null; cp "$root/build/MacShot-$cur_ver.dmg" "$fake/MacShot-9.9.9.dmg"; }
 sha=$(shasum -a 256 "$fake/MacShot-9.9.9.dmg" | awk '{print $1}')
 bytes=$(stat -f %z "$fake/MacShot-9.9.9.dmg")
 

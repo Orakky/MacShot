@@ -32,8 +32,13 @@ public struct MSIntPoint: Hashable, Sendable, Codable {
     }
 
     public static func documentDelta(selectionOld old: CGRect, to new: CGRect, scale: CGFloat) -> CGSize {
-        CGSize(width: (old.minX - new.minX) * scale,
-               height: (new.maxY - old.maxY) * scale)     // y 向下：选区在屏幕上往上移 ⇒ 元素画布 y 变大
+        // 必须先把两个矩形各自吸到设备像素网格，再取边差。直接用浮点边差 ⇒ 这条量和"取样/画布"
+        // 用的整数边各算一遍，同一帧里能差 1px：箭头的设备行 = 选区设备顶 + 画布 y 就会逐帧 337/338 跳
+        // （11-20 判据 V-070 实测 6/10 帧对不上，观感＝"框不动、边缘闪"）。
+        // 吸附之后两条边都落在整数设备上，差值本身就是整数，`translated(by:)` 不再二次取整。
+        let o = snappedToPixelGrid(old, scale: scale), n = snappedToPixelGrid(new, scale: scale)
+        return CGSize(width: (o.minX - n.minX) * scale,
+                      height: (n.maxY - o.maxY) * scale)   // y 向下：选区在屏幕上往上移 ⇒ 元素画布 y 变大
     }
 
     /// 反向：已知画布平移量，求选区在视图里动了多少（单测用来验两个方向互为逆运算）。

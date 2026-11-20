@@ -288,15 +288,17 @@ public final class MSOverlayView: NSView {
     }
 
     private func canvasSize(for rect: CGRect) -> MSIntSize {
-        // 画布尺寸必须由**尺寸本身**取整，不能用"两条边各自取整再相减"：
-        // 纯平移选区时逻辑尺寸恒定，但小数原点让 pixelRect 的高在 338/339 之间反复跳，
-        // 而 `renderElements` 的翻转基准就是 canvas.height ⇒ 每跳一次整层标注上下挪 1px。
-        // 水平方向没有这个翻转基准，所以用户看到的是"X 不动、只有 Y 抖"（11-20 真机日志）。
-        let w = Int((rect.width * display.scale).rounded())
-        let h = Int((rect.height * display.scale).rounded())
-        if w > 0, h > 0 { return MSIntSize(width: w, height: h) }
-        guard let pixel = display.pixelRect(forLogical: globalRect(rect)) else { return .zero }
-        return pixel.size
+        // 画布尺寸**必须就是这一帧取样用的那个设备矩形**，不许自己再按"尺寸 × scale"round 一遍：
+        // `croppedSource` 走 `pixelRect`（两条边各取整再相减），两条路各算一次就会差 1px，
+        // 于是 `render` 把 301px 的底图塞进 300px 的画布、再按选区放大画回屏幕
+        // ⇒ 背景逐帧非整数重采样、标注却按整数画 = 用户 11-20 答的"位置不动、边缘在闪"（`V-070`）。
+        // 先吸附再换算，使画布 / 取样 / `documentDelta` 三条量落在同一张设备网格上；
+        // 设备顶 = `pixelRect.minY` 与元素平移同源 ⇒ 标注的设备行由构造恒定，不再靠"尺寸别抖"撑着。
+        let snapped = MSIntPoint.snappedToPixelGrid(rect, scale: display.scale)
+        if let pixel = display.pixelRect(forLogical: globalRect(snapped)) { return pixel.size }
+        // 选区还在拖成 0×0（或整块跑到屏外）时 `pixelRect` 返回 nil，这里退回浮点尺寸。
+        let w = Int((rect.width * display.scale).rounded()), h = Int((rect.height * display.scale).rounded())
+        return w > 0 && h > 0 ? MSIntSize(width: w, height: h) : .zero
     }
 
     private func globalRect(_ rect: CGRect) -> CGRect {
@@ -334,6 +336,7 @@ public final class MSOverlayView: NSView {
             // 先算工具条再画读数：读数的落位要看工具条占没占外侧（同帧真值，不用上一帧的 layout）
             drawToolbar(sel, in: ctx)
             drawReadout(sel, in: ctx)
+            selfCheckChromeSweep()      // 同帧真值：chrome 落位必须在它算完之后比
         } else {
             ctx.setFillColor(MSColorRGBA.rgba(0, 0, 0, scrim).cgColor)
             ctx.fill(bounds)
@@ -370,15 +373,76 @@ public final class MSOverlayView: NSView {
         guard rawSel.width > 1, rawSel.height > 1 else { return }
         // 绘制目标吸附到设备像素网格：小数原点 + 像素精确的烘焙图 = 逐帧 ±1px 微抖（见 `MSIntPoint.snappedToPixelGrid`）。
         let sel = MSIntPoint.snappedToPixelGrid(rawSel, scale: display.scale)
+        let cropped = croppedSource(for: sel)
         let composite = compositedCrop(for: sel)
 
         ctx.saveGState()
         ctx.interpolationQuality = .none
         if let composite { ctx.draw(composite, in: sel) }
-        else if let cropped = croppedSource(for: sel) { ctx.draw(cropped, in: sel) }
+        else if let cropped { ctx.draw(cropped, in: sel) }
         ctx.restoreGState()
         // 拖拽中的草稿走矢量层，和提交后的元素同一条渲染路径：所见=所存。
-        if draft != nil, let source = croppedSource(for: sel) { drawDraft(in: sel, source: source, in: ctx) }
+        if draft != nil, let source = cropped { drawDraft(in: sel, source: source, in: ctx) }
+        v070AnnoViewRect = document?.elements.first.flatMap { element in
+            MSAnnotationGeometry.bounds(of: element).map { box in
+                CGRect(x: sel.minX + CGFloat(box.minX) / display.scale,
+                       y: sel.maxY - CGFloat(box.maxY) / display.scale,
+                       width: CGFloat(box.width) / display.scale, height: CGFloat(box.height) / display.scale)
+            }
+        }
+        selfCheckDragGeometry(drawSel: sel, rawSel: rawSel, drawn: composite ?? cropped)
+    }
+
+    // MARK: - `V-070` 拖动自检（只在真机上才有的那一半证据）
+
+    /// 一次"移动视窗"拖动结束时打**一条**读数：帧数、其中小数边几帧、`crop ≠ 画布`几帧、标注设备行变了多少次。
+    /// 为什么要留：上一轮的临时日志打的是**吸附后**的矩形，在 scale 1 下永远显示 `.00`，
+    /// 于是"真机的输入到底是不是小数"这个前提它答不了（`E-110`）。这条把原始 `maxY × scale` 的分数部分一起带出来。
+    private var v070Frames = 0
+    private var v070Fractional = 0
+    private var v070Unpaired = 0
+    private var v070RowChanges = 0
+    private var v070LastRow: Int?
+    private var v070Anchor: UUID?
+    /// 药丸本轮画在哪（`drawReadout` 写）与标注在视图里的外接框（`drawSelectionContents` 写）。
+    /// 拖动时工具条/药丸会**扫过**标注：这两个量一比就知道"闪"是不是盖造成的（`E-110` 的另一支）。
+    private var readoutRect: CGRect?
+    private var v070AnnoViewRect: CGRect?
+    private var v070CoverChanges = 0
+    private var v070WasCovered: Bool?
+
+    private func selfCheckDragGeometry(drawSel: CGRect, rawSel: CGRect, drawn: CGImage?) {
+        guard case .move = dragMode, let drawn, let canvas = document?.canvasSize,
+              let anchor = document?.elements.first,
+              let pixel = display.pixelRect(forLogical: globalRect(drawSel)) else { return }
+        // 锚点换了元素（被裁掉/被清掉）就不是同一条量，累计值作废，免得把"换了元素"报成"抖"。
+        if let v070Anchor, v070Anchor != anchor.id {
+            v070Frames = 0; v070Fractional = 0; v070Unpaired = 0; v070RowChanges = 0
+        }
+        v070Anchor = anchor.id
+        v070Frames += 1
+        if (rawSel.maxY * display.scale).truncatingRemainder(dividingBy: 1) != 0 { v070Fractional += 1 }
+        if drawn.width != canvas.width || drawn.height != canvas.height { v070Unpaired += 1 }
+        let row = pixel.minY + (anchor.points.first?.y ?? 0)
+        if let last = v070LastRow, last != row { v070RowChanges += 1 }
+        v070LastRow = row
+    }
+
+    /// 工具条/药丸是否压在这一条标注上，以及**这个"压/没压"逐帧变了没有**——
+    /// 变一次就是一次"箭头被 chrome 扫过去"，观感＝位置不动、边上闪一下。
+    private func selfCheckChromeSweep() {
+        guard case .move = dragMode, let anno = v070AnnoViewRect else { return }
+        let covered = [toolbarLayout?.rect, readoutRect].compactMap { $0 }.contains { $0.intersects(anno) }
+        if let was = v070WasCovered, was != covered { v070CoverChanges += 1 }
+        v070WasCovered = covered
+    }
+
+    private func logDragGeometryCheck() {
+        guard case .move = dragMode, v070Frames > 0 else { return }
+        MSLog.info(.overlay, "V-070 拖动自检：帧=\(self.v070Frames) 小数边=\(self.v070Fractional) "
+                            + "取样≠画布=\(self.v070Unpaired) 设备行变化=\(self.v070RowChanges) "
+                            + "chrome 扫过标注=\(self.v070CoverChanges)")
+        v070Frames = 0; v070Fractional = 0; v070Unpaired = 0; v070RowChanges = 0; v070LastRow = nil; v070CoverChanges = 0; v070WasCovered = nil; v070Anchor = nil
     }
 
     /// 边画边看到形状跟着走（`FR-ANN-002`）。贴图编辑器一直有这一层（`MSPinWindow` 的 draft），
@@ -612,6 +676,7 @@ public final class MSOverlayView: NSView {
         let size = s.size()
         let p = MSOverlayToolbar.readoutOrigin(selection: sel, bounds: bounds,
                                               readoutSize: size, toolbar: toolbarLayout?.rect)
+        readoutRect = CGRect(origin: p, size: size)
         s.draw(at: p)
     }
 
@@ -776,6 +841,7 @@ public final class MSOverlayView: NSView {
         isDraggingSelection = true
         if let sel = selection {
             selectionDragBaseline = (sel, document?.elements ?? [])
+            v070Frames = 0; v070Fractional = 0; v070Unpaired = 0; v070RowChanges = 0; v070LastRow = nil; v070CoverChanges = 0; v070WasCovered = nil; v070Anchor = nil
             let h = MSSelectionGeometry.handle(at: p, of: sel)
             switch h {
             case .body: dragMode = .move(grab: p, original: sel)
@@ -880,6 +946,7 @@ public final class MSOverlayView: NSView {
     }
 
     public override func mouseUp(with event: NSEvent) {
+        logDragGeometryCheck()
         isDraggingSelection = false
         selectionDragBaseline = nil
         defer { dragMode = nil }
