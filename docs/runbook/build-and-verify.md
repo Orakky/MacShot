@@ -97,6 +97,12 @@
 
 **发布之后不许再构建这一版的包**（11-19 实测过代价）：`make dmg` / `make install` / `make release-bundle`（非 `--verify-only`）都会重新压缩 DMG 并换 sha256，而远端 `latest.json` 钉的是**发布那一刻**的字节。一旦重建，客户端下载回来校验必不过（表现是"下载没成功"，文件被删）。要出新的就升 `Config/Info.plist` 的版本号重走一轮；只想装本机最新版就用 `--verify-only` 之外**别碰构建类目标**，需要覆盖安装时先升版本号。
 
+**手工覆盖安装 Release 产物必须显式重签**（11-20 实测踩到）：`make release` 只构建、不签名——签名在 `appicon`/`inject-brand` 那条链里，而它只走 Debug 产物。
+所以 `make release && ditto … /Applications` 装出来的是 **ad-hoc**（`codesign -dvv` 显示 `flags=0x2(adhoc)`、没有 `Authority`），
+DR 从"identifier + 证书叶"退化成"只有 identifier"⇒ 屏幕录制授权不再适用，用户测出来的一切现象都不可信。
+正确顺序：`codesign --force --sign "MacShot Dev" <Release.app>` → `ditto` → `xattr -dr com.apple.quarantine` → 再 `codesign -dvv` 确认 `Authority=MacShot Dev`。
+（`make install` 走 DMG 不受影响，它经 `dmg`→`appicon` 已签好；但发布之后不许再 `make dmg`，见上。）
+
 **代推（用户 11-19 授权）的形状**：CLI 拿不到凭据（IDEA 的 push 命令带 `-c credential.helper=`，token 只在 IDE 里，我不去把它抠出来），所以 push 走 IDEA 的 UI：分支弹窗 → 搜分支名 → 子菜单 `Push…` → 对话框里核对 ref 行（`New` ＝新建而非覆盖）再点 Push。两条铁律：**① 菜单项不许靠"按次数 Down"定位**（实测会漂——我有一次回车落在 `Rename…` 上，立刻 Escape，事后 `git branch --list` 复核分支名未变），要**逐次读选中行文字、命中才按键**；**② 成没成只认 `git ls-remote` 的判定**：IDEA 不弹错不等于推上去，本机到 GitHub 的 HTTPS 会整段失败（`Error in the HTTP2 framing layer` / `curl 28`）。
 
 **tag 推出去之后**：`remote_has_ref` 会返回"远端已有"，`--retag` 对这轮永久失效 ⇒ 该版本后续修订只能升版本号重发（`V-067` ③ 的例外窗口只在"远端还没有"时开着）。
