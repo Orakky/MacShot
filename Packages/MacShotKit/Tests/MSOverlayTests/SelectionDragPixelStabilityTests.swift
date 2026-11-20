@@ -44,7 +44,10 @@ struct SelectionDragPixelStabilityTests {
     /// 一个箭头，放在选区的**左上角区域**，这样按住选区右下角拖就是"移动视窗"而不是"拖元素"。
     private func arrowAtTopLeft() -> MSAnnotationElement {
         var style = MSAnnotationStyle.standard
-        style.stroke = .rgba(232, 51, 71, 1)
+        // 夹具色必须与界面 chrome 不撞：上一版用 #E83347（工具条选中色就是这个红），
+        // 于是"包围盒"把跟着选区一起走的工具条/把手也算进去（量出来宽 300+px，比箭头本身大得多）——
+        // 测的其实是 chrome，不是箭头。换成界面里不存在的纯绿。
+        style.stroke = .rgba(0, 255, 0, 1)
         return MSAnnotationElement(kind: .arrow, points: [MSIntPoint(x: 40, y: 40), MSIntPoint(x: 150, y: 110)],
                                    style: style, z: 0)
     }
@@ -59,7 +62,7 @@ struct SelectionDragPixelStabilityTests {
                 guard let c = rep.colorAt(x: x, y: y) else { continue }
                 let r = c.redComponent * 255, g = c.greenComponent * 255, bl = c.blueComponent * 255
                 // 箭头笔色 #E83347；抗锯齿边缘允许半程衰减
-                if r > 120 && r - g > 60 && r - bl > 40 {
+                if g > 180 && r < 110 && bl < 110 {
                     count += 1
                     minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
                 }
@@ -72,7 +75,7 @@ struct SelectionDragPixelStabilityTests {
     // 水平方向补偿正常，垂直方向等于没补 ⇒ 箭头跟着视窗跑。这条已复现到可判定的形状，
     // 但修复还没做，所以先 .disabled 挂着，避免把红的判据混进 `make check` 装作绿（`T-128`）。
     @MainActor
-    @Test("按住选区空白处拖动：箭头在屏幕上的包围盒必须逐帧完全相同（不许 ±1px 抖）", .disabled("判据为红：数据侧位移已正确，怀疑在 renderer 烘焙与绘制之间的 y 翻转，见 T-128 / E-105"))
+    @Test("按住选区空白处拖动：箭头在屏幕上的包围盒必须逐帧完全相同（不许 ±1px 抖）", .disabled("判据为红且已定轴：X 恒 29 正常、Y 逐帧 −2.4 跟着视窗走；缺陷在 renderer 烘焙的 y 翻转与 sel 绘制基准，见 T-128 / E-106"))
     func arrowDoesNotJitterWhileWindowMoves() throws {
         let selA = CGRect(x: 10, y: 10, width: 300, height: 180)
         let view = try makeView(elements: [arrowAtTopLeft()], selection: selA)
