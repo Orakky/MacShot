@@ -202,6 +202,8 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
     var permissionRequester: () -> PermissionState = { PermissionProbe.requestScreenRecording() }
     /// 本次进程内向系统申请过几次，供断言与日志。
     private(set) var permissionRequestCount = 0
+    /// 申请之后系统的实际回答：失败文案用它判断"权限到底给没给"（自相矛盾不许报成缺权限）。
+    private(set) var lastPermissionStateAfterRequest: PermissionState?
     private var didAskSystemForPermission = false
 
     public init(capturer: any ScreenCapturing, preferences: any MSReadingPreferences,
@@ -239,6 +241,7 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
         didAskSystemForPermission = true
         permissionRequestCount += 1
         let after = permissionRequester()
+        lastPermissionStateAfterRequest = after
         MSLog.error(.capture, "capture.perm-missing after request=\(after.rawValue)")
     }
 
@@ -246,14 +249,48 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
         frozenFrame = nil
         run(.captureFailed(detail))
         finishEffects()
-        onNeedsPermission?()
+        // 这里**不许**弹权限窗：能走到这条的都是"采集失败但原因不是权限"（display 找不到、
+        // 后端报错、空帧…）。以前它无条件调 onNeedsPermission ⇒ 任何一次失败都谎称"缺屏幕录制权限"，
+        // 而且权限窗一旦开过就把后续截图一直挡住（11-20 用户实测：检查更新后截图就废了）。
     }
+
+    /// 唯一一处"缺权限"的人话文案：toast 与权限窗讲的是同一件事，不许两处各写一遍。
+    static let emptyFrameHint = "截到的是空画面：系统显示屏幕录制权限已授予，但这一帧没有内容。请再按一次截图键；若持续出现，请在系统设置里关掉再打开该权限"
+    static let permissionHint = "截不到屏幕内容：需要在 系统设置 → 隐私与安全性 → 屏幕录制与系统音频录制 勾选 MacShot，然后重启它"
 
     /// 唯一面向用户的失败文案来源：说清"发生了什么 + 下一步做什么"。
     private static func failureMessage(for error: Error) -> String {
         MSCaptureError.isPermissionDenied(error)
-            ? "截不到屏幕内容：需要在 系统设置 → 隐私与安全性 → 屏幕录制与系统音频录制 勾选 MacShot，然后重启它"
+            ? permissionHint
             : "截图失败：\((error as NSError).localizedDescription)"
+    }
+
+    /// 采集失败的唯一处置口（snip 与 fullScreen 走同一条）：只有**真权限**失败才申请授权并开权限窗，
+    /// 其它原因只说清发生了什么——不许把别的问题报成"缺权限"。
+    @MainActor
+    private func handleFreezeFailure(_ error: Error) {
+        frozenFrame = nil
+        let isPermission: Bool
+        if let captureError = error as? MSCaptureError, case .permissionMissing = captureError {
+            isPermission = true
+        } else {
+            isPermission = MSCaptureError.isPermissionDenied(error)
+        }
+        if isPermission {
+            requestPermissionOnce()
+            // 自相矛盾时说实话：11-20 用户那次是 `frame is uniform` 被判成缺权限，而同一行日志紧跟着
+            // `after request=granted`——权限明明是给的。系统说给了就不许再开权限窗，
+            // 改成"这一帧是空画面"的诚实文案，让人去查采集而不是去查 TCC。
+            if lastPermissionStateAfterRequest == .granted {
+                reportCaptureFailure(Self.emptyFrameHint)
+            } else {
+                run(.captureFailed(Self.permissionHint))
+                finishEffects()
+                onNeedsPermission?()
+            }
+        } else {
+            reportCaptureFailure(Self.failureMessage(for: error))
+        }
     }
 
     private func startSnip() {
@@ -282,6 +319,7 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
         run(.hotKeyPressed(.snip))
         Task { @MainActor in
             do {
+                self.captureAttempts += 1
                 let frame = try await self.capturer.freeze(display: display)
                 self.frozenFrame = frame
                 MSLog.info(.capture, "t.hotkey→frozen \(started.duration(to: ContinuousClock.now))")
@@ -294,19 +332,8 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
                 self.overlay = window
                 if self.presentsOverlay { window.present() }
                 self.run(.overlayShown)
-            } catch let error as MSCaptureError {
-                self.frozenFrame = nil
-                switch error {
-                case .permissionMissing:
-                    requestPermissionOnce()
-                    self.run(.captureFailed("permission"))
-                    self.finishEffects()
-                    self.onNeedsPermission?()
-                default:
-                    self.reportCaptureFailure(Self.failureMessage(for: error))
-                }
             } catch {
-                self.reportCaptureFailure(Self.failureMessage(for: error))
+                self.handleFreezeFailure(error)
             }
         }
     }
@@ -318,12 +345,13 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
         frontAppBeforeSession = NSWorkspace.shared.frontmostApplication
         Task { @MainActor in
             do {
+                self.captureAttempts += 1
                 let frame = try await self.capturer.freeze(display: display)
                 self.frozenFrame = frame
                 self.commit(intent: preferences.current.commitBehavior == .copy ? .copy : .pin,
                             selection: display.logicalFrame, document: nil)
             } catch {
-                self.onToast?("截图失败：\(error.localizedDescription)")
+                self.handleFreezeFailure(error)
             }
         }
     }
@@ -531,6 +559,15 @@ public final class MSSessionCoordinator: NSObject, MSOverlayDelegate, MSPinDeleg
     }
 
     public var overlayVisible: Bool { overlay != nil }
+
+    /// 探针专用：直接取一帧，不进会话状态机（对照旧/新 degenerate 判据用）。
+    public func captureOneFrameForProbe(display: MSDisplay) async throws -> MSCaptureFrame {
+        try await capturer.freeze(display: display)
+    }
+
+    /// 测试与探针用的只读观察口：采集失败之后会话有没有回到 idle（"下一次还能不能用"的判据）。
+    public var sessionPhaseName: String { reducer.phase.rawValue }
+    public private(set) var captureAttempts = 0
 
     private func closeOverlay() {
         guard overlay != nil else { return }

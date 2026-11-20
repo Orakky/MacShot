@@ -62,6 +62,8 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var coordinator: MSSessionCoordinator!
     private var statusItem: NSStatusItem?
     private var permissionWindow: NSWindow?
+    /// 最近一次 toast 的原文：探针用它判断"失败说的是人话还是内部 token"（11-20 的 permission 灰块）。
+    private(set) var lastToast: String?
     private var settingsWindow: NSWindow?
     private var toastController: MSToast?
     private var hotKeyEditor: MSHotKeyEditor?
@@ -78,7 +80,7 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let capturer = CaptureBackendSelector.makeCapturer(backend: backend)
         coordinator = MSSessionCoordinator(capturer: capturer, preferences: settings, pins: pins,
                                           clipboard: MSClipboardWriter(pasteboard: MSSystemPasteboard()))
-        coordinator.onToast = { [weak self] text in self?.showToast(text) }
+        coordinator.onToast = { [weak self] text in self?.lastToast = text; self?.showToast(text) }
         coordinator.onNeedsPermission = { [weak self] in self?.presentPermissionGate() }
 
         buildStatusItem()
@@ -896,6 +898,80 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// `--probe-update <url>`：不发 UI，直接把检查→下载→校验跑完并写读数。
     /// 判据要的正是"没有屏幕也能判"这一段（`V-065`）。
+    /// 11-20 用户报告的复现口：**点完「检查更新」再截图**就废了。这条探针把"检查更新"对进程状态的
+    /// 三种影响逐级加上去，看哪一级让采集失败——只看最后一条读数是不够的，因为"失败"本身不指因。
+    /// 读数写 /tmp/macshot-probe-updatesnip.txt，每级都记 采集结果 + 会话相位 + 前台 app。
+    func probeUpdateThenSnip() {
+        let path = "/tmp/macshot-probe-updatesnip.txt"
+        var lines: [String] = []
+        func report(_ line: String) {
+            MSLog.info(.session, "probe-updatesnip \(line)")
+            lines.append(line)
+            try? (lines.joined(separator: "\n") + "\n").write(toFile: path, atomically: true, encoding: .utf8)
+        }
+        func frontApp() -> String {
+            NSWorkspace.shared.frontmostApplication?.localizedName ?? "nil"
+        }
+        func one(_ label: String, then next: @escaping () -> Void) {
+            coordinator.handle(.snip)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                // 每一级结束后先把会话收干净：上一级留着遮罩，下一级的 snip 会走"忙则取消"分支，
+                // 那样读出来的 attempts 不动是探针自己的假象，不是缺陷（11-20 第一版就误读过一次）。
+                let phaseBeforeClose = self.coordinator.sessionPhaseName
+                self.coordinator.cancelSession()
+                if label.hasPrefix("①") { report("\(label) 关闭前相位=\(phaseBeforeClose)") }
+                let toast = self.lastToast ?? "（无 toast）"
+                report("\(label): phase=\(self.coordinator.sessionPhaseName) attempts=\(self.coordinator.captureAttempts) 前台=\(frontApp()) toast=\(toast)")
+                next()
+            }
+        }
+        report("本机版本=\(MSUpdater.currentVersion()) 权限=\(PermissionProbe.screenRecording().rawValue)")
+        // 关键对照读数：拿**当前真屏幕**的一帧，同时算"旧判据（只看五点全等）"与"新判据（全等且近黑）"。
+        // 这样才能证明用户那次是被白底画面误判，而不是权限真的没了。
+        if let display = MSDisplayInventory.current().first {
+            Task { @MainActor in
+                do {
+                    let frame = try await self.coordinator.captureOneFrameForProbe(display: display)
+                    if let bmp = MSBitmap(image: frame.image) {
+                        let w = bmp.width, h = bmp.height
+                        let pts = [MSIntPoint(x: 1, y: 1), MSIntPoint(x: w / 2, y: h / 2), MSIntPoint(x: w - 2, y: h - 2),
+                                   MSIntPoint(x: w / 4, y: h * 3 / 4), MSIntPoint(x: w * 3 / 4, y: h / 4)]
+                        let cols = pts.compactMap { bmp.sample(pixelAt: $0) }
+                        let uniform = cols.count == pts.count && Set(cols).count == 1
+                        let nearBlack = uniform && max(cols[0].red, max(cols[0].green, cols[0].blue)) <= 8
+                        report("对照 五点=\(cols.map { $0.hex() }.joined(separator: " ")) 旧判据(degenerate)=\(uniform) 新判据=\(nearBlack)")
+                    }
+                } catch { report("对照 FAIL \(error)") }
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { report("FAIL 超时（30s 没跑完）"); exit(8) }
+        // ① 基线：什么都不动
+        one("① 基线截图") {
+            // ② 只是把本 app 激活（NSAlert 的可见副作用之一）
+            NSApp.activate(ignoringOtherApps: true)
+            one("② 激活本 app 后截图") {
+                // ③ 走**真路径**：菜单「检查更新…」的同一个方法（真出网 + 真 NSAlert.runModal）。
+                //    自动收窗用 common 模式的 Timer 调 NSApp.stopModal()——普通 DispatchQueue.main 在模态期间根本不跑
+                //    （第一版就是这么把探针自己挂住的，读数停在 ② 之后，看起来像"卡在采集"）。
+                self.checkForUpdates()
+                // 只有"收窗"这一步必须在 common 模式跑（模态期间主队列的块根本不执行）；
+                // 后续阶段照常排到主队列——它们会自然排在模态结束之后，这正是"用户点完弹窗再按键"的时序。
+                let stop = Timer(timeInterval: 3.0, repeats: false) { _ in
+                    if NSApp.modalWindow != nil { NSApp.stopModal() }
+                }
+                RunLoop.main.add(stop, forMode: .common)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+                    let still = NSApp.modalWindow != nil ? "还在" : "nil"
+                    report("③ 模态窗已收（modalWindow=\(still)）")
+                    one("④ 检查更新之后截图") {
+                        report("完成")
+                        exit(0)
+                    }
+                }
+            }
+        }
+    }
+
     func probeUpdate(manifestURL: String) {
         func report(_ line: String) {
             MSLog.info(.app, "probe-update \(line)")

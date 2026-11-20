@@ -92,6 +92,18 @@ if let i = CommandLine.arguments.firstIndex(of: "--probe-update") {
     app.run()
 }
 
+// --probe-update-then-snip：复现"点完检查更新再截图就废"（11-20 用户报告），逐级加状态变化找因。
+if CommandLine.arguments.contains("--probe-update-then-snip") {
+    let app = NSApplication.shared
+    let delegate = MainActor.assumeIsolated { MSAppDelegate(autoSnip: false) }
+    app.delegate = delegate
+    app.setActivationPolicy(.accessory)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+        MainActor.assumeIsolated { delegate.probeUpdateThenSnip() }
+    }
+    app.run()
+}
+
 // --probe-settings：真建设置窗并自绘成 PNG，给"加了控件"这件事一双眼睛。
 if let i = CommandLine.arguments.firstIndex(of: "--probe-settings") {
     let ms = CommandLine.arguments.count > i + 1 ? (Int(CommandLine.arguments[i + 1]) ?? 1_200) : 1_200

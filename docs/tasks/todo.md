@@ -98,6 +98,7 @@
 | T-124 | **一键发布到 GitHub Releases 当更新源**（用户 11-19） | agent + 用户 | ① `--dry-run` 离线跑完（已证）② 仓库地址从 `git remote` 解析，不写死 ③ 真上传后 `--verify-only` 必须绿：远端清单 sha256/bytes 与本地产物一致 + 资产不 404 ④ 没有 gh 也没有 token ⇒ `exit 3` 打印手工两步，不猜 | **done**（11-19 用户放行代推：main/tag/分支经 IDEA 上远端，Release 已发布且 `--verify-only` 绿，`E-097`） |
 | T-125 | **发布线纪律**（用户 2026-11-19 裁决：`main` 开发，每次发版自动产生 tag + 发布分支，代码推该分支） | agent | ① `publish-release.sh` 构建前断言 `git status --porcelain` 为空 ② tag/分支名从 plist 版本号推出 ③ 同批创建且指向同一 commit、重复跑幂等、指向别处就 `exit 2` 不覆盖 ④ 脚本不执行 push ⑤ `V-067` + runbook §3c + `AGENTS.md` §3.12 ⑥ 顺带把 `make X` 三处一致做成门禁 | **done**（E-095；远端那一格待 push） |
 | T-126 | `done.md` 里 **9 行少一列**（E-073…E-080、E-092：条目与证据之间的竖线在早前某次替换里丢了） | agent | 逐行找到自然边界补竖线（不猜统一位置）、补完整批 `make check` + 目检渲染；同时把 `check-docs.py` 的 `KNOWN_SHORT` 从 9 改小 | 待办（今天查出的既有损伤，不在本次范围，按纪律另登记） |
+| T-127 | **修复「点完检查更新再截图就废」**（用户 11-20 报告，附截图：屏上出现写着 permission 的灰块） | agent | ① 三条判据全绿（`V-068`）② 真机复现口 `--probe-update-then-snip` 走完四级 ③ 覆盖安装让用户能试 | **done**（E-098） |
 
 ## 已知"提前做也没用"的项（防顺手实现）
 

@@ -139,8 +139,9 @@ public enum PermissionProbe {
     }
 }
 
-/// Heuristic guard so a black frame is reported instead of delivered as a "successful" capture.
-/// Deliberately conservative: only a completely uniform frame counts, because real desktops are not.
+/// 无权限时系统给的是**纯黑帧**（实测：终端没授权时五个取样点全 `0,0,0`），所以判据是
+/// "整帧均匀 **且** 那个均匀色接近纯黑"。只看"均匀"会误伤：一张白底文档 + 白边就能让五个点全等，
+/// 11-20 用户实测就是这样被报成"需要屏幕录制权限"、并且之后每次截图都开不了。
 public enum MSCaptureDiagnostics {
     public static func isDegenerate(_ image: CGImage) -> Bool {
         guard let bmp = MSBitmap(image: image), bmp.width > 8, bmp.height > 8 else { return false }
@@ -152,6 +153,8 @@ public enum MSCaptureDiagnostics {
         let first = probes.compactMap { bmp.sample(pixelAt: $0) }.first
         guard let first else { return true }
         let samples = probes.compactMap { bmp.sample(pixelAt: $0) }
-        return samples.allSatisfy { $0.red == first.red && $0.green == first.green && $0.blue == first.blue }
+        let uniform = samples.allSatisfy { $0.red == first.red && $0.green == first.green && $0.blue == first.blue }
+        let nearBlack = max(first.red, max(first.green, first.blue)) <= 8
+        return uniform && nearBlack
     }
 }
