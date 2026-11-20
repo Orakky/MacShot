@@ -11,8 +11,12 @@ final class MSToast {
     private var lastShown: Date = .distantPast
 
     func show(_ text: String) {
-        // Same message within 60s is not repeated (`UI-009` rule).
-        if text == lastMessage, Date().timeIntervalSince(lastShown) < 60, panel != nil { return }
+        // 同一条文案 60 秒内不重复刷屏（UI-009），但**必须重新排隐藏计时**——
+        // 以前这里是 return，配合"新建 panel"就变成：旧的那条既不消失也不再被管。
+        if text == lastMessage, Date().timeIntervalSince(lastShown) < 60, panel != nil {
+            scheduleHide()
+            return
+        }
         lastMessage = text
         lastShown = Date()
 
@@ -22,15 +26,17 @@ final class MSToast {
         label.lineBreakMode = .byTruncatingTail
         label.maximumNumberOfLines = 2
 
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 420, height: 44),
-                            styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        let panel = self.panel ?? NSPanel(contentRect: NSRect(x: 0, y: 0, width: 420, height: 44),
+                                          styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
-        panel.level = .statusBar
+        // 贴图（`MSPinLevel.current`）就是 statusBar(25)：同级 ⇒ 谁后 orderFront 谁在上面，
+        // toast 会被刚贴出的图压住（11-20 用户实测"藏在其他窗口下方"）。压过它一级。
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
         panel.ignoresMouseEvents = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-        let bg = NSVisualEffectView()
+        let bg = NSVisualEffectView()   // 每个 panel 只留一份内容视图：下面 setContentView 前会清掉旧的
         bg.material = .hudWindow
         bg.state = .active
         bg.blendingMode = .behindWindow
@@ -46,6 +52,7 @@ final class MSToast {
         ])
         let textWidth = min(520.0, label.fittingSize.width + 28)
         bg.frame = NSRect(x: 0, y: 0, width: textWidth, height: 40)
+        panel.contentView?.subviews.forEach { $0.removeFromSuperview() }
         panel.contentView = bg
         panel.setContentSize(NSSize(width: textWidth, height: 40))
 
@@ -60,7 +67,14 @@ final class MSToast {
         }
         self.panel = panel
 
+        scheduleHide()
+    }
+
+    /// 隐藏永远挂在"当前这一个 panel"上，并且每次 show 都重排：
+    /// 判据是"toast 出现后必然消失"，不是"我排过一个计时器"。
+    private func scheduleHide() {
         hideWorkItem?.cancel()
+        guard let panel else { return }
         let work = DispatchWorkItem { [weak panel] in
             guard let panel else { return }
             NSAnimationContext.runAnimationGroup({ ctx in
@@ -71,4 +85,8 @@ final class MSToast {
         hideWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: work)
     }
+
+    /// 探针判据用：当前是否有一条 toast 正显示着。
+    var isOnScreenForProbe: Bool { panel?.isVisible == true && (panel?.alphaValue ?? 0) > 0.5 }
+    var levelForProbe: Int { Int(panel?.level.rawValue ?? -1) }
 }

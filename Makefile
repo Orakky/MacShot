@@ -12,7 +12,7 @@ VERSION   := $(shell /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionStri
 # 没有身份时自动退回 ad-hoc（`-`），构建与门禁不会因为环境缺身份而变红。
 SIGN_IDENTITY := $(shell security find-identity -v -p codesigning 2>/dev/null | grep -q "MacShot Dev" && echo "MacShot Dev" || echo "-")
 
-.PHONY: doctor permissions contrast verify-dmg usage-report build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-clipboard probe-pin probe-pin-real probe-loupe-real probe-settings probe-hotkey probe-freeze probe-update release-bundle icon appicon
+.PHONY: doctor permissions contrast verify-dmg usage-report build release test run run-term dmg install check clean sign probe probe-permission probe-menu probe-chrome probe-clipboard probe-pin probe-pin-real probe-loupe-real probe-toast probe-hotkey probe-freeze probe-update release-bundle icon appicon
 
 doctor:
 	@echo "  签名身份 = $(SIGN_IDENTITY)（有 MacShot Dev 则 DR=identifier+leaf，重建不掉授权）"
@@ -81,6 +81,9 @@ probe-memory: appicon
 
 # FR-SET-002 逐项对照的读数通道：真建设置窗，递归打印控件清单
 # 注意：这个窗的离屏 PNG 画不出文字（label 是 layer-backed），所以判据是清单不是图
+probe-toast: appicon
+	@"$(PRODUCT)/Contents/MacOS/MacShot" --probe-toast
+
 probe-settings: appicon
 	@rm -f /tmp/macshot-probe-settings.txt
 	@pkill -x MacShot 2>/dev/null; sleep 1; \

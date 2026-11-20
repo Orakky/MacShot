@@ -1215,6 +1215,31 @@ final class MSAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - toast (UI-009)
 
+    /// 11-20 用户实测两条：保存成功的 toast **不消失**、而且**被别的窗口压住**。
+    /// 这条探针把判据钉死：连发三条 toast 之后，屏上只允许存在**一个** toast 面板；
+    /// 静置 2.4 秒后它必须自己消失；层级必须**高于贴图**（贴图就是 statusBar）。
+    func probeToast() {
+        func visibleToastPanels() -> Int {
+            NSApp.windows.filter { $0.isVisible && $0.level.rawValue >= NSWindow.Level.statusBar.rawValue
+                && $0.styleMask.contains(.borderless) == false || ($0.isVisible && $0.styleMask.contains(.borderless) && $0.ignoresMouseEvents) }.count
+        }
+        func line(_ k: String, _ v: String) { MSLog.info(.app, "probe-toast \(k)=\(v)") }
+        showToast("已保存 MacShot 探针-A.png")
+        showToast("已保存 MacShot 探针-B.png")
+        showToast("已保存 MacShot 探针-C.png")
+        line("连发三条后可见无边框忽略鼠标的面板数", "\(visibleToastPanels())")
+        line("toast 层级", "\(toastController?.levelForProbe ?? 0)（贴图用 statusBar=25，必须更大）")
+        // "在不在屏上"要等淡入完成再读：动画 0.16s，立刻读必然 alpha<0.5 ⇒ 把一次成功读成"没显示"。
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            line("淡入后在屏上", "\(self.toastController?.isOnScreenForProbe == true)")
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
+            line("静置 2.4 秒后还在屏上", "\(self.toastController?.isOnScreenForProbe == true)")
+            line("静置后可见面板数", "\(visibleToastPanels())")
+            exit(0)
+        }
+    }
+
     private func showToast(_ text: String) {
         if toastController == nil { toastController = MSToast() }
         toastController?.show(text)

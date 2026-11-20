@@ -104,6 +104,18 @@ if CommandLine.arguments.contains("--probe-update-then-snip") {
     app.run()
 }
 
+// --probe-toast：连发三条 toast，判"只剩一个面板 / 会自己消失 / 层级压过贴图"（V-069）。
+if CommandLine.arguments.contains("--probe-toast") {
+    let app = NSApplication.shared
+    let delegate = MainActor.assumeIsolated { MSAppDelegate(autoSnip: false) }
+    app.delegate = delegate
+    app.setActivationPolicy(.accessory)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+        MainActor.assumeIsolated { delegate.probeToast() }
+    }
+    app.run()
+}
+
 // --probe-settings：真建设置窗并自绘成 PNG，给"加了控件"这件事一双眼睛。
 if let i = CommandLine.arguments.firstIndex(of: "--probe-settings") {
     let ms = CommandLine.arguments.count > i + 1 ? (Int(CommandLine.arguments[i + 1]) ?? 1_200) : 1_200
