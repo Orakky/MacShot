@@ -72,7 +72,7 @@ struct SelectionDragPixelStabilityTests {
     // 水平方向补偿正常，垂直方向等于没补 ⇒ 箭头跟着视窗跑。这条已复现到可判定的形状，
     // 但修复还没做，所以先 .disabled 挂着，避免把红的判据混进 `make check` 装作绿（`T-128`）。
     @MainActor
-    @Test("按住选区空白处拖动：箭头在屏幕上的包围盒必须逐帧完全相同（不许 ±1px 抖）", .disabled("X 漂移已由基准法消除；Y 仍漂，缺陷在视图的 canvas↔位图 Y 映射，见 T-128 / E-104"))
+    @Test("按住选区空白处拖动：箭头在屏幕上的包围盒必须逐帧完全相同（不许 ±1px 抖）", .disabled("判据为红：数据侧位移已正确，怀疑在 renderer 烘焙与绘制之间的 y 翻转，见 T-128 / E-105"))
     func arrowDoesNotJitterWhileWindowMoves() throws {
         let selA = CGRect(x: 10, y: 10, width: 300, height: 180)
         let view = try makeView(elements: [arrowAtTopLeft()], selection: selA)
