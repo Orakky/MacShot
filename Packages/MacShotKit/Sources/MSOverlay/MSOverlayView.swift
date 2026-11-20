@@ -366,8 +366,10 @@ public final class MSOverlayView: NSView {
 
     /// Inside the selection we show the composited (bitmap + annotations) crop at 1:1 device
     /// pixels, so what you see is byte-for-byte what export produces (`NFR-011`).
-    private func drawSelectionContents(_ sel: CGRect, in ctx: CGContext) {
-        guard sel.width > 1, sel.height > 1 else { return }
+    private func drawSelectionContents(_ rawSel: CGRect, in ctx: CGContext) {
+        guard rawSel.width > 1, rawSel.height > 1 else { return }
+        // 绘制目标吸附到设备像素网格：小数原点 + 像素精确的烘焙图 = 逐帧 ±1px 微抖（见 `MSIntPoint.snappedToPixelGrid`）。
+        let sel = MSIntPoint.snappedToPixelGrid(rawSel, scale: display.scale)
         let composite = compositedCrop(for: sel)
         // 真机读数（11-20 用户确认"X 不动、Y 漂"）：把绘制段的每一项都打出来，
         // 缺哪一项一眼就能看出来——`裁切顶 + 图内行` 应当逐帧恒定。

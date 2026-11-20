@@ -20,6 +20,17 @@ public struct MSIntPoint: Hashable, Sendable, Codable {
     /// 选区从 `old` 变到 `new`（视图坐标 y-up）时，**屏幕位置不动**的元素在画布坐标里要平移多少。
     /// 这是 `canvasPoint(of:in:scale:)` 的差分形式：改选区后想把标注留在原地，就加这个量。
     /// 单独成函数（而不是就地减一下）的理由与 ADR-013 一样——两处各算一遍就会有一处多翻一次 y。
+    /// 把矩形吸附到**设备像素网格**（scale 1 ⇒ 整数 pt；scale 2 ⇒ 0.5pt 步进）。
+    /// 用途是绘制目标矩形：烘焙产物是像素精确的，放到小数行上会被合成器逐帧吸到不同整数行，
+    /// 观感就是"慢慢拖时标注轻微抖动"（11-20 真机日志：maxY 每帧 +0.23，docY 四帧才进 1）。
+    /// 只用于绘制，不改选区本身——命中区与读数仍按真实浮点选区。
+    public static func snappedToPixelGrid(_ rect: CGRect, scale: CGFloat) -> CGRect {
+        guard scale > 0, scale.isFinite else { return rect }
+        func edge(_ v: CGFloat) -> CGFloat { (v * scale).rounded(.toNearestOrAwayFromZero) / scale }
+        let x = edge(rect.minX), y = edge(rect.minY)
+        return CGRect(x: x, y: y, width: max(0, edge(rect.maxX) - x), height: max(0, edge(rect.maxY) - y))
+    }
+
     public static func documentDelta(selectionOld old: CGRect, to new: CGRect, scale: CGFloat) -> CGSize {
         CGSize(width: (old.minX - new.minX) * scale,
                height: (new.maxY - old.maxY) * scale)     // y 向下：选区在屏幕上往上移 ⇒ 元素画布 y 变大

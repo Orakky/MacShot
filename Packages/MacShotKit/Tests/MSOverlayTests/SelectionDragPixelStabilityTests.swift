@@ -75,7 +75,7 @@ struct SelectionDragPixelStabilityTests {
     // 水平方向补偿正常，垂直方向等于没补 ⇒ 箭头跟着视窗跑。这条已复现到可判定的形状，
     // 但修复还没做，所以先 .disabled 挂着，避免把红的判据混进 `make check` 装作绿（`T-128`）。
     @MainActor
-    @Test("按住选区空白处拖动：箭头在屏幕上的包围盒必须逐帧完全相同（不许 ±1px 抖）", .disabled("夹具与真机量级不一致：夹具是单调漂移、真机日志是 canvasH 338/339 振荡。裁判换成真机，见 T-128 / E-108"))
+    @Test("按住选区空白处拖动：箭头在屏幕上的包围盒必须逐帧完全相同（不许 ±1px 抖）", .disabled("夹具与真机量级不一致（真机日志已给出两段根因：canvasH 振荡、绘制目标小数行）。裁判是真机，见 T-128 / E-109"))
     func arrowDoesNotJitterWhileWindowMoves() throws {
         let selA = CGRect(x: 10, y: 10, width: 300, height: 180)
         let view = try makeView(elements: [arrowAtTopLeft()], selection: selA)
