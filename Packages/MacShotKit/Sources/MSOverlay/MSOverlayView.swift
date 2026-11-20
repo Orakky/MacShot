@@ -189,6 +189,11 @@ public final class MSOverlayView: NSView {
     }
     var history = MSAnnotationHistory()
     private var dragMode: DragMode?
+
+    /// 拖选区（移动/改尺寸）的**基准**：起点矩形 + 起点元素表。
+    /// 逐帧从基准算总位移，而不是在上一帧已取整的点上继续加——鼠标给的位移是小数（3.5 / 2.5 pt），
+    /// 每帧各自取整会累积漂移：11-20 在 scale 1 下实测四帧少走 2px，观感就是"箭头慢慢跟着视窗爬"。
+    private var selectionDragBaseline: (rect: CGRect, elements: [MSAnnotationElement])?
     private var draft: MSAnnotationElement?
     private var cachedComposite: CGImage?
 
@@ -257,12 +262,16 @@ public final class MSOverlayView: NSView {
     /// 落到新选区外面的清掉；整件事合成**一条**撤销记录，`⌘Z` 一次回到改动前。
     private func retargetElements(from old: CGRect, to new: CGRect) {
         guard let before = document else { return }
+        // 有拖拽基准就用基准：位移按"起点→当前"一次算清，元素坐标也从起点那份表出发，
+        // 这样每帧的取整只发生一次，不会逐帧叠加成漂移（判据 `V-070`）。
+        let baseRect = selectionDragBaseline?.rect ?? old
+        let baseElements = selectionDragBaseline?.elements ?? before.elements
         let canvas = canvasSize(for: new)
-        let d = MSIntPoint.documentDelta(selectionOld: old, to: new, scale: display.scale)
+        let d = MSIntPoint.documentDelta(selectionOld: baseRect, to: new, scale: display.scale)
         let area = CGRect(x: 0, y: 0, width: canvas.width, height: canvas.height)
         var steps: [MSAnnotationCommand] = []
         var dropped = 0
-        for element in before.elements {
+        for element in baseElements {
             let moved = element.translated(by: d)
             let inside = MSAnnotationGeometry.bounds(of: moved).map { $0.cgRect.intersects(area) } ?? true
             if !inside { steps.append(.remove(element)); dropped += 1; continue }
@@ -270,7 +279,7 @@ public final class MSOverlayView: NSView {
                 steps.append(.replace(before: element, after: moved))
             }
         }
-        var next = MSAnnotationDocument(canvasSize: canvas, elements: before.elements,
+        var next = MSAnnotationDocument(canvasSize: canvas, elements: baseElements,
                                         currentStyle: before.currentStyle, badgeCounter: before.badgeCounter)
         if let command = MSAnnotationCommand.compose(steps) { history.apply(command, to: &next) }
         document = next
@@ -756,6 +765,7 @@ public final class MSOverlayView: NSView {
         // 以前 mouseDown 一进来就置位，画箭头/矩形也算"拖拽"，标注时放大镜跟着弹（用户 11-18 撤的就是这个）。
         isDraggingSelection = true
         if let sel = selection {
+            selectionDragBaseline = (sel, document?.elements ?? [])
             let h = MSSelectionGeometry.handle(at: p, of: sel)
             switch h {
             case .body: dragMode = .move(grab: p, original: sel)
@@ -861,6 +871,7 @@ public final class MSOverlayView: NSView {
 
     public override func mouseUp(with event: NSEvent) {
         isDraggingSelection = false
+        selectionDragBaseline = nil
         defer { dragMode = nil }
         if case .moveElement(let recorder, _) = dragMode {
             // 上百次 mouseDragged 只留一条记录；没真移动过就不留（`FR-ANN-005` 判据）

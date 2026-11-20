@@ -11,6 +11,8 @@ import Testing
 /// 这条判据不留容差：拖动过程中，箭头在**屏幕上的包围盒必须逐帧完全相同**——
 /// 选区在动、标注不许动（`V-056` 的原地保留，加上"不许抖"）。
 struct SelectionDragPixelStabilityTests {
+    // 用户的屏实测是 **scale 1.0**（KG251Q 1920x1080@x1.0），夹具却是 scale 2
+    // ⇒ 漂移到底是产品缺陷还是夹具的分辨率不匹配，必须两种 scale 各跑一遍才敢说。
     private static let display = MSTestCard.display          // 400×250 逻辑点，scale 2
 
     private func mouse(_ type: CGEventType, _ p: CGPoint) -> NSEvent {
@@ -70,7 +72,7 @@ struct SelectionDragPixelStabilityTests {
     // 水平方向补偿正常，垂直方向等于没补 ⇒ 箭头跟着视窗跑。这条已复现到可判定的形状，
     // 但修复还没做，所以先 .disabled 挂着，避免把红的判据混进 `make check` 装作绿（`T-128`）。
     @MainActor
-    @Test("按住选区空白处拖动：箭头在屏幕上的包围盒必须逐帧完全相同（不许 ±1px 抖）", .disabled("判据已复现为红，修复未落地：见 T-128 / E-103"))
+    @Test("按住选区空白处拖动：箭头在屏幕上的包围盒必须逐帧完全相同（不许 ±1px 抖）", .disabled("X 漂移已由基准法消除；Y 仍漂，缺陷在视图的 canvas↔位图 Y 映射，见 T-128 / E-104"))
     func arrowDoesNotJitterWhileWindowMoves() throws {
         let selA = CGRect(x: 10, y: 10, width: 300, height: 180)
         let view = try makeView(elements: [arrowAtTopLeft()], selection: selA)
@@ -92,11 +94,47 @@ struct SelectionDragPixelStabilityTests {
             let b = arrowBox(try snapshot(view))
             #expect(b.count > 30, "第 \(step) 帧箭头消失了（\(b.count) 个采样点）")
             boxes.append(key(b))
+            // 分开"数据错"与"画错"：文档里箭头的画布坐标 + 当时的选区，与实测包围盒并排打出来。
+            // 若文档坐标随帧变化符合"屏幕位置不变"的期望而包围盒仍漂 ⇒ 缺陷在绘制映射；
+            // 若文档坐标本身就跟着视窗走 ⇒ 缺陷在 retarget 的数据侧。
+            let pts = (view.document?.elements.first?.points ?? []).map { "\($0.x),\($0.y)" }.joined(separator: " ")
+            let selNow = view.selection.map { "\($0.minX),\($0.minY),\($0.width),\($0.height)" } ?? "nil"
+            print("帧\(step) 文档点=[\(pts)] 选区=\(selNow) 实测盒=\(key(b))")
         }
         let distinct = Set(boxes)
         let positions = distinct.sorted().joined(separator: " | ")
         Issue.record("逐帧位置 \(boxes.joined(separator: " -> "))")
         #expect(distinct.count == 1, "箭头跟着视窗抖了：逐帧出现 \(distinct.count) 种位置 \(positions)，这就是用户说的「拖动视窗时箭头有点移动」")
+    }
+
+    @MainActor
+    @Test("scale 1（与用户实屏一致）时同样逐帧量：区分产品缺陷与夹具分辨率")
+    func measurementAtScaleOne() throws {
+        let selA = CGRect(x: 10, y: 10, width: 300, height: 180)
+        let view = try makeView(elements: [arrowAtTopLeft()], selection: selA)
+        _ = view
+        // 这里只打印，不断言：先看 scale 1 下漂移是否还在
+        let ctx = CGContext(data: nil, width: 800, height: 500, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(MSColorRGBA.rgb(190, 190, 190).cgColor)
+        ctx.fill(CGRect(x: 0, y: 0, width: 800, height: 500))
+        let oneX = MSDisplay(id: 1, logicalFrame: CGRect(x: 0, y: 0, width: 400, height: 250),
+                             visibleFrame: CGRect(x: 0, y: 0, width: 400, height: 250), scale: 1, isMain: true, localizedName: "1x")
+        let v1 = MSOverlayView(display: oneX, frozenFrame: ctx.makeImage()!)
+        v1.setSelection(selA)
+        var doc = v1.document!
+        doc.elements.append(arrowAtTopLeft())
+        v1.document = doc
+        v1.tool = .select
+        let grab = CGPoint(x: selA.maxX - 40, y: selA.maxY - 40)
+        v1.mouseDown(with: mouse(.leftMouseDown, grab))
+        print("scale1 dragMode=\(v1.dragModeForProbe) repSize=\(try snapshot(v1).pixelsWide)x\(try snapshot(v1).pixelsHigh) bounds=\(v1.bounds.width)x\(v1.bounds.height)")
+        for step in 1...4 {
+            v1.mouseDragged(with: mouse(.leftMouseDragged, CGPoint(x: grab.x + CGFloat(step) * 3.5, y: grab.y + CGFloat(step) * 2.5)))
+            let b = arrowBox(try snapshot(v1))
+            print("scale1 帧\(step) 盒=\(b.minX),\(b.minY),\(b.maxX),\(b.maxY) 文档点=\((v1.document?.elements.first?.points ?? []).map { "\($0.x),\($0.y)" }.joined(separator: " ")) 选区=\(v1.selection.map { "\($0.minX),\($0.minY)" } ?? "")")
+        }
     }
 
     @MainActor
