@@ -371,14 +371,7 @@ public final class MSOverlayView: NSView {
         // 绘制目标吸附到设备像素网格：小数原点 + 像素精确的烘焙图 = 逐帧 ±1px 微抖（见 `MSIntPoint.snappedToPixelGrid`）。
         let sel = MSIntPoint.snappedToPixelGrid(rawSel, scale: display.scale)
         let composite = compositedCrop(for: sel)
-        // 真机读数（11-20 用户确认"X 不动、Y 漂"）：把绘制段的每一项都打出来，
-        // 缺哪一项一眼就能看出来——`裁切顶 + 图内行` 应当逐帧恒定。
-        if dragMode != nil, let first = document?.elements.first?.points.first {
-            let canvasH = document?.canvasSize.height ?? -1
-            let bake = compositeBakeCount
-            let imgSize = composite.map { "\($0.width)x\($0.height)" } ?? "nil"
-            MSLog.info(.overlay, "draw sel maxY=\(String(format: "%.2f", sel.maxY)) canvasH=\(canvasH) img=\(imgSize) docY=\(first.y) bake=\(bake)")
-        }
+
         ctx.saveGState()
         ctx.interpolationQuality = .none
         if let composite { ctx.draw(composite, in: sel) }
