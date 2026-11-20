@@ -288,6 +288,13 @@ public final class MSOverlayView: NSView {
     }
 
     private func canvasSize(for rect: CGRect) -> MSIntSize {
+        // 画布尺寸必须由**尺寸本身**取整，不能用"两条边各自取整再相减"：
+        // 纯平移选区时逻辑尺寸恒定，但小数原点让 pixelRect 的高在 338/339 之间反复跳，
+        // 而 `renderElements` 的翻转基准就是 canvas.height ⇒ 每跳一次整层标注上下挪 1px。
+        // 水平方向没有这个翻转基准，所以用户看到的是"X 不动、只有 Y 抖"（11-20 真机日志）。
+        let w = Int((rect.width * display.scale).rounded())
+        let h = Int((rect.height * display.scale).rounded())
+        if w > 0, h > 0 { return MSIntSize(width: w, height: h) }
         guard let pixel = display.pixelRect(forLogical: globalRect(rect)) else { return .zero }
         return pixel.size
     }
@@ -362,6 +369,14 @@ public final class MSOverlayView: NSView {
     private func drawSelectionContents(_ sel: CGRect, in ctx: CGContext) {
         guard sel.width > 1, sel.height > 1 else { return }
         let composite = compositedCrop(for: sel)
+        // 真机读数（11-20 用户确认"X 不动、Y 漂"）：把绘制段的每一项都打出来，
+        // 缺哪一项一眼就能看出来——`裁切顶 + 图内行` 应当逐帧恒定。
+        if dragMode != nil, let first = document?.elements.first?.points.first {
+            let canvasH = document?.canvasSize.height ?? -1
+            let bake = compositeBakeCount
+            let imgSize = composite.map { "\($0.width)x\($0.height)" } ?? "nil"
+            MSLog.info(.overlay, "draw sel maxY=\(String(format: "%.2f", sel.maxY)) canvasH=\(canvasH) img=\(imgSize) docY=\(first.y) bake=\(bake)")
+        }
         ctx.saveGState()
         ctx.interpolationQuality = .none
         if let composite { ctx.draw(composite, in: sel) }
