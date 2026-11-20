@@ -212,4 +212,13 @@ struct CanvasViewRoundTripTests {
         #expect(MSIntPoint.canvasPoint(of: CGPoint(x: 100, y: 500), in: selection, scale: 2) == MSIntPoint(x: 0, y: 0))
         #expect(MSIntPoint.canvasPoint(of: CGPoint(x: 300, y: 350), in: selection, scale: 2) == MSIntPoint(x: 400, y: 300))
     }
+    @Test("纯平移：两轴都必须给出满额的设备像素位移（否则标注会跟着视窗跑）")
+    func pureTranslationGivesFullDeviceDelta() {
+        let old = CGRect(x: 100, y: 100, width: 300, height: 180)
+        let new = CGRect(x: 103.5, y: 102.5, width: 300, height: 180)   // 视图坐标：向右上平移 3.5 / 2.5
+        let d = MSIntPoint.documentDelta(selectionOld: old, to: new, scale: 2)
+        #expect(abs(d.width) == 7, "X 位移应是 3.5pt × 2 = 7 设备像素，实测 \(d.width)")
+        #expect(abs(d.height) == 5, "Y 位移应是 2.5pt × 2 = 5 设备像素，实测 \(d.height)")
+    }
+
 }
