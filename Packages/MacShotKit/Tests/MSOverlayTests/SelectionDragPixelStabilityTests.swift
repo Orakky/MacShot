@@ -1,0 +1,108 @@
+import AppKit
+import CoreGraphics
+import MSCore
+import MSAnnotate
+import MSTestSupport
+import Testing
+@testable import MSOverlay
+
+/// 用户 11-20 的描述把问题钉死了：**加一个箭头标注，按住拖动选区视窗，箭头有"跟着移动"的闪烁感。**
+/// 上一轮我写的测试容差给了 ±2 设备像素，正好把 ±1px 的抖动放过去了（所以"反证打不出来"）。
+/// 这条判据不留容差：拖动过程中，箭头在**屏幕上的包围盒必须逐帧完全相同**——
+/// 选区在动、标注不许动（`V-056` 的原地保留，加上"不许抖"）。
+struct SelectionDragPixelStabilityTests {
+    private static let display = MSTestCard.display          // 400×250 逻辑点，scale 2
+
+    private func mouse(_ type: CGEventType, _ p: CGPoint) -> NSEvent {
+        let src = CGEventSource(stateID: .combinedSessionState)
+        let realHeight = NSScreen.screens.first?.frame.height ?? 1080
+        let cg = CGEvent(mouseEventSource: src, mouseType: type,
+                         mouseCursorPosition: CGPoint(x: p.x, y: realHeight - p.y), mouseButton: .left)!
+        return NSEvent(cgEvent: cg)!
+    }
+
+    @MainActor
+    private func makeView(elements: [MSAnnotationElement], selection: CGRect) throws -> MSOverlayView {
+        let ctx = CGContext(data: nil, width: 800, height: 500, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(MSColorRGBA.rgb(190, 190, 190).cgColor)
+        ctx.fill(CGRect(x: 0, y: 0, width: 800, height: 500))
+        let view = MSOverlayView(display: Self.display, frozenFrame: ctx.makeImage()!)
+        view.setSelection(selection)
+        if !elements.isEmpty {
+            var doc = try #require(view.document, "setSelection 之后文档应已按真实像素建好")
+            for e in elements { doc.elements.append(e) }
+            view.document = doc
+        }
+        view.tool = .select
+        return view
+    }
+
+    /// 一个箭头，放在选区的**左上角区域**，这样按住选区右下角拖就是"移动视窗"而不是"拖元素"。
+    private func arrowAtTopLeft() -> MSAnnotationElement {
+        var style = MSAnnotationStyle.standard
+        style.stroke = .rgba(232, 51, 71, 1)
+        return MSAnnotationElement(kind: .arrow, points: [MSIntPoint(x: 40, y: 40), MSIntPoint(x: 150, y: 110)],
+                                   style: style, z: 0)
+    }
+
+    /// 直接按**箭头的红色**找像素，而不是与底图做差：选区在动 ⇒ 底图每帧都不同，
+    /// 做差会把"背景移动"也算成差异，包围盒就没法比了（上一版判据不成立也有这个因素）。
+    @MainActor
+    private func arrowBox(_ rep: NSBitmapImageRep) -> (count: Int, minX: Int, minY: Int, maxX: Int, maxY: Int) {
+        var count = 0, minX = rep.pixelsWide, minY = rep.pixelsHigh, maxX = -1, maxY = -1
+        for y in 0..<rep.pixelsHigh {
+            for x in 0..<rep.pixelsWide {
+                guard let c = rep.colorAt(x: x, y: y) else { continue }
+                let r = c.redComponent * 255, g = c.greenComponent * 255, bl = c.blueComponent * 255
+                // 箭头笔色 #E83347；抗锯齿边缘允许半程衰减
+                if r > 120 && r - g > 60 && r - bl > 40 {
+                    count += 1
+                    minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
+                }
+            }
+        }
+        return (count, minX, minY, maxX, maxY)
+    }
+
+    // 判据**当前是红的**（实测逐帧 minY 30→27→25→22→20→17，minX 恒 29）：
+    // 水平方向补偿正常，垂直方向等于没补 ⇒ 箭头跟着视窗跑。这条已复现到可判定的形状，
+    // 但修复还没做，所以先 .disabled 挂着，避免把红的判据混进 `make check` 装作绿（`T-128`）。
+    @MainActor
+    @Test("按住选区空白处拖动：箭头在屏幕上的包围盒必须逐帧完全相同（不许 ±1px 抖）", .disabled("判据已复现为红，修复未落地：见 T-128 / E-102"))
+    func arrowDoesNotJitterWhileWindowMoves() throws {
+        let selA = CGRect(x: 10, y: 10, width: 300, height: 180)
+        let view = try makeView(elements: [arrowAtTopLeft()], selection: selA)
+        let first = arrowBox(try snapshot(view))
+        #expect(first.count > 30, "起始帧必须有箭头（实测 \(first.count)）")
+
+        // 按住选区**右下角空白处**（箭头在左上角 ⇒ 命不中元素 ⇒ dragMode = .move）
+        let grab = CGPoint(x: selA.maxX - 12, y: selA.maxY - 12)
+        view.mouseDown(with: mouse(.leftMouseDown, grab))
+        // 元组不能 Hashable，用字符串键当"这一帧的位置"指纹
+        func key(_ b: (count: Int, minX: Int, minY: Int, maxX: Int, maxY: Int)) -> String {
+            "\(b.minX),\(b.minY),\(b.maxX),\(b.maxY)"
+        }
+        var boxes: [String] = [key(first)]
+        for step in 1...5 {
+            let p = CGPoint(x: grab.x + CGFloat(step) * 3.5, y: grab.y + CGFloat(step) * 2.5)
+            view.mouseDragged(with: mouse(.leftMouseDragged, p))
+            let b = arrowBox(try snapshot(view))
+            #expect(b.count > 30, "第 \(step) 帧箭头消失了（\(b.count) 个采样点）")
+            boxes.append(key(b))
+        }
+        let distinct = Set(boxes)
+        let positions = distinct.sorted().joined(separator: " | ")
+        Issue.record("逐帧位置 \(boxes.joined(separator: " -> "))")
+        #expect(distinct.count == 1, "箭头跟着视窗抖了：逐帧出现 \(distinct.count) 种位置 \(positions)，这就是用户说的「拖动视窗时箭头有点移动」")
+    }
+
+    @MainActor
+    private func snapshot(_ view: MSOverlayView) throws -> NSBitmapImageRep {
+        view.needsDisplay = true
+        let rep = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: rep)
+        return rep
+    }
+}
