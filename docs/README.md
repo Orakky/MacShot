@@ -52,6 +52,7 @@
 | `runbook/permissions-tcc.md` | 授权流程、ad-hoc 坑、复位手段、实测记录 | 权限 | 已落 |
 | `runbook/troubleshooting.md` | P-001…P-015 问题库骨架 + 追加模板 | 问题库 | 已落（真实根因待实测追加） |
 | `reference/snipaste-gap.md` | Snipaste 事实对照（三分法：官方/推断/未找到出处） | 参考，**非真源** | 已落 |
+| `reference/code-structure-map.md` | 代码结构图谱：模块依赖矩阵、数据流接力、坐标系契约、逐模块函数职责表、12 条调用链、结构债清单 | 引用（从代码反查，规格仍以 `architecture/*` 为准） | 草稿 |
 | `templates/task-card.md` | 六项必填任务卡 + 粒度参考 | 模板 | 已落 |
 | `templates/adr.md` | ADR 模板（含"否决方案+翻案决策门"要求） | 模板 | 已落 |
 | `templates/spec-doc.md` | 模块/屏幕/状态机共用规格模板 + 反面清单 | 模板 | 已落 |
